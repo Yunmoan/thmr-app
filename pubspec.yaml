@@ -1,7 +1,7 @@
 name: thmr_app
 description: "东方音乐电台 THMR Flutter 客户端"
 publish_to: "none"
-version: 0.1.0+1
+version: 0.1.1+1
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
@@ -61,6 +61,7 @@ dev_dependencies:
 # 用 THMR 品牌图标生成 launcher 图标:
 #   dart run flutter_launcher_icons
 flutter_launcher_icons:
+  android: true
   image_path: "assets/icons/icon-512.png"
   adaptive_icon_background: "#fbf2f4"
   adaptive_icon_foreground: "assets/icons/icon-maskable-512.png"

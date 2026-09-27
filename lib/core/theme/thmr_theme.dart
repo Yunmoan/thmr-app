@@ -33,8 +33,10 @@ class ThmrTheme {
       onSecondaryContainer: t.supportInk,
       tertiary: t.supportInk,
       onTertiary: Colors.white,
-      error: const Color(0xFFA63D4A),
-      onError: Colors.white,
+      error: brightness == Brightness.dark
+          ? const Color(0xFFF28B91)
+          : const Color(0xFFA63D4A),
+      onError: brightness == Brightness.dark ? t.pageBg : Colors.white,
       surface: t.solidPanel,
       onSurface: t.ink,
       onSurfaceVariant: t.mutedInk,
@@ -161,14 +163,16 @@ class ThmrTheme {
         backgroundColor: t.panelSoft,
         side: BorderSide(color: t.panelBorder),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-        labelStyle: base.labelLarge?.copyWith(color: t.mutedInk),
+        labelStyle: base.labelLarge?.copyWith(color: t.ink),
         selectedColor: t.accentSoft,
-        secondaryLabelStyle: base.labelLarge?.copyWith(color: accent),
+        secondaryLabelStyle: base.labelLarge?.copyWith(color: t.ink),
       ),
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: ButtonStyle(
           backgroundColor: WidgetStateProperty.resolveWith((states) =>
               states.contains(WidgetState.selected) ? t.accentSoft : null),
+          foregroundColor: WidgetStateProperty.resolveWith((states) =>
+              states.contains(WidgetState.selected) ? t.ink : t.mutedInk),
           side: WidgetStatePropertyAll(BorderSide(color: t.panelBorder)),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

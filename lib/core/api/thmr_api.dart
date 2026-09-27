@@ -14,7 +14,8 @@ class ThmrApi {
       ..receiveTimeout = const Duration(seconds: 15)
       ..validateStatus = (s) => s != null && s < 500;
     // Dart 默认 UA(Dart/x.x)会被站点防火墙按机器人拦截,显式声明客户端 UA
-    _dio.options.headers['User-Agent'] = 'THMR-Client/1.0 (+https://thmr.yunmoan.cn)';
+    _dio.options.headers['User-Agent'] =
+        'THMR-Client/1.0 (+https://thmr.yunmoan.cn)';
   }
 
   final Dio _dio;
@@ -51,13 +52,8 @@ class ThmrApi {
   /// 他人分享(公开)。410 = 分享已过期。
   Future<(Collection, List<CollectionItem>)> sharedCollection(
       String slug) async {
-    final j = await _getJson('/api/collections/$slug');
-    final collection =
-        Collection.fromJson(j['collection'] as Map<String, dynamic>);
-    final items = ((j['items'] as List?) ?? const [])
-        .map((e) => CollectionItem.fromJson(e))
-        .toList();
-    return (collection, items);
+    final j = await _getJson('/api/collections/${Uri.encodeComponent(slug)}');
+    return parseSharedCollection(j);
   }
 
   Future<VoteStatus> voteStatus(String stationId) async {
@@ -77,8 +73,8 @@ class ThmrApi {
   }
 
   Future<ThmrUser> updateNickname(String nickname) async {
-    final r = await _dio.patch<Object?>('/api/auth/profile',
-        data: {'nickname': nickname});
+    final r = await _dio
+        .patch<Object?>('/api/auth/profile', data: {'nickname': nickname});
     if (r.statusCode != 200) _throwApiError(r);
     // Backend replies {ok, nickname}; refresh the full profile.
     final user = await me();
@@ -192,8 +188,8 @@ class ThmrApi {
   }
 
   Future<VoteStatus> castVote(String stationId) async {
-    final r = await _dio.post<Object?>('/api/vote',
-        data: {'stationId': stationId});
+    final r =
+        await _dio.post<Object?>('/api/vote', data: {'stationId': stationId});
     if (r.statusCode != 200) _throwApiError(r);
     return VoteStatus.fromJson((r.data as Map).cast<String, dynamic>());
   }
@@ -203,4 +199,16 @@ class ThmrApi {
         queryParameters: {'stationId': stationId});
     if (r.statusCode != 200) _throwApiError(r);
   }
+}
+
+/// The public endpoint omits account-only fields such as collection.share.
+(Collection, List<CollectionItem>) parseSharedCollection(
+    Map<String, dynamic> payload) {
+  final collection = Collection.fromJson(
+      Map<String, dynamic>.from(payload['collection'] as Map));
+  final items = ((payload['items'] as List?) ?? const [])
+      .map((item) =>
+          CollectionItem.fromJson(Map<String, dynamic>.from(item as Map)))
+      .toList();
+  return (collection, items);
 }

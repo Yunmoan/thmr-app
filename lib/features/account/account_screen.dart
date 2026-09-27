@@ -4,13 +4,13 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/state/app_providers.dart';
 import '../../core/state/auth_provider.dart';
 import '../../core/state/settings_provider.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/thmr_panel.dart';
+import 'about_panel.dart';
 import 'login_screen.dart';
 
 /// 「我的」:账号(WebView 登录 M2 接入)+ 偏好设置 + 关于。
@@ -283,136 +283,8 @@ class AccountScreen extends ConsumerWidget {
           ],
           const SizedBox(height: 18),
           const SectionHeader(title: '关于'),
-          ThmrPanel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.asset('assets/brand/logo.png',
-                          width: 44, height: 44),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('东方音乐电台 THMR',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleSmall
-                                  ?.copyWith(fontWeight: FontWeight.w800)),
-                          Text(
-                            'Touhou Music Radio · 跨平台客户端',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: tokens.mutedInk),
-                          ),
-                          Text(
-                            'THMR客户端：Alpha v${ref.watch(metaProvider).valueOrNull?.version ?? '…'}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelSmall
-                                ?.copyWith(color: tokens.mutedInk),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  '在博丽大结界守护的幻想乡,24 小时免费放送全球同人佳作。'
-                  '从神社风铃到红魔馆夜曲,跨越现世与异界,聆听符卡与弹幕交织的旋律。',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: tokens.mutedInk, height: 1.62),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  '播放内容版权归原作者所有，本网站为个人兴趣搭建与非商业使用。若有侵权，请联系 yunmoan@zyghit.cn。\n'
-                  '基础设施由 ZGIT Network Experimental IaaS 提供，CDN 服务由 TencentCloud EdgeOne 提供。',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: tokens.mutedInk, height: 1.62),
-                ),
-                const SizedBox(height: 10),
-                const _AboutCreditRow(
-                  label: '作者',
-                  name: '云默安',
-                  url: 'https://github.com/Yunmoan',
-                ),
-                const _AboutCreditRow(
-                  label: '特别鸣谢',
-                  name: 'AoralsFout',
-                  url: 'https://github.com/AoralsFout',
-                ),
-                const _AboutCreditRow(
-                  label: 'THMR官方交流群',
-                  name: '1094578162',
-                  url: 'https://qm.qq.com/q/pKXxsx4m52',
-                ),
-              ],
-            ),
-          ),
+          AboutPanel(version: ref.watch(metaProvider).valueOrNull?.version),
           const SizedBox(height: 30),
-        ],
-      ),
-    );
-  }
-}
-
-/// 「关于」面板的署名行:label + 可点击链接(系统浏览器打开)。
-class _AboutCreditRow extends StatelessWidget {
-  const _AboutCreditRow({
-    required this.label,
-    required this.name,
-    required this.url,
-  });
-
-  final String label;
-  final String name;
-  final String url;
-
-  Future<void> _open() async {
-    try {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    } catch (_) {
-      // 无默认浏览器等环境问题:静默忽略
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).thmr;
-    final mutedStyle = Theme.of(context)
-        .textTheme
-        .bodySmall
-        ?.copyWith(color: tokens.mutedInk);
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('$label：', style: mutedStyle),
-          InkWell(
-            onTap: _open,
-            borderRadius: BorderRadius.circular(4),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-              child: Text(
-                name,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    decoration: TextDecoration.underline),
-              ),
-            ),
-          ),
         ],
       ),
     );

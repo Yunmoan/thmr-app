@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/radio_api.dart';
+import '../../core/api/network_failure.dart';
 import '../../core/models/models.dart';
 import '../../core/state/app_providers.dart';
 import '../../core/state/auth_provider.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/thmr_panel.dart';
+import '../../shared/widgets/network_notice.dart';
 import 'collection_detail.dart';
 import 'shared_collection_screen.dart';
 
@@ -20,6 +22,7 @@ class CollectionsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
     final collections = ref.watch(collectionsProvider);
+    final offline = collections.valueOrNull?.offline ?? false;
     final tokens = Theme.of(context).thmr;
 
     return SafeArea(
@@ -39,50 +42,87 @@ class CollectionsScreen extends ConsumerWidget {
                 IconButton(
                   tooltip: '查看他人分享',
                   icon: const Icon(Icons.link_rounded),
-                  onPressed: () => _openShared(context),
+                  onPressed: offline ? null : () => _openShared(context),
                 ),
                 if (auth.signedIn)
                   IconButton(
                     tooltip: '新建收藏夹',
                     icon: const Icon(Icons.create_new_folder_outlined),
-                    onPressed: () => _newCollection(context, ref),
+                    onPressed:
+                        offline ? null : () => _newCollection(context, ref),
                   ),
               ],
             ),
             const SizedBox(height: 12),
             if (!auth.signedIn)
-              const _SignedOutHint()
+              const Expanded(child: _SignedOutHint())
             else
               Expanded(
                 child: collections.when(
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
-                  error: (e, _) => Center(
-                    child: TextButton.icon(
-                      onPressed: () => ref.invalidate(collectionsProvider),
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('加载失败,点此重试'),
-                    ),
+                  error: (e, _) => NetworkIssueView(
+                    onRetry: () => ref.invalidate(collectionsProvider),
+                    networkFailure: isNetworkFailure(e),
                   ),
-                  data: (list) {
+                  data: (catalog) {
+                    final list = catalog.collections;
                     if (list.isEmpty) {
-                      return Center(
-                        child: Text('还没有收藏夹,点右上角新建一个吧',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(color: tokens.mutedInk)),
+                      return Column(
+                        children: [
+                          if (catalog.offline)
+                            OfflineCacheBanner(
+                              savedAt: catalog.savedAt,
+                              onRetry: () =>
+                                  ref.invalidate(collectionsProvider),
+                            ),
+                          Expanded(
+                            child: Center(
+                              child: Text(
+                                catalog.offline
+                                    ? '本机缓存中还没有收藏夹'
+                                    : '还没有收藏夹,点右上角新建一个吧',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(color: tokens.mutedInk),
+                              ),
+                            ),
+                          ),
+                        ],
                       );
                     }
-                    return RefreshIndicator(
-                      onRefresh: () async =>
-                          ref.invalidate(collectionsProvider),
-                      child: ListView.separated(
-                        itemCount: list.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
-                        itemBuilder: (context, i) => _CollectionCard(
-                            collection: list[i], isDefault: i == 0),
-                      ),
+                    return Column(
+                      children: [
+                        if (catalog.offline) ...[
+                          OfflineCacheBanner(
+                            savedAt: catalog.savedAt,
+                            onRetry: () => ref.invalidate(collectionsProvider),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                        Expanded(
+                          child: RefreshIndicator(
+                            onRefresh: () async {
+                              ref.invalidate(collectionsProvider);
+                              try {
+                                await ref.read(collectionsProvider.future);
+                              } catch (_) {}
+                            },
+                            child: ListView.separated(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              itemCount: list.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 10),
+                              itemBuilder: (context, i) => _CollectionCard(
+                                collection: list[i],
+                                isDefault: i == 0,
+                                readOnly: catalog.offline,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     );
                   },
                 ),
@@ -163,28 +203,46 @@ class CollectionsScreen extends ConsumerWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('创建失败:${e.message}')));
+    } catch (error) {
+      if (!context.mounted) return;
+      if (isNetworkFailure(error)) ref.invalidate(collectionsProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('创建失败，请检查网络连接后重试')),
+      );
     }
   }
 }
 
-/// 未登录引导(立绘 + 文案)。
-class _SignedOutHint extends ConsumerWidget {
+/// 未登录引导。
+class _SignedOutHint extends StatelessWidget {
   const _SignedOutHint();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final tokens = Theme.of(context).thmr;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Opacity(
-            opacity: 0.55,
-            child: Image.asset('assets/brand/background_alt.png',
-                height: 200, fit: BoxFit.contain),
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: tokens.accentSoft,
+              shape: BoxShape.circle,
+              border: Border.all(color: tokens.panelBorder),
+            ),
+            child: Icon(Icons.person_off_outlined, size: 34, color: tokens.ink),
           ),
-          const SizedBox(height: 10),
-          Text('登录后,把喜欢的曲目收进幻想乡的歌单',
+          const SizedBox(height: 14),
+          Text('尚未登录',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleSmall
+                  ?.copyWith(color: tokens.ink, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text('登录后，把喜欢的曲目收进幻想乡的歌单',
+              textAlign: TextAlign.center,
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -197,10 +255,15 @@ class _SignedOutHint extends ConsumerWidget {
 
 /// 收藏夹卡片。
 class _CollectionCard extends ConsumerWidget {
-  const _CollectionCard({required this.collection, required this.isDefault});
+  const _CollectionCard({
+    required this.collection,
+    required this.isDefault,
+    required this.readOnly,
+  });
 
   final Collection collection;
   final bool isDefault;
+  final bool readOnly;
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
@@ -235,10 +298,11 @@ class _CollectionCard extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('删除失败：${e.message}')),
       );
-    } catch (_) {
+    } catch (error) {
       if (!context.mounted) return;
+      if (isNetworkFailure(error)) ref.invalidate(collectionsProvider);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('删除失败，请稍后重试')),
+        const SnackBar(content: Text('删除失败，请检查网络连接后重试')),
       );
     }
   }
@@ -252,9 +316,10 @@ class _CollectionCard extends ConsumerWidget {
           builder: (_) => CollectionDetailScreen(
             collectionId: collection.id,
             name: collection.name,
+            preferOffline: readOnly,
           ),
         ));
-        ref.invalidate(collectionsProvider);
+        if (!readOnly) ref.invalidate(collectionsProvider);
       },
       child: Row(
         children: [
@@ -321,7 +386,7 @@ class _CollectionCard extends ConsumerWidget {
               ],
             ),
           ),
-          if (!isDefault)
+          if (!isDefault && !readOnly)
             IconButton(
               tooltip: '删除收藏夹',
               icon: const Icon(Icons.delete_outline_rounded),

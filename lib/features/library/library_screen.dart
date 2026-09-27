@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/radio_api.dart';
+import '../../core/api/network_failure.dart';
 import '../../core/config.dart';
 import '../../core/models/models.dart';
 import '../../core/state/auth_provider.dart';
@@ -9,6 +10,7 @@ import '../../core/theme/thmr_colors.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import '../../shared/widgets/track_cover.dart';
+import '../../shared/widgets/network_notice.dart';
 
 const _sortOptions = <(String, String)>[
   ('title', '按曲名'),
@@ -54,11 +56,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         sort: _sort,
         pageSize: 100,
       );
+      if (!mounted) return;
       setState(() => _results = tracks);
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (!mounted) return;
+      setState(() => _error = e);
     } catch (e) {
-      setState(() => _error = '网络异常,稍后再试');
+      if (!mounted) return;
+      setState(() => _error = e);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -130,12 +135,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
-      return Center(
-        child: Text('$_error',
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
-                ?.copyWith(color: tokens.mutedInk)),
+      return NetworkIssueView(
+        onRetry: _search,
+        networkFailure: isNetworkFailure(_error!),
+        message: isNetworkFailure(_error!) ? '曲库搜索需要联网。请检查网络连接后重试。' : null,
       );
     }
     final results = _results;
@@ -354,7 +357,7 @@ class _NotSignedIn extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.lock_outline_rounded, size: 40, color: Colors.grey),
+          Icon(Icons.lock_outline_rounded, size: 40, color: tokens.mutedInk),
           const SizedBox(height: 12),
           Text('曲库搜索需要登录后使用',
               style: Theme.of(context)

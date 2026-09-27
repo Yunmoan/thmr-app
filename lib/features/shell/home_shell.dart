@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:io' show Directory, File, Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -8,6 +9,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/player/playback_controller.dart';
+import '../../core/platform/windows_process_exit.dart';
 import '../../core/state/settings_provider.dart';
 import '../../core/state/station_provider.dart';
 import '../../shared/widgets/player_dock_bar.dart';
@@ -30,6 +32,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
     with WindowListener, TrayListener {
   int _index = 0;
   bool _autoTried = false;
+  bool _closing = false;
   bool get _isWindows => !kIsWeb && Platform.isWindows;
 
   static const _destinations = [
@@ -102,23 +105,40 @@ class _HomeShellState extends ConsumerState<HomeShell>
               await windowManager.focus();
             }),
         MenuItem.separator(),
-        MenuItem(
-            label: '退出',
-            onClick: (_) async {
-              await _reallyExit();
-            }),
+        MenuItem(label: '退出', onClick: (_) => _reallyExit()),
       ]));
     } catch (_) {}
   }
 
   /// 真正退出(托盘菜单 / 关闭询问选「退出程序」时)。
-  Future<void> _reallyExit() async {
-    await windowManager.setPreventClose(false);
-    await windowManager.destroy();
+  void _reallyExit({bool rememberChoice = false}) {
+    if (_closing) return;
+    _closing = true;
+    if (rememberChoice) {
+      unawaited(_rememberExitChoiceAndQuit());
+      return;
+    }
+    terminateWindowsProcess();
+  }
+
+  Future<void> _rememberExitChoiceAndQuit() async {
+    try {
+      // Persist the selected preference, but never let a plugin call hold the
+      // window open indefinitely while the user is trying to quit.
+      await ref
+          .read(settingsProvider.notifier)
+          .setCloseAction(CloseAction.exit)
+          .timeout(const Duration(milliseconds: 500));
+    } catch (_) {
+      // Exiting takes priority if preferences cannot be written.
+    } finally {
+      terminateWindowsProcess();
+    }
   }
 
   @override
   void onWindowClose() async {
+    if (_closing) return;
     // 关闭按钮:按用户偏好询问 / 直接退出 / 隐藏到托盘
     final action = ref.read(settingsProvider).closeAction;
     if (action == CloseAction.tray) {
@@ -126,19 +146,19 @@ class _HomeShellState extends ConsumerState<HomeShell>
       return;
     }
     if (action == CloseAction.exit) {
-      await _reallyExit();
+      _reallyExit();
       return;
     }
     final picked = await _askCloseAction();
     if (picked == null) return; // 取消 → 什么都不做
     final (choice, remember) = picked;
-    if (remember) {
-      await ref.read(settingsProvider.notifier).setCloseAction(choice);
-    }
     if (choice == CloseAction.tray) {
+      if (remember) {
+        await ref.read(settingsProvider.notifier).setCloseAction(choice);
+      }
       await windowManager.hide();
     } else {
-      await _reallyExit();
+      _reallyExit(rememberChoice: remember);
     }
   }
 
@@ -189,9 +209,10 @@ class _HomeShellState extends ConsumerState<HomeShell>
             FilledButton.icon(
               style: FilledButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Theme.of(context).colorScheme.onError,
               ),
-              onPressed: () =>
-                  Navigator.of(dialogContext).pop((CloseAction.exit, remember)),
+              // Exit directly, without waiting for the dialog route to pop.
+              onPressed: () => _reallyExit(rememberChoice: remember),
               icon: const Icon(Icons.power_settings_new_rounded, size: 16),
               label: const Text('退出程序'),
             ),
@@ -247,62 +268,64 @@ class _HomeShellState extends ConsumerState<HomeShell>
         for (var i = 0; i < _pages.length; i++) _page(i),
       ],
     );
-    return LayoutBuilder(builder: (context, constraints) {
-      final wide = constraints.maxWidth >= 980;
-      final dock = _dockBar(compact: !wide);
-      if (wide) {
-        return Scaffold(
-          backgroundColor: Colors.transparent,
-          body: Row(
-            children: [
-              NavigationRail(
-                backgroundColor:
-                    Theme.of(context).thmr.solidPanel.withValues(alpha: 0.78),
-                selectedIndex: _index,
-                onDestinationSelected: _switchTo,
-                labelType: NavigationRailLabelType.all,
-                leading: Padding(
-                  padding: const EdgeInsets.only(top: 18, bottom: 10),
-                  child: Image.asset('assets/brand/logo.png', width: 44),
-                ),
-                destinations: [
-                  for (final d in _destinations)
-                    NavigationRailDestination(
-                      icon: Icon(d.icon),
-                      selectedIcon: Icon(d.selected),
-                      label: Text(d.label),
-                    ),
-                ],
-              ),
-              const VerticalDivider(width: 1),
-              Expanded(
-                child: Column(
-                  children: [
-                    Expanded(child: stack),
-                    dock,
+    return Stack(children: [
+      LayoutBuilder(builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 980;
+        final dock = _dockBar(compact: !wide);
+        if (wide) {
+          return Scaffold(
+            backgroundColor: Colors.transparent,
+            body: Row(
+              children: [
+                NavigationRail(
+                  backgroundColor:
+                      Theme.of(context).thmr.solidPanel.withValues(alpha: 0.78),
+                  selectedIndex: _index,
+                  onDestinationSelected: _switchTo,
+                  labelType: NavigationRailLabelType.all,
+                  leading: Padding(
+                    padding: const EdgeInsets.only(top: 18, bottom: 10),
+                    child: Image.asset('assets/brand/logo.png', width: 44),
+                  ),
+                  destinations: [
+                    for (final d in _destinations)
+                      NavigationRailDestination(
+                        icon: Icon(d.icon),
+                        selectedIcon: Icon(d.selected),
+                        label: Text(d.label),
+                      ),
                   ],
                 ),
+                const VerticalDivider(width: 1),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(child: stack),
+                      dock,
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: stack,
+          bottomNavigationBar: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              dock,
+              _ThmrNavBar(
+                destinations: _destinations,
+                index: _index,
+                onChanged: _switchTo,
               ),
             ],
           ),
         );
-      }
-      return Scaffold(
-        backgroundColor: Colors.transparent,
-        body: stack,
-        bottomNavigationBar: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            dock,
-            _ThmrNavBar(
-              destinations: _destinations,
-              index: _index,
-              onChanged: _switchTo,
-            ),
-          ],
-        ),
-      );
-    });
+      }),
+    ]);
   }
 
   /// 底部常驻播放条:非收听页时出现(AnimatedSize 平滑展开)。

@@ -1,6 +1,7 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,6 +29,14 @@ Future<void> main() async {
     });
   }
 
-  await initBackgroundAudio();
   runApp(const ProviderScope(child: ThmrApp()));
+  // Audio service registration can wait for Android's service binding. It must
+  // never keep the launch screen up or prevent the app from opening.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(initBackgroundAudio()
+        .timeout(const Duration(seconds: 20))
+        .catchError((Object error, StackTrace stack) {
+      debugPrint('Background audio initialization failed: $error\n$stack');
+    }));
+  });
 }

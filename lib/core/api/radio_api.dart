@@ -50,8 +50,7 @@ class RadioApi {
 
   /// 直播流地址(直连 MP3)。profileId 取自 station.bitrates 中 enabled 条目。
   String streamUrl(String stationId, String profileId) {
-    final base =
-        '${appConfig.radioBaseUrl}/radio/$stationId/$profileId';
+    final base = '${appConfig.radioBaseUrl}/radio/$stationId/$profileId';
     return appConfig.streamToken.isEmpty
         ? base
         : '$base?token=${Uri.encodeQueryComponent(appConfig.streamToken)}';

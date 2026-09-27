@@ -378,73 +378,76 @@ void main() {
     await mouse.removePointer();
   });
 
-  for (final textScale in [1.0, 1.3]) {
-    testWidgets('mini player fits its fixed window at ${textScale}x text',
-        (tester) async {
-      final windowSize = miniWindowSize(TextScaler.linear(textScale));
-      tester.view.physicalSize = windowSize;
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+  for (final preset in MiniPlayerSizePreset.values) {
+    for (final textScale in [1.0, 1.3]) {
+      testWidgets('mini player $preset fits at ${textScale}x text',
+          (tester) async {
+        final windowSize =
+            miniWindowSize(TextScaler.linear(textScale), preset: preset);
+        tester.view.physicalSize = windowSize;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(ProviderScope(
-        child: MaterialApp(
-          theme: ThmrTheme.light(),
-          // The production mini player is built outside Navigator/Overlay.
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              textScaler: TextScaler.linear(textScale),
-            ),
-            child: MiniPlayerWindow(
-              stationState: StationUiState(
-                status: const StationStatus(
-                  station: StationInfo(
-                    id: 'main',
-                    name: 'THMR',
-                    enabled: true,
-                    public: null,
-                    streamAuthEnabled: false,
-                    bitrates: [],
-                  ),
-                  listeners: 3,
-                  uniqueIps: 3,
-                  current: CurrentTrack(
-                    trackId: '1',
-                    title: 'Saigetsu (tribetrigger edit)',
-                    artist: 'tribetrigger',
-                    coverUrl: '',
-                    startedAtMs: 0,
-                    expectedEndMs: 0,
-                    positionSec: 58,
-                    durationSec: 253,
-                  ),
-                  previous: null,
-                  queue: [],
-                ),
-                updatedAt: DateTime.now(),
+        await tester.pumpWidget(ProviderScope(
+          child: MaterialApp(
+            theme: ThmrTheme.light(),
+            // The production mini player is built outside Navigator/Overlay.
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(textScale),
               ),
-              playbackState: const PlaybackState(),
+              child: MiniPlayerWindow(
+                stationState: StationUiState(
+                  status: const StationStatus(
+                    station: StationInfo(
+                      id: 'main',
+                      name: 'THMR',
+                      enabled: true,
+                      public: null,
+                      streamAuthEnabled: false,
+                      bitrates: [],
+                    ),
+                    listeners: 3,
+                    uniqueIps: 3,
+                    current: CurrentTrack(
+                      trackId: '1',
+                      title: 'Saigetsu (tribetrigger edit)',
+                      artist: 'tribetrigger',
+                      coverUrl: '',
+                      startedAtMs: 0,
+                      expectedEndMs: 0,
+                      positionSec: 58,
+                      durationSec: 253,
+                    ),
+                    previous: null,
+                    queue: [],
+                  ),
+                  updatedAt: DateTime.now(),
+                ),
+                playbackState: const PlaybackState(),
+              ),
             ),
+            home: const SizedBox.shrink(),
           ),
-          home: const SizedBox.shrink(),
-        ),
-      ));
+        ));
 
-      expect(tester.takeException(), isNull);
-      expect(find.byType(VolumeSlider), findsOneWidget);
-      expect(find.text('00:58'), findsNothing);
-      expect(find.text('放送中'), findsNothing);
-      expect(tester.getBottomLeft(find.byType(VolumeSlider)).dy,
-          lessThan(windowSize.height));
-      if (textScale == 1.0) {
-        expect(find.text('tribetrigger'), findsOneWidget);
-        await tester.pump(const Duration(seconds: 4));
-        await tester.pump(const Duration(milliseconds: 300));
-        expect(find.text('3 人在听'), findsOneWidget);
-        await tester.pump(const Duration(seconds: 4));
-        await tester.pump(const Duration(milliseconds: 300));
-        expect(find.text('tribetrigger'), findsOneWidget);
-      }
-    });
+        expect(tester.takeException(), isNull);
+        expect(find.byType(VolumeSlider), findsOneWidget);
+        expect(find.text('00:58'), findsNothing);
+        expect(find.text('放送中'), findsNothing);
+        expect(tester.getBottomLeft(find.byType(VolumeSlider)).dy,
+            lessThan(windowSize.height));
+        if (textScale == 1.0) {
+          expect(find.text('tribetrigger'), findsOneWidget);
+          await tester.pump(const Duration(seconds: 4));
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(find.text('3 人在听'), findsOneWidget);
+          await tester.pump(const Duration(seconds: 4));
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(find.text('tribetrigger'), findsOneWidget);
+        }
+      });
+    }
   }
 }

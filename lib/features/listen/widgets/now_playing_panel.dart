@@ -8,6 +8,8 @@ import '../../../core/api/radio_api.dart';
 import '../../../core/config.dart';
 import '../../../core/models/models.dart';
 import '../../../core/player/playback_controller.dart';
+import '../../../core/player/spectrum_android.dart'
+    show AndroidSpectrum, AndroidSpectrumStatus;
 import '../../../core/player/spectrum.dart'
     show SpectrumSource, getPlatformSpectrum;
 import '../../../core/state/app_providers.dart';
@@ -478,51 +480,123 @@ class _PlayBar extends ConsumerWidget {
   }
 }
 
-/// Energy-model spectrum. Bar count adapts to available width; motion is
-/// layered sinusoids over a random walk with beat pulses, heavier on the
-/// low-frequency side; decays to a flat line when paused. (media_kit does
-/// not expose PCM/FFT data; a true spectrum would need loopback capture.)
+/// Captured output spectrum. When capture is unavailable the strip settles to
+/// rest instead of showing motion unrelated to the playing audio.
 ///
 /// 性能:单一 Ticker 节流到 ~20fps(被 TickerMode 静音时零开销,切页即停),
 /// 并以 CustomPaint 一次绘制全部频谱条,替代逐帧构建上百个 widget。
 class AudioStrip extends StatefulWidget {
-  const AudioStrip({super.key, required this.playing, this.busy = false});
+  const AudioStrip({
+    super.key,
+    required this.playing,
+    this.busy = false,
+    this.source,
+  });
 
   final bool playing;
   final bool busy;
+  final SpectrumSource? source;
 
   @override
   State<AudioStrip> createState() => _AudioStripState();
 }
 
 class _AudioStripState extends State<AudioStrip>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final Ticker _ticker = createTicker(_onTick);
-  final SpectrumSource? _cap = getPlatformSpectrum();
+  late final SpectrumSource? _cap = widget.source ?? getPlatformSpectrum();
   List<double> _values = [];
-  List<double> _targets = [];
-  final _rng = math.Random();
   Duration _last = Duration.zero;
-  int _tick = 0;
+  bool _capturing = false;
+  bool _foreground = true;
 
   @override
   void initState() {
     super.initState();
-    if (widget.playing) _begin();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget.playing && TickerMode.valuesOf(context).enabled) {
+      _begin();
+    } else {
+      _stopCapture();
+      _ticker.stop();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (_foreground && widget.playing) {
+      _begin();
+    } else {
+      _stopCapture();
+      _ticker.stop();
+    }
   }
 
   @override
   void didUpdateWidget(AudioStrip old) {
     super.didUpdateWidget(old);
     // 暂停时不立刻停表:让 tick 走完衰减到静止再自动停
-    if (widget.playing) _begin();
+    if (widget.playing && !old.playing) _begin();
+    if (!widget.playing && old.playing) _stopCapture();
   }
 
   void _begin() {
-    if (_cap != null) _cap.start();
+    if (_cap == null || !_foreground || !TickerMode.valuesOf(context).enabled) {
+      return;
+    }
+    if (!_capturing) {
+      _cap.start();
+      _capturing = true;
+    }
     if (!_ticker.isActive) {
       _last = Duration.zero;
       _ticker.start();
+    }
+  }
+
+  void _stopCapture() {
+    if (!_capturing) return;
+    _cap?.stop();
+    _capturing = false;
+  }
+
+  Future<void> _requestCapture() async {
+    final source = _cap;
+    if (source is! AndroidSpectrum) return;
+    if (source.status == AndroidSpectrumStatus.permissionRequired) {
+      final agreed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('启用实时频谱'),
+          content:
+              const Text('Android 需要音频采集权限来读取设备播放输出并绘制实时频谱。应用不会录制或保存麦克风声音。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('暂不开启'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('继续'),
+            ),
+          ],
+        ),
+      );
+      if (agreed != true || !mounted) return;
+    }
+    final ready = await source.requestAccess();
+    if (!mounted) return;
+    setState(() {});
+    if (!ready) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('实时频谱暂不可用；若已拒绝权限，请在系统设置中为本应用开启音频采集权限。'),
+      ));
     }
   }
 
@@ -560,55 +634,77 @@ class _AudioStripState extends State<AudioStrip>
       }
       return;
     }
-    _tick++;
-    final t = _tick * 0.32;
     for (var i = 0; i < n; i++) {
-      final w = 1.0 - 0.6 * (i / n);
-      final s1 = 0.5 + 0.5 * math.sin(t * (1.05 + 0.09 * (i % 7)) + i * 0.55);
-      final s2 = 0.5 + 0.5 * math.sin(t * (2.2 + 0.11 * (i % 5)) - i * 1.15);
-      final kick = _rng.nextDouble() < 0.09 ? 0.5 : 0.0;
-      final amp = widget.busy ? 0.42 : 1.0;
-      final target =
-          ((0.14 + w * (0.28 + 0.5 * s1) + 0.2 * s2 * w + kick * w) * amp)
-              .clamp(0.08, 1.0);
-      _targets[i] = _targets[i] * 0.3 + target * 0.7;
-      _values[i] += (_targets[i] - _values[i]) * 0.55;
+      _values[i] += (0.02 - _values[i]) * 0.22;
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ticker.dispose();
-    // Keep the shared capture session alive: layout switches recreate this
-    // widget, and stopping here would race with the new instance's start.
+    _stopCapture();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
-    return ExcludeSemantics(
-      child: LayoutBuilder(builder: (context, box) {
-        // one bar per ~8px, clamped
-        final count = (box.maxWidth / 8).round().clamp(28, 110);
-        if (_values.length != count) {
-          final old = _values;
-          _values = List.generate(count, (i) => i < old.length ? old[i] : 0.08);
-          _targets =
-              List.generate(count, (i) => i < old.length ? old[i] : 0.08);
-        }
-        return RepaintBoundary(
-          child: CustomPaint(
-            painter: _SpectrumPainter(
-              values: _values,
-              color: accent,
-              playing: widget.playing,
+    return LayoutBuilder(builder: (context, box) {
+      // one bar per ~8px, clamped
+      final count = (box.maxWidth / 8).round().clamp(28, 110);
+      if (_values.length != count) {
+        final old = _values;
+        _values = List.generate(count, (i) => i < old.length ? old[i] : 0.08);
+      }
+      final android = _cap is AndroidSpectrum ? _cap : null;
+      final needsAction = widget.playing &&
+          android != null &&
+          (android.status == AndroidSpectrumStatus.permissionRequired ||
+              android.status == AndroidSpectrumStatus.unavailable);
+      return RepaintBoundary(
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            ExcludeSemantics(
+              child: CustomPaint(
+                painter: _SpectrumPainter(
+                  values: _values,
+                  color: accent,
+                  playing: widget.playing,
+                ),
+                child: const SizedBox(width: double.infinity, height: 36),
+              ),
             ),
-            child: const SizedBox(width: double.infinity, height: 36),
-          ),
-        );
-      }),
-    );
+            if (needsAction)
+              box.maxWidth < 180
+                  ? Tooltip(
+                      message: android.status ==
+                              AndroidSpectrumStatus.permissionRequired
+                          ? '启用实时频谱'
+                          : '重试实时频谱',
+                      child: TextButton(
+                        onPressed: _requestCapture,
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(44, 32),
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('频谱'),
+                      ),
+                    )
+                  : TextButton.icon(
+                      onPressed: _requestCapture,
+                      icon: const Icon(Icons.graphic_eq_rounded, size: 16),
+                      label: Text(android.status ==
+                              AndroidSpectrumStatus.permissionRequired
+                          ? '启用实时频谱'
+                          : '重试实时频谱'),
+                    ),
+          ],
+        ),
+      );
+    });
   }
 }
 
@@ -672,7 +768,7 @@ class _PlaybackError extends ConsumerWidget {
         style: Theme.of(context)
             .textTheme
             .labelSmall
-            ?.copyWith(color: const Color(0xFFA63D4A)),
+            ?.copyWith(color: Theme.of(context).colorScheme.error),
       ),
     );
   }

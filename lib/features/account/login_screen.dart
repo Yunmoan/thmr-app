@@ -14,8 +14,10 @@
 
 import 'dart:async';
 import 'dart:convert' show utf8;
-import 'dart:io' show HttpServer, InternetAddress, ContentType;
+import 'dart:io' show ContentType, HttpServer, InternetAddress;
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -33,6 +35,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   InAppWebViewController? _controller;
   WebViewEnvironment? _env;
+  bool _envReady = false;
   HttpServer? _loopback;
   int _port = 0;
   bool _loopbackDecided = false;
@@ -52,10 +55,17 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _initEnv() async {
+    // WebViewEnvironment is a WebView2-only API. Android and iOS create their
+    // platform WebView directly and use the default CookieManager instance.
+    if (defaultTargetPlatform != TargetPlatform.windows) {
+      if (mounted) setState(() => _envReady = true);
+      return;
+    }
     try {
       _env = await WebViewEnvironment.create(
         settings: WebViewEnvironmentSettings(userDataFolder: 'thmr_webview'),
       );
+      _envReady = true;
     } catch (e) {
       if (mounted) setState(() => _diag = 'WebView 环境初始化失败:$e');
     }
@@ -169,7 +179,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final ready = _env != null && _loopbackDecided;
+    final ready = _envReady && _loopbackDecided;
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -220,9 +230,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     initialUrlRequest:
                         URLRequest(url: WebUri(_loginUri.toString())),
                     initialSettings: InAppWebViewSettings(
-                      // 保持 WebView2 默认 Edge UA:畸形的自定义 UA
-                      // 会被站点防火墙按可疑请求拦截
-                    ),
+                        // 保持 WebView2 默认 Edge UA:畸形的自定义 UA
+                        // 会被站点防火墙按可疑请求拦截
+                        ),
                     onWebViewCreated: (c) => _controller = c,
                     onProgressChanged: (_, p) =>
                         setState(() => _progress = p / 100),

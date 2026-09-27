@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/radio_api.dart';
+import '../../core/api/network_failure.dart';
 import '../../core/models/models.dart';
 import '../../core/state/station_provider.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/delay_fade_in.dart';
 import '../../shared/widgets/thmr_panel.dart';
+import '../../shared/widgets/network_notice.dart';
 import 'widgets/bitrate_row.dart';
 import 'widgets/now_playing_panel.dart';
 import 'widgets/queue_strip.dart';
@@ -25,19 +27,19 @@ class ListenScreen extends ConsumerWidget {
     final status = station.status;
 
     return SafeArea(
-        bottom: false,
-        child: LayoutBuilder(builder: (context, c) {
-          final wide = c.maxWidth >= 980;
-          if (wide && status != null) {
-            return _WideLayout(status: status, error: station.error);
-          }
-          return _NarrowLayout(
-            status: status,
-            error: station.error,
-            initialLoading: station.initialLoading,
-            stationName: status?.station.name ?? '东方音乐电台 THMR',
-          );
-        }),
+      bottom: false,
+      child: LayoutBuilder(builder: (context, c) {
+        final wide = c.maxWidth >= 980;
+        if (wide && status != null) {
+          return _WideLayout(status: status, error: station.error);
+        }
+        return _NarrowLayout(
+          status: status,
+          error: station.error,
+          initialLoading: station.initialLoading,
+          stationName: status?.station.name ?? '东方音乐电台 THMR',
+        );
+      }),
     );
   }
 }
@@ -58,6 +60,11 @@ class _WideLayout extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           DelayFadeIn(child: _Hero(status: status)),
+          if (error != null)
+            _ErrorCard(
+              error: error!,
+              onRetry: () => ref.read(stationProvider.notifier).refresh(),
+            ),
           const SizedBox(height: 16),
           Expanded(
             child: Row(
@@ -250,7 +257,25 @@ class _NarrowLayout extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
           _TopBar(stationName: stationName, status: status),
-          if (error != null && st == null) _ErrorCard(error: error!),
+          if (error != null && st == null)
+            isNetworkFailure(error!)
+                ? SizedBox(
+                    height: 320,
+                    child: NetworkIssueView(
+                      onRetry: () =>
+                          ref.read(stationProvider.notifier).refresh(),
+                      message: '请检查网络连接。电台直播需要联网，恢复后可重试。',
+                    ),
+                  )
+                : _ErrorCard(
+                    error: error!,
+                    onRetry: () => ref.read(stationProvider.notifier).refresh(),
+                  ),
+          if (error != null && st != null)
+            _ErrorCard(
+              error: error!,
+              onRetry: () => ref.read(stationProvider.notifier).refresh(),
+            ),
           if (st != null) ...[
             const SizedBox(height: 14),
             NowPlayingPanel(status: st),
@@ -267,7 +292,7 @@ class _NarrowLayout extends ConsumerWidget {
             ),
             QueueStrip(status: st),
             const SizedBox(height: 24),
-          ] else if (!initialLoading)
+          ] else if (!initialLoading && error == null)
             const SizedBox(
               height: 320,
               child: Center(child: CircularProgressIndicator()),
@@ -339,9 +364,10 @@ class _TopBar extends StatelessWidget {
 }
 
 class _ErrorCard extends StatelessWidget {
-  const _ErrorCard({required this.error});
+  const _ErrorCard({required this.error, required this.onRetry});
 
   final Object error;
+  final VoidCallback onRetry;
 
   String get _friendly {
     if (error is ApiException) {
@@ -366,7 +392,8 @@ class _ErrorCard extends StatelessWidget {
       child: ThmrPanel(
         child: Row(
           children: [
-            const Icon(Icons.cloud_off_rounded, color: Color(0xFFA63D4A)),
+            Icon(Icons.cloud_off_rounded,
+                color: Theme.of(context).colorScheme.error),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -378,7 +405,7 @@ class _ErrorCard extends StatelessWidget {
               ),
             ),
             TextButton.icon(
-              onPressed: () => ErrorRetryScope.of(context)?.refresh(),
+              onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded, size: 16),
               label: const Text('立即重试'),
             ),
@@ -387,21 +414,4 @@ class _ErrorCard extends StatelessWidget {
       ),
     );
   }
-}
-
-/// 让深层错误卡能触发收听页刷新的轻量作用域。
-class ErrorRetryScope extends InheritedWidget {
-  const ErrorRetryScope({
-    super.key,
-    required this.refresh,
-    required super.child,
-  });
-
-  final Future<void> Function() refresh;
-
-  static ErrorRetryScope? of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<ErrorRetryScope>();
-
-  @override
-  bool updateShouldNotify(ErrorRetryScope oldWidget) => false;
 }

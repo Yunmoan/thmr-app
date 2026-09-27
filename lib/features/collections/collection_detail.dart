@@ -6,13 +6,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/config.dart';
+import '../../core/api/network_failure.dart';
 import '../../core/models/models.dart';
 import '../../core/state/app_providers.dart';
 import '../../core/state/auth_provider.dart';
+import '../../core/state/collection_cache.dart';
 import '../../core/theme/thmr_colors.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import '../../shared/widgets/track_cover.dart';
+import '../../shared/widgets/network_notice.dart';
 
 /// 收藏夹详情:条目列表 + 排序 + 分享开关 + 导出。
 class CollectionDetailScreen extends ConsumerStatefulWidget {
@@ -20,10 +23,12 @@ class CollectionDetailScreen extends ConsumerStatefulWidget {
     super.key,
     required this.collectionId,
     required this.name,
+    this.preferOffline = false,
   });
 
   final String collectionId;
   final String name;
+  final bool preferOffline;
 
   @override
   ConsumerState<CollectionDetailScreen> createState() =>
@@ -38,6 +43,8 @@ class _CollectionDetailScreenState
   List<CollectionItem>? _items;
   Object? _error;
   bool _loading = true;
+  bool _offline = false;
+  DateTime? _cachedAt;
 
   @override
   void initState() {
@@ -45,22 +52,83 @@ class _CollectionDetailScreenState
     _load();
   }
 
-  Future<void> _load() async {
+  List<CollectionItem> _sortCached(List<CollectionItem> items) {
+    final sorted = List<CollectionItem>.of(items);
+    sorted.sort((a, b) {
+      final comparison = switch (_sort) {
+        'title' => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+        'artist' => a.artist.toLowerCase().compareTo(b.artist.toLowerCase()),
+        'addedAt' => (a.addedAt ?? '').compareTo(b.addedAt ?? ''),
+        _ => a.position.compareTo(b.position),
+      };
+      return comparison != 0 ? comparison : a.position.compareTo(b.position);
+    });
+    return _order == 'desc' ? sorted.reversed.toList() : sorted;
+  }
+
+  Future<void> _load({bool retryOnline = false}) async {
     setState(() => _loading = true);
+    final userId = ref.read(authProvider).user?.id;
+    const cache = CollectionCache();
+    if (userId != null && (widget.preferOffline || _offline) && !retryOnline) {
+      final snapshot = await cache.readDetail(userId, widget.collectionId);
+      if (!mounted) return;
+      setState(() {
+        _collection = snapshot?.collection;
+        _items = snapshot == null ? null : _sortCached(snapshot.items);
+        _cachedAt = snapshot?.savedAt;
+        _offline = snapshot != null;
+        _error = snapshot == null ? StateError('No cached detail') : null;
+        _loading = false;
+      });
+      return;
+    }
     try {
       final api = ref.read(authProvider.notifier).api;
-      final (c, items) =
-          await api.collectionDetail(widget.collectionId, sort: _sort, order: _order);
+      final (c, items) = await api.collectionDetail(widget.collectionId,
+          sort: _sort, order: _order);
+      if (!mounted) return;
+      if (userId != null && ref.read(authProvider).user?.id == userId) {
+        try {
+          await cache.saveDetail(userId, c, items);
+        } catch (_) {}
+      }
+      if (!mounted) return;
       setState(() {
         _collection = c;
         _items = items;
         _error = null;
+        _offline = false;
+        _cachedAt = null;
       });
     } catch (e) {
-      setState(() => _error = e);
+      final snapshot = userId != null && isNetworkFailure(e)
+          ? await cache.readDetail(userId, widget.collectionId)
+          : null;
+      if (!mounted) return;
+      setState(() {
+        _collection = snapshot?.collection;
+        _items = snapshot == null ? null : _sortCached(snapshot.items);
+        _cachedAt = snapshot?.savedAt;
+        _offline = snapshot != null;
+        _error = snapshot == null ? e : null;
+      });
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _markOfflineIfNetwork(Object error) async {
+    if (!isNetworkFailure(error) || !mounted) return;
+    final userId = ref.read(authProvider).user?.id;
+    final snapshot = userId == null
+        ? null
+        : await const CollectionCache().readDetail(userId, widget.collectionId);
+    if (!mounted) return;
+    setState(() {
+      _offline = true;
+      _cachedAt = snapshot?.savedAt;
+    });
   }
 
   Future<void> _removeItem(CollectionItem item) async {
@@ -69,7 +137,8 @@ class _CollectionDetailScreenState
       await api.removeItem(widget.collectionId, item.id);
       _load();
       ref.invalidate(collectionsProvider);
-    } catch (_) {
+    } catch (error) {
+      await _markOfflineIfNetwork(error);
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('移除失败,稍后再试')));
@@ -99,8 +168,8 @@ class _CollectionDetailScreenState
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: content));
                 Navigator.of(dialogContext).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('已复制到剪贴板')));
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
               },
               child: const Text('复制全部'),
             ),
@@ -110,7 +179,8 @@ class _CollectionDetailScreenState
           ],
         ),
       );
-    } catch (_) {
+    } catch (error) {
+      await _markOfflineIfNetwork(error);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('导出失败,稍后再试')));
@@ -145,6 +215,7 @@ class _CollectionDetailScreenState
           ),
           PopupMenuButton<String>(
             tooltip: '导出',
+            enabled: !_offline,
             icon: const Icon(Icons.ios_share_rounded),
             onSelected: (v) => _export(context, v),
             itemBuilder: (_) => const [
@@ -170,7 +241,7 @@ class _CollectionDetailScreenState
                         ?.copyWith(color: tokens.mutedInk),
                   ),
                   const Spacer(),
-                  if (share != null)
+                  if (share != null && !_offline)
                     _ShareToggle(
                       enabled: share.enabled,
                       onChanged: (v) async {
@@ -178,7 +249,8 @@ class _CollectionDetailScreenState
                           final api = ref.read(authProvider.notifier).api;
                           await api.setShare(widget.collectionId, enabled: v);
                           _load();
-                        } catch (_) {
+                        } catch (error) {
+                          await _markOfflineIfNetwork(error);
                           if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('操作失败,稍后再试')));
@@ -188,10 +260,21 @@ class _CollectionDetailScreenState
                 ],
               ),
             ),
-            if (share != null && share.enabled && share.slug.isNotEmpty)
+            if (share != null &&
+                !_offline &&
+                share.enabled &&
+                share.slug.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(18, 6, 18, 0),
                 child: _ShareLinkBar(slug: share.slug),
+              ),
+            if (_offline)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 8, 18, 0),
+                child: OfflineCacheBanner(
+                  savedAt: _cachedAt,
+                  onRetry: () => _load(retryOnline: true),
+                ),
               ),
             Expanded(child: _buildList(context, tokens)),
           ],
@@ -205,12 +288,10 @@ class _CollectionDetailScreenState
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
-      return Center(
-        child: TextButton.icon(
-          onPressed: _load,
-          icon: const Icon(Icons.refresh_rounded),
-          label: const Text('加载失败,点此重试'),
-        ),
+      return NetworkIssueView(
+        onRetry: () => _load(retryOnline: true),
+        hasCache: widget.preferOffline,
+        networkFailure: widget.preferOffline || isNetworkFailure(_error!),
       );
     }
     final items = _items ?? const [];
@@ -234,7 +315,7 @@ class _CollectionDetailScreenState
           frost: false,
           child: Row(
             children: [
-              TrackCover(url: it.coverUrl, size: 46, radius: 8),
+              TrackCover(url: _offline ? '' : it.coverUrl, size: 46, radius: 8),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -243,12 +324,8 @@ class _CollectionDetailScreenState
                     Text(it.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleSmall
-                            ?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: tokens.ink)),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700, color: tokens.ink)),
                     Text(
                       '${it.artist}${it.album.isEmpty ? '' : ' · ${it.album}'}',
                       maxLines: 1,
@@ -267,11 +344,12 @@ class _CollectionDetailScreenState
                         .textTheme
                         .labelSmall
                         ?.copyWith(color: tokens.mutedInk)),
-              IconButton(
-                tooltip: '移除',
-                icon: const Icon(Icons.bookmark_remove_outlined, size: 20),
-                onPressed: () => _removeItem(it),
-              ),
+              if (!_offline)
+                IconButton(
+                  tooltip: '移除',
+                  icon: const Icon(Icons.bookmark_remove_outlined, size: 20),
+                  onPressed: () => _removeItem(it),
+                ),
             ],
           ),
         );
@@ -326,8 +404,7 @@ class _ShareLinkBar extends StatelessWidget {
             tooltip: '系统分享',
             visualDensity: VisualDensity.compact,
             icon: const Icon(Icons.share_rounded, size: 16),
-            onPressed: () =>
-                Share.share(url, subject: '东方音乐电台 THMR · 收藏夹分享'),
+            onPressed: () => Share.share(url, subject: '东方音乐电台 THMR · 收藏夹分享'),
           ),
         ],
       ),

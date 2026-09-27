@@ -57,7 +57,8 @@ class TrackRef {
         trackId: (j['trackId'] ?? '').toString(),
         title: (j['title'] ?? '') as String,
         artist: (j['artist'] ?? '') as String,
-        coverUrl: absolutizeCover((j['coverUrl'] ?? '') as String, appConfig.radioBaseUrl),
+        coverUrl: absolutizeCover(
+            (j['coverUrl'] ?? '') as String, appConfig.radioBaseUrl),
       );
 
   String cover(String radioBase) => absolutizeCover(coverUrl, radioBase);
@@ -84,7 +85,8 @@ class CurrentTrack extends TrackRef {
         trackId: (j['trackId'] ?? '').toString(),
         title: (j['title'] ?? '') as String,
         artist: (j['artist'] ?? '') as String,
-        coverUrl: absolutizeCover((j['coverUrl'] ?? '') as String, appConfig.radioBaseUrl),
+        coverUrl: absolutizeCover(
+            (j['coverUrl'] ?? '') as String, appConfig.radioBaseUrl),
         startedAtMs: (j['startedAtMs'] as num?)?.toInt() ?? 0,
         expectedEndMs: (j['expectedEndMs'] as num?)?.toInt() ?? 0,
         positionSec: (j['positionSec'] as num?)?.toInt() ?? 0,
@@ -111,7 +113,8 @@ class QueueEntry extends TrackRef {
         trackId: (j['trackId'] ?? '').toString(),
         title: (j['title'] ?? '') as String,
         artist: (j['artist'] ?? '') as String,
-        coverUrl: absolutizeCover((j['coverUrl'] ?? '') as String, appConfig.radioBaseUrl),
+        coverUrl: absolutizeCover(
+            (j['coverUrl'] ?? '') as String, appConfig.radioBaseUrl),
         plannedStartMs: (j['plannedStartMs'] as num?)?.toInt() ?? 0,
         plannedEndMs: (j['plannedEndMs'] as num?)?.toInt() ?? 0,
         durationSec: (j['durationSec'] as num?)?.toInt() ?? 0,
@@ -190,7 +193,7 @@ class StationStatus {
   });
 
   factory StationStatus.fromJson(Map<String, dynamic> j) {
-    final totals = (j['totals'] ?? const {}) as Map<String, dynamic>;
+    final totals = _optionalJsonMap(j['totals']);
     return StationStatus(
       station: StationInfo.fromJson(j['station'] as Map<String, dynamic>),
       listeners: (totals['listeners'] as num?)?.toInt() ?? 0,
@@ -292,8 +295,7 @@ class Collection {
         itemCount: (j['itemCount'] as num?)?.toInt() ?? 0,
         createdAt: j['createdAt'] as String?,
         updatedAt: j['updatedAt'] as String?,
-        share: ShareInfo.fromJson(
-            (j['share'] ?? const {}) as Map<String, dynamic>),
+        share: ShareInfo.fromJson(_optionalJsonMap(j['share'])),
       );
 }
 
@@ -331,7 +333,8 @@ class CollectionItem {
         artist: (j['artist'] ?? '') as String,
         album: (j['album'] ?? '') as String,
         durationSec: (j['durationSec'] as num?)?.toInt(),
-        coverUrl: absolutizeCover((j['coverUrl'] ?? '') as String, appConfig.radioBaseUrl),
+        coverUrl: absolutizeCover(
+            (j['coverUrl'] ?? '') as String, appConfig.radioBaseUrl),
         addedAt: j['addedAt'] as String?,
       );
 }
@@ -351,8 +354,7 @@ class FavCollectionRef {
     required this.itemId,
   });
 
-  factory FavCollectionRef.fromJson(Map<String, dynamic> j) =>
-      FavCollectionRef(
+  factory FavCollectionRef.fromJson(Map<String, dynamic> j) => FavCollectionRef(
         collectionId: (j['collectionId'] ?? '').toString(),
         name: (j['name'] ?? '') as String,
         favorited: j['favorited'] == true,
@@ -409,7 +411,8 @@ class LibraryTrack {
         album: (j['album'] ?? '') as String,
         relativePath: (j['relativePath'] ?? '') as String,
         durationSec: (j['durationSec'] as num?)?.toInt(),
-        coverUrl: absolutizeCover((j['coverUrl'] ?? '') as String, appConfig.radioBaseUrl),
+        coverUrl: absolutizeCover(
+            (j['coverUrl'] ?? '') as String, appConfig.radioBaseUrl),
       );
 }
 
@@ -454,8 +457,7 @@ class VoteStatus {
         stationId: (j['stationId'] ?? '') as String,
         active: j['active'] == true,
         listeners: (j['listeners'] as num?)?.toInt() ?? 0,
-        current:
-            j['current'] == null ? null : TrackRef.fromJson(j['current']),
+        current: j['current'] == null ? null : TrackRef.fromJson(j['current']),
         round: j['round'] == null ? null : VoteRound.fromJson(j['round']),
         myVote: j['myVote'] == true,
         reason: j['reason'] as String?,
@@ -479,10 +481,9 @@ class ThmrMeta {
   });
 
   factory ThmrMeta.fromJson(Map<String, dynamic> j) {
-    final auth = (j['auth'] ?? const {}) as Map<String, dynamic>;
-    final vote = (j['vote'] ?? const {}) as Map<String, dynamic>;
-    final collections =
-        (j['collections'] ?? const {}) as Map<String, dynamic>;
+    final auth = _optionalJsonMap(j['auth']);
+    final vote = _optionalJsonMap(j['vote']);
+    final collections = _optionalJsonMap(j['collections']);
     return ThmrMeta(
       version: (j['version'] ?? '') as String,
       natayarkConfigured: auth['natayarkConfigured'] == true,
@@ -493,6 +494,9 @@ class ThmrMeta {
     );
   }
 }
+
+Map<String, dynamic> _optionalJsonMap(Object? value) =>
+    value is Map ? Map<String, dynamic>.from(value) : const <String, dynamic>{};
 
 /// mm:ss 工具。
 String formatDuration(int? seconds) {
