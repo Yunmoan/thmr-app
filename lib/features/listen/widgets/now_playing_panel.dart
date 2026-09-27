@@ -1,0 +1,939 @@
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/api/radio_api.dart';
+import '../../../core/config.dart';
+import '../../../core/models/models.dart';
+import '../../../core/player/playback_controller.dart';
+import '../../../core/player/spectrum.dart'
+    show SpectrumSource, getPlatformSpectrum;
+import '../../../core/state/app_providers.dart';
+import '../../../core/state/auth_provider.dart';
+import '../../../core/state/station_provider.dart';
+import '../../../core/theme/thmr_theme.dart';
+import '../../../shared/widgets/thmr_panel.dart';
+import '../../../shared/widgets/volume_slider.dart';
+import 'bitrate_row.dart';
+import 'feedback_sheet.dart';
+
+/// 正在放送面板:封面 + 曲名 + 直播进度 + 控制排(收藏 / 播放 / 反馈)+ 投票。
+///
+/// 重建范围刻意收窄:本面板只订阅低频状态(电台 10s 轮询、收藏状态);
+/// 秒级变化由 [_PlayBar] / [_VolumeControl] / [_PlaybackError] 各自窄订阅,
+/// 整面板不再每秒重建。
+class NowPlayingPanel extends ConsumerStatefulWidget {
+  const NowPlayingPanel(
+      {super.key, required this.status, this.inlineBitrate = true});
+
+  final StationStatus status;
+
+  /// Mobile: quality chips live inside the panel; desktop keeps a separate
+  /// panel (its own row) instead.
+  final bool inlineBitrate;
+
+  @override
+  ConsumerState<NowPlayingPanel> createState() => _NowPlayingPanelState();
+}
+
+class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
+  Future<void> _onMainButton() {
+    return ref
+        .read(playbackProvider.notifier)
+        .toggle(ref.read(streamUrlProvider));
+  }
+
+  Future<void> _toggleFavorite(CurrentTrack cur) async {
+    final auth = ref.read(authProvider);
+    if (!auth.signedIn) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('登录后即可收藏曲目,在「我的」页登录')));
+      return;
+    }
+    final api = ref.read(authProvider.notifier).api;
+    final fs = ref.read(favoritesStatusProvider).valueOrNull;
+    try {
+      if (fs != null &&
+          fs.favorited &&
+          fs.itemId != null &&
+          fs.collectionId != null) {
+        await api.removeItem(fs.collectionId!, fs.itemId!);
+      } else {
+        // 默认收藏夹 = collections 首个(position 最小)
+        final defaultCid = fs?.collections.isNotEmpty == true
+            ? fs!.collections.first.collectionId
+            : (await api.collections()).first.id;
+        await api.addToCollection(defaultCid,
+            stationId: appConfig.stationId, trackId: cur.trackId);
+      }
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.statusCode == 409) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('这首已经在收藏夹里了')));
+      } else if (e.statusCode == 401) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('登录已过期,请重新登录')));
+      } else {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('操作失败:${e.message}')));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('网络异常,稍后再试')));
+    } finally {
+      ref.invalidate(favoritesStatusProvider);
+      ref.invalidate(collectionsProvider);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cur = widget.status.current;
+    final meta = ref.watch(metaProvider).valueOrNull;
+    // 与 Web 端对齐:功能开关 + meta 阈值 双条件
+    final voteEnabled =
+        appConfig.featuresVote && (meta?.voteThreshold ?? 0) > 0;
+    final favorited = ref.watch(favoritesStatusProvider
+        .select((v) => v.valueOrNull?.favorited ?? false));
+
+    return ThmrPanel(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // now-playing row: cover left, copy right (web PlayerConsole)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _Cover96(cur: cur),
+              const SizedBox(width: 14),
+              Expanded(
+                child: _TrackCopy(
+                  cur: cur,
+                  favorited: favorited,
+                  onFavorite: cur == null ? null : () => _toggleFavorite(cur),
+                  onFeedback: cur == null
+                      ? null
+                      : () => showFeedbackSheet(context, track: cur),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // player-toggle long bar (web .player-toggle)
+          _PlayBar(onToggle: _onMainButton),
+          const _PlaybackError(),
+          const SizedBox(height: 12),
+          // volume: desktop = inline slider; mobile = icon + bottom sheet
+          _VolumeControl(desktopInline: !widget.inlineBitrate),
+          if (widget.inlineBitrate) ...[
+            const SizedBox(height: 4),
+            Divider(color: Theme.of(context).thmr.panelBorder),
+            const SizedBox(height: 2),
+            const BitrateRow(),
+          ],
+          if (voteEnabled) ...[
+            const SizedBox(height: 12),
+            const Center(child: _VoteStrip()),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _Cover96 extends StatelessWidget {
+  const _Cover96({required this.cur});
+
+  final CurrentTrack? cur;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).thmr;
+    final track = cur;
+    // 限制解码尺寸:96px 封面不必解码原图
+    final cacheWidth = (96 * MediaQuery.devicePixelRatioOf(context)).round();
+    final child = (track == null || track.coverUrl.isEmpty)
+        ? Image.asset('assets/brand/cover-fallback.png',
+            fit: BoxFit.cover, cacheWidth: cacheWidth)
+        : Image.network(
+            track.coverUrl,
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.low,
+            cacheWidth: cacheWidth,
+            gaplessPlayback: true,
+            errorBuilder: (_, __, ___) => Image.asset(
+                'assets/brand/cover-fallback.png',
+                fit: BoxFit.cover,
+                cacheWidth: cacheWidth),
+          );
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: tokens.shadow,
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 400),
+          switchInCurve: Curves.easeOut,
+          child: KeyedSubtree(
+            key: ValueKey(track?.coverUrl ?? 'no-cover'),
+            child: SizedBox(width: 96, height: 96, child: child),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// track copy block: eyebrow + title + artist row + actions (web layout).
+class _TrackCopy extends ConsumerWidget {
+  const _TrackCopy({
+    required this.cur,
+    required this.favorited,
+    this.onFavorite,
+    this.onFeedback,
+  });
+
+  final CurrentTrack? cur;
+  final bool favorited;
+  final VoidCallback? onFavorite;
+  final VoidCallback? onFeedback;
+
+  static final GlobalKey _favKey = GlobalKey();
+
+  Future<void> _handleFavoriteTap(BuildContext context, WidgetRef ref) async {
+    if (cur == null || onFavorite == null) return;
+    final fs = ref.read(favoritesStatusProvider).valueOrNull;
+    final cols = fs?.collections ?? const <FavCollectionRef>[];
+    // Single collection (or unknown): keep the direct toggle path.
+    if (cols.length <= 1) {
+      onFavorite!();
+      return;
+    }
+    // Multiple collections: anchored pick menu, mirrors web fav-menu.
+    final box = _favKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) {
+      onFavorite!();
+      return;
+    }
+    final pos = box.localToGlobal(Offset.zero);
+    final size = box.size;
+    final picked = await showMenu<FavCollectionRef>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        pos.dx,
+        pos.dy + size.height + 6,
+        pos.dx + size.width,
+        pos.dy + size.height,
+      ),
+      items: [
+        for (final c in cols)
+          PopupMenuItem(
+            value: c,
+            child: Row(
+              children: [
+                Icon(
+                  c.favorited
+                      ? Icons.favorite_rounded
+                      : Icons.favorite_border_rounded,
+                  size: 15,
+                  color: c.favorited
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).thmr.mutedInk,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(c.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).thmr.ink)),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  c.favorited ? '已收藏' : '收藏',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: c.favorited
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).thmr.mutedInk),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+    if (picked == null || !context.mounted) return;
+    try {
+      final api = ref.read(authProvider.notifier).api;
+      if (picked.favorited && picked.itemId != null) {
+        await api.removeItem(picked.collectionId, picked.itemId!);
+      } else {
+        await api.addToCollection(picked.collectionId,
+            stationId: appConfig.stationId, trackId: cur!.trackId);
+      }
+      ref.invalidate(favoritesStatusProvider);
+      ref.invalidate(collectionsProvider);
+    } on ApiException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content:
+              Text(e.statusCode == 409 ? '已在该收藏夹中' : '操作失败:${e.message}')));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('网络异常,稍后再试')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = Theme.of(context).thmr;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '当前曲目',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: tokens.mutedInk,
+                letterSpacing: 3,
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+        const SizedBox(height: 4),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 350),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeIn,
+          transitionBuilder: (child, anim) =>
+              FadeTransition(opacity: anim, child: child),
+          child: Text(
+            cur?.title ?? '暂无播放',
+            key: ValueKey(cur?.trackId ?? 'none'),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context)
+                .textTheme
+                .titleLarge
+                ?.copyWith(fontWeight: FontWeight.w800, height: 1.25),
+          ),
+        ),
+        const SizedBox(height: 6),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 350),
+          transitionBuilder: (child, anim) =>
+              FadeTransition(opacity: anim, child: child),
+          child: Text(
+            cur?.artist ?? '等待下一首',
+            key: ValueKey('a${cur?.trackId ?? 'none'}'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: tokens.mutedInk),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            _TextAction(
+              key: _favKey,
+              label: favorited ? '已收藏' : '收藏',
+              active: favorited,
+              onTap: onFavorite == null
+                  ? null
+                  : () => _handleFavoriteTap(context, ref),
+            ),
+            _TextAction(label: '反馈', onTap: onFeedback),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// small bordered text button, mirrors web .track-feedback-button.
+class _TextAction extends StatelessWidget {
+  const _TextAction({
+    super.key,
+    required this.label,
+    this.active = false,
+    this.onTap,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).thmr;
+    final accent = Theme.of(context).colorScheme.primary;
+    return Material(
+      color: active ? tokens.accentSoft : tokens.fieldBg,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color:
+                  active ? accent.withValues(alpha: 0.5) : tokens.panelBorder,
+            ),
+          ),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: active ? accent : tokens.ink,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlayBar extends ConsumerWidget {
+  const _PlayBar({required this.onToggle});
+
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = Theme.of(context).thmr;
+    final scheme = Theme.of(context).colorScheme;
+    // 窄订阅:仅相位 / 收听秒数变化才重建本条
+    final phase = ref.watch(playbackProvider.select((s) => s.phase));
+    final elapsed = ref.watch(playbackProvider.select((s) => s.listenedSec));
+    final busy = phase == PlaybackPhase.connecting ||
+        phase == PlaybackPhase.reconnecting;
+    final playing =
+        phase == PlaybackPhase.online || phase == PlaybackPhase.buffering;
+    final label = switch (phase) {
+      PlaybackPhase.idle => '播放',
+      PlaybackPhase.connecting => '连接中',
+      PlaybackPhase.online => '正在播放',
+      PlaybackPhase.buffering => '正在播放',
+      PlaybackPhase.reconnecting => '重连中',
+    };
+
+    return Material(
+      color: tokens.fieldBg,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onToggle,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: tokens.panelBorder),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 52,
+                child: Text(
+                  formatDuration(elapsed),
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: AudioStrip(playing: playing, busy: busy)),
+              const SizedBox(width: 12),
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: playing ? scheme.primary : tokens.mutedInk,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Energy-model spectrum. Bar count adapts to available width; motion is
+/// layered sinusoids over a random walk with beat pulses, heavier on the
+/// low-frequency side; decays to a flat line when paused. (media_kit does
+/// not expose PCM/FFT data; a true spectrum would need loopback capture.)
+///
+/// 性能:单一 Ticker 节流到 ~20fps(被 TickerMode 静音时零开销,切页即停),
+/// 并以 CustomPaint 一次绘制全部频谱条,替代逐帧构建上百个 widget。
+class AudioStrip extends StatefulWidget {
+  const AudioStrip({super.key, required this.playing, this.busy = false});
+
+  final bool playing;
+  final bool busy;
+
+  @override
+  State<AudioStrip> createState() => _AudioStripState();
+}
+
+class _AudioStripState extends State<AudioStrip>
+    with SingleTickerProviderStateMixin {
+  late final Ticker _ticker = createTicker(_onTick);
+  final SpectrumSource? _cap = getPlatformSpectrum();
+  List<double> _values = [];
+  List<double> _targets = [];
+  final _rng = math.Random();
+  Duration _last = Duration.zero;
+  int _tick = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.playing) _begin();
+  }
+
+  @override
+  void didUpdateWidget(AudioStrip old) {
+    super.didUpdateWidget(old);
+    // 暂停时不立刻停表:让 tick 走完衰减到静止再自动停
+    if (widget.playing) _begin();
+  }
+
+  void _begin() {
+    if (_cap != null) _cap.start();
+    if (!_ticker.isActive) {
+      _last = Duration.zero;
+      _ticker.start();
+    }
+  }
+
+  void _onTick(Duration elapsed) {
+    // ~20fps is plenty; skip the in-between frames.
+    if (elapsed - _last < const Duration(milliseconds: 48)) return;
+    _last = elapsed;
+    var settled = false;
+    if (widget.playing) {
+      _step();
+    } else {
+      for (var i = 0; i < _values.length; i++) {
+        _values[i] += (0.05 - _values[i]) * 0.32;
+      }
+      settled = _values.every((v) => v <= 0.065);
+    }
+    if (settled) {
+      // 衰减到静止 → 停表,暂停时零开销
+      _ticker.stop();
+      _last = Duration.zero;
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _step() {
+    final n = _values.length;
+    if (n == 0) return;
+    final real = _cap?.poll(n);
+    if (real != null) {
+      for (var i = 0; i < n; i++) {
+        // asymmetric envelope: moderate attack, graceful release
+        final nv = real[i];
+        final k = nv > _values[i] ? 0.42 : 0.09;
+        _values[i] += (nv - _values[i]) * k;
+      }
+      return;
+    }
+    _tick++;
+    final t = _tick * 0.32;
+    for (var i = 0; i < n; i++) {
+      final w = 1.0 - 0.6 * (i / n);
+      final s1 = 0.5 + 0.5 * math.sin(t * (1.05 + 0.09 * (i % 7)) + i * 0.55);
+      final s2 = 0.5 + 0.5 * math.sin(t * (2.2 + 0.11 * (i % 5)) - i * 1.15);
+      final kick = _rng.nextDouble() < 0.09 ? 0.5 : 0.0;
+      final amp = widget.busy ? 0.42 : 1.0;
+      final target =
+          ((0.14 + w * (0.28 + 0.5 * s1) + 0.2 * s2 * w + kick * w) * amp)
+              .clamp(0.08, 1.0);
+      _targets[i] = _targets[i] * 0.3 + target * 0.7;
+      _values[i] += (_targets[i] - _values[i]) * 0.55;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    // Keep the shared capture session alive: layout switches recreate this
+    // widget, and stopping here would race with the new instance's start.
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+    return ExcludeSemantics(
+      child: LayoutBuilder(builder: (context, box) {
+        // one bar per ~8px, clamped
+        final count = (box.maxWidth / 8).round().clamp(28, 110);
+        if (_values.length != count) {
+          final old = _values;
+          _values = List.generate(count, (i) => i < old.length ? old[i] : 0.08);
+          _targets =
+              List.generate(count, (i) => i < old.length ? old[i] : 0.08);
+        }
+        return RepaintBoundary(
+          child: CustomPaint(
+            painter: _SpectrumPainter(
+              values: _values,
+              color: accent,
+              playing: widget.playing,
+            ),
+            child: const SizedBox(width: double.infinity, height: 36),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+/// Draws one rounded bar per value, growing symmetrically around the
+/// vertical midline — visually identical to the old Row-of-Containers.
+class _SpectrumPainter extends CustomPainter {
+  _SpectrumPainter({
+    required this.values,
+    required this.color,
+    required this.playing,
+  });
+
+  final List<double> values;
+  final Color color;
+  final bool playing;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = values.length;
+    if (n == 0 || size.width <= 0) return;
+    final slot = size.width / n;
+    final barW = (slot - 2.0).clamp(1.2, slot);
+    final radius = Radius.circular(math.min(2.0, barW / 2));
+    final paint = Paint()..style = PaintingStyle.fill;
+    for (var i = 0; i < n; i++) {
+      final v = values[i].clamp(0.0, 1.0);
+      final h = 2.0 + 32.0 * v;
+      paint.color = color.withValues(alpha: playing ? 0.4 + 0.6 * v : 0.22);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(
+            i * slot + (slot - barW) / 2,
+            (size.height - h) / 2,
+            barW,
+            h,
+          ),
+          radius,
+        ),
+        paint,
+      );
+    }
+  }
+
+  // values mutate in place; repaint whenever the widget rebuilds.
+  @override
+  bool shouldRepaint(_SpectrumPainter oldDelegate) => true;
+}
+
+/// 播放错误条:窄订阅,仅在错误出现/消失时重建。
+class _PlaybackError extends ConsumerWidget {
+  const _PlaybackError();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final error = ref.watch(playbackProvider.select((s) => s.error));
+    if (error == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Text(
+        error,
+        style: Theme.of(context)
+            .textTheme
+            .labelSmall
+            ?.copyWith(color: const Color(0xFFA63D4A)),
+      ),
+    );
+  }
+}
+
+/// 音量控制:桌面 = 常驻内联滑杆;手机 = 图标 + 弹层。
+class _VolumeControl extends ConsumerStatefulWidget {
+  const _VolumeControl({required this.desktopInline});
+
+  final bool desktopInline;
+
+  @override
+  ConsumerState<_VolumeControl> createState() => _VolumeControlState();
+}
+
+class _VolumeControlState extends ConsumerState<_VolumeControl> {
+  @override
+  Widget build(BuildContext context) {
+    final volume = ref.watch(playbackProvider.select((s) => s.volume));
+    if (!widget.desktopInline) {
+      // Mobile: compact icon that opens a popup slider (原行为)
+      final muted = volume <= 0;
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => showModalBottomSheet<void>(
+            context: context,
+            builder: (sheetContext) => _VolumeSheet(initial: volume),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  muted
+                      ? Icons.volume_off_rounded
+                      : volume < 50
+                          ? Icons.volume_down_rounded
+                          : Icons.volume_up_rounded,
+                  size: 18,
+                  color: Theme.of(context).thmr.mutedInk,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '音量 ${volume.round()}%',
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelSmall
+                      ?.copyWith(color: Theme.of(context).thmr.mutedInk),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Desktop: inline slider, always visible.
+    final tokens = Theme.of(context).thmr;
+    final shown = volume;
+    final muted = shown <= 0;
+    return Row(
+      children: [
+        IconButton(
+          tooltip: muted ? '取消静音' : '静音',
+          visualDensity: VisualDensity.compact,
+          icon: Icon(
+            muted
+                ? Icons.volume_off_rounded
+                : shown < 50
+                    ? Icons.volume_down_rounded
+                    : Icons.volume_up_rounded,
+            size: 18,
+            color: tokens.mutedInk,
+          ),
+          onPressed: () =>
+              ref.read(playbackProvider.notifier).setVolume(muted ? 100 : 0),
+        ),
+        Expanded(
+          child: VolumeSlider(
+            value: shown,
+            onChanged: (v) => ref.read(playbackProvider.notifier).setVolume(v),
+          ),
+        ),
+        SizedBox(
+          width: 40,
+          child: Text(
+            '${shown.round()}%',
+            textAlign: TextAlign.right,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: tokens.mutedInk,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _VolumeSheet extends ConsumerStatefulWidget {
+  const _VolumeSheet({required this.initial});
+
+  final double initial;
+
+  @override
+  ConsumerState<_VolumeSheet> createState() => _VolumeSheetState();
+}
+
+class _VolumeSheetState extends ConsumerState<_VolumeSheet> {
+  late double _value = widget.initial;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).thmr;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 6, 20, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('播放音量',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                IconButton(
+                  tooltip: _value <= 0 ? '取消静音' : '静音',
+                  icon: Icon(
+                    _value <= 0
+                        ? Icons.volume_off_rounded
+                        : _value < 50
+                            ? Icons.volume_down_rounded
+                            : Icons.volume_up_rounded,
+                    color: tokens.mutedInk,
+                  ),
+                  onPressed: () {
+                    final next = _value <= 0 ? 100.0 : 0.0;
+                    ref.read(playbackProvider.notifier).setVolume(next);
+                    setState(() => _value = next);
+                  },
+                ),
+                Expanded(
+                  child: VolumeSlider(
+                    value: _value,
+                    onChanged: (v) {
+                      ref.read(playbackProvider.notifier).setVolume(v);
+                      setState(() => _value = v);
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: 42,
+                  child: Text(
+                    '${_value.round()}%',
+                    textAlign: TextAlign.right,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: tokens.mutedInk,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 投票切歌条(阈值来自 /api/meta)。
+class _VoteStrip extends ConsumerStatefulWidget {
+  const _VoteStrip();
+
+  @override
+  ConsumerState<_VoteStrip> createState() => _VoteStripState();
+}
+
+class _VoteStripState extends ConsumerState<_VoteStrip> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final vote = ref.watch(voteStatusProvider);
+    final tokens = Theme.of(context).thmr;
+    final v = vote.valueOrNull;
+    final round = v?.round;
+    final theme = Theme.of(context);
+
+    final content = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.bolt_rounded,
+            size: 18,
+            color: (v?.myVote ?? false)
+                ? theme.colorScheme.primary
+                : tokens.mutedInk),
+        const SizedBox(width: 6),
+        Text(
+          round == null
+              ? '投票切歌暂不可用'
+              : '切歌投票 ${round.votes}/${round.threshold}'
+                  '${round.actionTaken ? ' · 已触发切歌' : ''}',
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: round == null ? tokens.mutedInk : tokens.ink,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 10),
+        if (round != null && !round.actionTaken)
+          TextButton(
+            onPressed: _busy ? null : () => _cast(v?.myVote ?? false),
+            child: Text(v?.myVote ?? false ? '取消' : '投一票'),
+          ),
+      ],
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: tokens.panelSoft,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: tokens.panelBorder),
+      ),
+      child: content,
+    );
+  }
+
+  Future<void> _cast(bool mine) async {
+    setState(() => _busy = true);
+    try {
+      final auth = ref.read(authProvider);
+      if (!auth.signedIn) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('登录后即可参与切歌投票')));
+        return;
+      }
+      final api = ref.read(authProvider.notifier).api;
+      if (mine) {
+        await api.cancelVote(appConfig.stationId);
+      } else {
+        await api.castVote(appConfig.stationId);
+      }
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('投票失败:${e.message}')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('网络异常,稍后再试')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+      ref.invalidate(voteStatusProvider);
+    }
+  }
+}
