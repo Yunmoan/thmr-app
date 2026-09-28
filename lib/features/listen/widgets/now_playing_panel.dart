@@ -18,6 +18,7 @@ import '../../../core/state/station_provider.dart';
 import '../../../core/theme/thmr_theme.dart';
 import '../../../shared/widgets/thmr_panel.dart';
 import '../../../shared/widgets/volume_slider.dart';
+import '../../../shared/widgets/volume_wheel_control.dart';
 import 'bitrate_row.dart';
 import 'feedback_sheet.dart';
 
@@ -793,35 +794,39 @@ class _VolumeControlState extends ConsumerState<_VolumeControl> {
       final muted = volume <= 0;
       return Align(
         alignment: Alignment.centerLeft,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: () => showModalBottomSheet<void>(
-            context: context,
-            builder: (sheetContext) => _VolumeSheet(initial: volume),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  muted
-                      ? Icons.volume_off_rounded
-                      : volume < 50
-                          ? Icons.volume_down_rounded
-                          : Icons.volume_up_rounded,
-                  size: 18,
-                  color: Theme.of(context).thmr.mutedInk,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '音量 ${volume.round()}%',
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelSmall
-                      ?.copyWith(color: Theme.of(context).thmr.mutedInk),
-                ),
-              ],
+        child: VolumeWheelControl(
+          value: volume,
+          onChanged: (v) => ref.read(playbackProvider.notifier).setVolume(v),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => showModalBottomSheet<void>(
+              context: context,
+              builder: (sheetContext) => _VolumeSheet(initial: volume),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    muted
+                        ? Icons.volume_off_rounded
+                        : volume < 50
+                            ? Icons.volume_down_rounded
+                            : Icons.volume_up_rounded,
+                    size: 18,
+                    color: Theme.of(context).thmr.mutedInk,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '音量 ${volume.round()}%',
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelSmall
+                        ?.copyWith(color: Theme.of(context).thmr.mutedInk),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -834,20 +839,24 @@ class _VolumeControlState extends ConsumerState<_VolumeControl> {
     final muted = shown <= 0;
     return Row(
       children: [
-        IconButton(
-          tooltip: muted ? '取消静音' : '静音',
-          visualDensity: VisualDensity.compact,
-          icon: Icon(
-            muted
-                ? Icons.volume_off_rounded
-                : shown < 50
-                    ? Icons.volume_down_rounded
-                    : Icons.volume_up_rounded,
-            size: 18,
-            color: tokens.mutedInk,
+        VolumeWheelControl(
+          value: shown,
+          onChanged: (v) => ref.read(playbackProvider.notifier).setVolume(v),
+          child: IconButton(
+            tooltip: muted ? '取消静音' : '静音',
+            visualDensity: VisualDensity.compact,
+            icon: Icon(
+              muted
+                  ? Icons.volume_off_rounded
+                  : shown < 50
+                      ? Icons.volume_down_rounded
+                      : Icons.volume_up_rounded,
+              size: 18,
+              color: tokens.mutedInk,
+            ),
+            onPressed: () =>
+                ref.read(playbackProvider.notifier).setVolume(muted ? 100 : 0),
           ),
-          onPressed: () =>
-              ref.read(playbackProvider.notifier).setVolume(muted ? 100 : 0),
         ),
         Expanded(
           child: VolumeSlider(
@@ -901,21 +910,28 @@ class _VolumeSheetState extends ConsumerState<_VolumeSheet> {
             const SizedBox(height: 4),
             Row(
               children: [
-                IconButton(
-                  tooltip: _value <= 0 ? '取消静音' : '静音',
-                  icon: Icon(
-                    _value <= 0
-                        ? Icons.volume_off_rounded
-                        : _value < 50
-                            ? Icons.volume_down_rounded
-                            : Icons.volume_up_rounded,
-                    color: tokens.mutedInk,
-                  ),
-                  onPressed: () {
-                    final next = _value <= 0 ? 100.0 : 0.0;
-                    ref.read(playbackProvider.notifier).setVolume(next);
-                    setState(() => _value = next);
+                VolumeWheelControl(
+                  value: _value,
+                  onChanged: (v) {
+                    ref.read(playbackProvider.notifier).setVolume(v);
+                    setState(() => _value = v);
                   },
+                  child: IconButton(
+                    tooltip: _value <= 0 ? '取消静音' : '静音',
+                    icon: Icon(
+                      _value <= 0
+                          ? Icons.volume_off_rounded
+                          : _value < 50
+                              ? Icons.volume_down_rounded
+                              : Icons.volume_up_rounded,
+                      color: tokens.mutedInk,
+                    ),
+                    onPressed: () {
+                      final next = _value <= 0 ? 100.0 : 0.0;
+                      ref.read(playbackProvider.notifier).setVolume(next);
+                      setState(() => _value = next);
+                    },
+                  ),
                 ),
                 Expanded(
                   child: VolumeSlider(
