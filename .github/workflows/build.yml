@@ -117,6 +117,7 @@ jobs:
           name: thmr-app-linux
           path: thmr-app-linux-x64.tar.gz
           if-no-files-found: error
+          overwrite: true
       - uses: softprops/action-gh-release@v3
         if: github.event_name != 'pull_request'
         with:
@@ -156,7 +157,7 @@ jobs:
           app=build/macos/Build/Products/Release/THMR.app
           test "$(/usr/libexec/PlistBuddy -c 'Print:CFBundleShortVersionString' "$app/Contents/Info.plist")" = "$CLIENT_VERSION"
           test "$(/usr/libexec/PlistBuddy -c 'Print:CFBundleVersion' "$app/Contents/Info.plist")" = "$CLIENT_BUILD_NUMBER"
-          lipo -verify_arch x86_64 arm64 "$app/Contents/MacOS/THMR"
+          lipo "$app/Contents/MacOS/THMR" -verify_arch x86_64 arm64
           codesign --verify --deep --strict "$app"
           ditto -c -k --sequesterRsrc --keepParent "$app" thmr-app-macos-universal.zip
       - name: Sign and notarize macOS distribution when configured
@@ -173,6 +174,7 @@ jobs:
           name: thmr-app-macos
           path: thmr-app-macos-universal.zip
           if-no-files-found: error
+          overwrite: true
       - uses: softprops/action-gh-release@v3
         if: github.event_name != 'pull_request'
         with:
@@ -218,6 +220,7 @@ jobs:
           name: thmr-app-windows
           path: thmr-app-windows-x64.zip
           if-no-files-found: error
+          overwrite: true
       - uses: softprops/action-gh-release@v3
         if: github.event_name != 'pull_request'
         with:
@@ -286,6 +289,7 @@ jobs:
           name: thmr-app-apk
           path: thmr-app-android.apk
           if-no-files-found: error
+          overwrite: true
       - uses: softprops/action-gh-release@v3
         if: github.event_name != 'pull_request'
         with:
