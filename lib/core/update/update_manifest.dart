@@ -121,6 +121,14 @@ Future<AppRelease?> verifyUpdateManifest(Object? raw, String publicKey) async {
     if (entries is! Map || entries.isEmpty) {
       throw const FormatException('No artifacts');
     }
+    // The owner's HTTPS update API may relocate the same signed binaries.
+    // Only the location changes; all installation metadata remains signed.
+    final downloads = raw['download_urls'] ?? const <String, dynamic>{};
+    if (downloads is! Map ||
+        downloads.keys
+            .any((key) => key is! String || !entries.containsKey(key))) {
+      throw const FormatException('Invalid mirror locations');
+    }
     final artifacts = <String, UpdateArtifact>{};
     for (final entry in entries.entries) {
       if (entry.key is! String || entry.value is! Map) {
@@ -150,8 +158,11 @@ Future<AppRelease?> verifyUpdateManifest(Object? raw, String publicKey) async {
       if (expected != format) {
         throw const FormatException('Unsupported artifact format');
       }
+      final originalUrl = checkedUpdateUrl(item['url']);
       artifacts[platform] = UpdateArtifact(
-          url: checkedUpdateUrl(item['url']),
+          url: downloads.containsKey(platform)
+              ? checkedUpdateUrl(downloads[platform])
+              : originalUrl,
           sha256: hash,
           size: size,
           format: format as String);

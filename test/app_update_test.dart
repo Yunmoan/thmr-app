@@ -126,6 +126,61 @@ void main() {
         throwsA(isA<UpdateCheckException>()));
   });
 
+  test('API mirror locations preserve signed binary identity and cached URLs',
+      () async {
+    final signed = await signTestRelease(releaseJson('0.2.0'));
+    final adapter = ReleaseAdapter()
+      ..signResponse = false
+      ..data = {
+        ...signed,
+        'download_urls': {
+          'windows-x86_64': 'https://mirror.example.com/THMR/windows.zip',
+          'darwin-x86_64': 'https://mirror.example.com/THMR/macos.zip',
+          'darwin-aarch64': 'https://mirror.example.com/THMR/macos.zip',
+        }
+      };
+    final release = (await serviceFor(adapter).latestRelease())!;
+    expect(
+        release.artifactFor('windows-x86_64')!.url.host, 'mirror.example.com');
+    expect(release.downloadFor(TargetPlatform.macOS)!.path, '/THMR/macos.zip');
+    expect(release.downloadFor(TargetPlatform.linux)!.host,
+        'staticassets.naids.com');
+    expect(release.artifactFor('windows-x86_64')!.sha256, 'a' * 64);
+    expect(release.artifactFor('windows-x86_64')!.size, 3);
+    expect(release.identity, '0.2.0+2');
+    expect(release.toJson()['payload'], signed['payload']);
+    expect(release.toJson()['signature'], signed['signature']);
+    adapter.data = jsonDecode(jsonEncode(release.toJson()));
+    expect(
+        (await serviceFor(adapter).latestRelease())!
+            .downloadFor(TargetPlatform.windows),
+        release.downloadFor(TargetPlatform.windows));
+    adapter.data = {
+      ...(adapter.data as Map<String, dynamic>),
+      'payload': base64Encode(utf8.encode(jsonEncode(releaseJson('9.0.0'))))
+    };
+    await expectLater(serviceFor(adapter).latestRelease(),
+        throwsA(isA<UpdateCheckException>()));
+  });
+
+  test('invalid or non-HTTPS mirror locations cannot enable a download',
+      () async {
+    final signed = await signTestRelease(releaseJson('0.2.0'));
+    final adapter = ReleaseAdapter()..signResponse = false;
+    for (final overrides in [
+      [],
+      {'windows-x86_64': 'http://mirror.example.com/a.zip'},
+      {'windows-x86_64': 'https://user:secret@mirror.example.com/a.zip'},
+      {'windows-x86_64': 'https://mirror.example.com/a.zip#fragment'},
+      {'windows-x86_64': 42},
+      {'unknown-platform': 'https://mirror.example.com/a.zip'},
+    ]) {
+      adapter.data = {...signed, 'download_urls': overrides};
+      await expectLater(serviceFor(adapter).latestRelease(),
+          throwsA(isA<UpdateCheckException>()));
+    }
+  });
+
   test('tampered metadata and missing pinned key cannot enable updates',
       () async {
     final signed = await signTestRelease(releaseJson('0.2.0'));

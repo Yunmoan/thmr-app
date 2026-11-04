@@ -1,6 +1,6 @@
 import unittest
 
-from resolve_version import resolve_version
+from resolve_version import release_identity, resolve_version
 
 
 class ResolveVersionTests(unittest.TestCase):
@@ -35,6 +35,20 @@ class ResolveVersionTests(unittest.TestCase):
                 "GITHUB_REF_TYPE": "tag", "GITHUB_REF_NAME": "v0.3.0",
                 "REQUESTED_VERSION": "0.4.0",
             })
+
+    def test_main_and_manual_builds_have_unique_preview_release_tags(self):
+        tag, preview = release_identity("0.2.0", "601", {"GITHUB_REF_TYPE": "branch"})
+        self.assertEqual((tag, preview), ("build-0.2.0-601", "true"))
+        self.assertFalse(tag.startswith("v"), "generated tags must not trigger another v* build")
+        self.assertNotEqual(tag, release_identity("0.2.0", "602", {})[0])
+
+    def test_only_stable_version_tags_are_official_releases(self):
+        self.assertEqual(release_identity("0.2.0", "601", {
+            "GITHUB_REF_TYPE": "tag", "GITHUB_REF_NAME": "v0.2.0",
+        }), ("v0.2.0", "false"))
+        self.assertEqual(release_identity("0.2.0-rc.1", "601", {
+            "GITHUB_REF_TYPE": "tag", "GITHUB_REF_NAME": "v0.2.0-rc.1",
+        }), ("v0.2.0-rc.1", "true"))
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-# v* tags build every client with the tag version and publish update packages.
+# Pushes/manual builds upload preview Releases; stable v* tags publish official Releases.
 name: Build Clients
 
 on:
@@ -28,6 +28,8 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       build_number: ${{ steps.version.outputs.build_number }}
       macos_version: ${{ steps.version.outputs.macos_version }}
+      release_tag: ${{ steps.version.outputs.release_tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
@@ -53,9 +55,35 @@ jobs:
       - run: flutter analyze
       - run: flutter test
 
-  linux:
+  prepare_release:
     needs: validate
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Keep pull request packages in Actions only
+        if: github.event_name == 'pull_request'
+        run: echo 'Pull requests do not publish Releases.'
+      - uses: softprops/action-gh-release@v3
+        if: github.event_name != 'pull_request'
+        with:
+          tag_name: ${{ needs.validate.outputs.release_tag }}
+          target_commitish: ${{ github.sha }}
+          name: THMR ${{ needs.validate.outputs.version }}+${{ needs.validate.outputs.build_number }}
+          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
+          draft: true
+          make_latest: 'false'
+          body: |
+            各平台安装包将在构建成功后逐个上传到此 Release 草稿，仓库所有者可先下载。
+            全部平台完成后会补充 SHA256SUMS 和 thmr-update.json。
+            下载包上传到自己的镜像后，修改 updater.js 顶部的 THMR_DOWNLOAD_URLS，
+            再把 thmr-update.json 原样放到 API 的 data/updates/thmr-release.json 并重载插件。
+
+  linux:
+    needs: [validate, prepare_release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
@@ -89,10 +117,22 @@ jobs:
           name: thmr-app-linux
           path: thmr-app-linux-x64.tar.gz
           if-no-files-found: error
+      - uses: softprops/action-gh-release@v3
+        if: github.event_name != 'pull_request'
+        with:
+          tag_name: ${{ needs.validate.outputs.release_tag }}
+          files: thmr-app-linux-x64.tar.gz
+          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
+          draft: true
+          fail_on_unmatched_files: true
+          make_latest: 'false'
 
   macos:
-    needs: validate
-    runs-on: macos-latest
+    needs: [validate, prepare_release]
+    # The arm64 pool currently fails to acquire runners. Intel still builds both architectures.
+    runs-on: ${{ vars.THMR_MACOS_RUNNER || 'macos-26-intel' }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
@@ -133,10 +173,21 @@ jobs:
           name: thmr-app-macos
           path: thmr-app-macos-universal.zip
           if-no-files-found: error
+      - uses: softprops/action-gh-release@v3
+        if: github.event_name != 'pull_request'
+        with:
+          tag_name: ${{ needs.validate.outputs.release_tag }}
+          files: thmr-app-macos-universal.zip
+          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
+          draft: true
+          fail_on_unmatched_files: true
+          make_latest: 'false'
 
   windows:
-    needs: validate
+    needs: [validate, prepare_release]
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
@@ -167,10 +218,21 @@ jobs:
           name: thmr-app-windows
           path: thmr-app-windows-x64.zip
           if-no-files-found: error
+      - uses: softprops/action-gh-release@v3
+        if: github.event_name != 'pull_request'
+        with:
+          tag_name: ${{ needs.validate.outputs.release_tag }}
+          files: thmr-app-windows-x64.zip
+          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
+          draft: true
+          fail_on_unmatched_files: true
+          make_latest: 'false'
 
   android:
-    needs: validate
+    needs: [validate, prepare_release]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -224,9 +286,18 @@ jobs:
           name: thmr-app-apk
           path: thmr-app-android.apk
           if-no-files-found: error
+      - uses: softprops/action-gh-release@v3
+        if: github.event_name != 'pull_request'
+        with:
+          tag_name: ${{ needs.validate.outputs.release_tag }}
+          files: thmr-app-android.apk
+          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
+          draft: true
+          fail_on_unmatched_files: true
+          make_latest: 'false'
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name != 'pull_request'
     needs: [validate, linux, macos, windows, android]
     runs-on: ubuntu-latest
     permissions:
@@ -245,37 +316,36 @@ jobs:
           path: release
       - name: Generate checksums
         working-directory: release
-        run: sha256sum thmr-app-* > SHA256SUMS
+        run: |
+          mkdir -p metadata
+          sha256sum thmr-app-* > metadata/SHA256SUMS
       - name: Sign the updater manifest
         if: ${{ !contains(needs.validate.outputs.version, '-') }}
         env:
           THMR_UPDATE_PRIVATE_KEY: ${{ secrets.THMR_UPDATE_PRIVATE_KEY }}
           THMR_UPDATE_PUBLIC_KEY: ${{ vars.THMR_UPDATE_PUBLIC_KEY }}
-          DOWNLOAD_BASE: ${{ vars.THMR_UPDATE_DOWNLOAD_BASE_URL }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}
           RELEASE_BUILD: ${{ needs.validate.outputs.build_number }}
         run: |
-          base="${DOWNLOAD_BASE:-https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME}"
-          if [ -n "$DOWNLOAD_BASE" ]; then base="${DOWNLOAD_BASE%/}/$GITHUB_REF_NAME"; fi
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG"
           git log -15 --pretty=format:'- %s' > "$RUNNER_TEMP/thmr-release-notes.txt"
           node tool/update_release.cjs manifest --version "$RELEASE_VERSION" --build-number "$RELEASE_BUILD" \
-            --artifacts release --base-url "$base/" --output release/thmr-update.json \
+            --artifacts release --base-url "$base/" --output release/metadata/thmr-update.json \
             --notes-file "$RUNNER_TEMP/thmr-release-notes.txt" \
-            --release-page "https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
+            --release-page "https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
       - uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ needs.validate.outputs.release_tag }}
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true
-          prerelease: ${{ contains(needs.validate.outputs.version, '-') }}
+          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
+          draft: false
+          make_latest: ${{ needs.validate.outputs.prerelease == 'false' && 'true' || 'false' }}
           fail_on_unmatched_files: true
-          files: |
-            release/*
-      - name: Publish the signed release to the private update API
-        if: ${{ !contains(needs.validate.outputs.version, '-') }}
-        env:
-          THMR_UPDATE_PUBLISH_TOKEN: ${{ secrets.THMR_UPDATE_PUBLISH_TOKEN }}
-        run: |
-          if [ -n "$THMR_UPDATE_PUBLISH_TOKEN" ]; then
-            node tool/update_release.cjs publish --file release/thmr-update.json --url "${UPDATE_API_URL%/}/publish"
-          else
-            echo 'No publish token configured. Deploy release/thmr-update.json to the API manually.'
-          fi
+          files: release/metadata/*
+          body: |
+            本次构建已完成，四个平台安装包与 SHA256SUMS 已上传。
+            稳定版本号的构建同时提供 thmr-update.json；带 -rc 等标记的版本用于测试。
+            下载原始安装包上传到镜像后，修改 updater.js 顶部 THMR_DOWNLOAD_URLS 的四个地址，
+            再把本 Release 的 thmr-update.json 原样放到 API 的 data/updates/thmr-release.json 并重载插件。

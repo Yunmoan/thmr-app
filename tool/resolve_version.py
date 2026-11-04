@@ -40,13 +40,21 @@ def resolve_version(pubspec, env):
     return version, build_number
 
 
+def release_identity(version, build_number, env):
+    tagged = env.get("GITHUB_REF_TYPE") == "tag"
+    tag = env["GITHUB_REF_NAME"] if tagged else f"build-{version}-{build_number}"
+    return tag, "true" if not tagged or "-" in version else "false"
+
+
 if __name__ == "__main__":
     root = Path(__file__).resolve().parent.parent
     version, build_number = resolve_version(
         (root / "pubspec.yaml").read_text(encoding="utf-8"), os.environ
     )
+    release_tag, prerelease = release_identity(version, build_number, os.environ)
     values = (f"version={version}\nbuild_number={build_number}\n"
-              f"macos_version={version.split('-')[0]}\n")
+              f"macos_version={version.split('-')[0]}\n"
+              f"release_tag={release_tag}\nprerelease={prerelease}\n")
     print(values, end="")
     if output := os.environ.get("GITHUB_OUTPUT"):
         with open(output, "a", encoding="utf-8") as target:

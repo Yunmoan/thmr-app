@@ -46,8 +46,25 @@ node tool/update_release.cjs keygen --output .update-keys/thmr-ed25519.pem
 
 可以用 `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` 生成发布凭据。清单父目录必须允许服务账户写入。插件原子替换清单，校验发布签名并拒绝版本倒退。
 
-3. 反向代理保留 `Authorization` 请求头、允许 POST `/updater/thmr/publish`，并使用 HTTPS。为 JSON 请求留出 1 MiB 上限；若 OpenAPI 核心有更小的全局 JSON 限制，需要一并提高。不要给该路径加面向网页的验证码或交互挑战；公开 GET 无需登录，POST 使用发布凭据认证。
+3. 为公开 GET 更新检查提供 HTTPS，并确保没有面向网页的验证码或交互挑战。可选的 POST 发布工具还需要代理保留 `Authorization` 请求头、允许 `/updater/thmr/publish`，并为 JSON 请求留出 1 MiB 上限；文件上传发布方式使用上面的清单文件路径。
 4. 检查 `https://api.zyghit.cn/updater/thmr`。尚未发布清单时返回 **204**；有有效签名清单时返回 **200**；已存在的清单损坏、签名错误或公钥未正确配置时返回 **503**，不会伪装成“已经是最新版”。
+
+### 手动修改镜像地址
+
+直接修改 `apis/updater.js` **顶部**的 `THMR_DOWNLOAD_URLS`：
+
+```js
+const THMR_DOWNLOAD_URLS = {
+    windows: 'https://你的镜像/thmr-app-windows-x64.zip',
+    macos: 'https://你的镜像/thmr-app-macos-universal.zip',
+    linux: 'https://你的镜像/thmr-app-linux-x64.tar.gz',
+    android: 'https://你的镜像/thmr-app-android.apk',
+};
+```
+
+先把 Release 原始安装包上传到镜像，再修改这四个完整 HTTPS 地址；macOS 通用包只填一次。地址留空使用该版本的 GitHub Release 地址。将**同一个 Release** 的 `thmr-update.json` 重命名为 `thmr-release.json`，放到 API 根目录的 `data/updates/`，然后重载插件或重启服务。
+
+镜像地址通过响应中的 `download_urls` 提供，客户端先验签，再使用镜像位置下载，仍强制核对签名保护的版本、文件大小、格式和 SHA-256。只改镜像地址不需要私钥，也不需要重新签名；不要改 `payload`、`signature` 或解压重打包安装文件。
 
 路由：
 
@@ -67,22 +84,22 @@ node tool/update_release.cjs keygen --output .update-keys/thmr-ed25519.pem
 | --- | --- | --- |
 | `THMR_UPDATE_PUBLIC_KEY` | 是 | 同一个 Base64 公钥；正式标签构建缺少它会失败 |
 | `THMR_UPDATE_API_URL` | 否 | 默认 `https://api.zyghit.cn/updater/thmr`，不要加 `/publish` |
-| `THMR_UPDATE_DOWNLOAD_BASE_URL` | 否 | 自有 CDN 根目录，例如 `https://staticassets.naids.com/thmr`；每版实际目录自动追加 `/v0.2.0/` |
+| `THMR_MACOS_RUNNER` | 否 | 默认 `macos-26-intel`，避开当前 arm64 容量不足；恢复后可填 `macos-latest` |
 
-不设置下载根目录时，安装包托管在 GitHub Release；**更新检查仍走你的 API**。如果配置自有 CDN，必须把 4 个包先上传到该版本目录并允许 HEAD/GET；发布工具会先检查下载链接和大小，死链不会推送给客户端。CDN 上传凭据和上传方式由你使用的存储服务决定，当前工作流不代替任意 CDN 的上传工具。
+CI 将安装包上传到 GitHub Release，**更新检查走你的 API**。下载后按上面的四个字段改成镜像地址。镜像搬运完成、清单文件上传后，客户端才会看到这次更新；构建工作流不自动提交更新到 API。
 
 ### Repository Secrets（机密）
 
 | Secret | 必填 | 说明 |
 | --- | --- | --- |
 | `THMR_UPDATE_PRIVATE_KEY` | 是 | PEM 私钥文件的完整内容，包含 BEGIN/END 行 |
-| `THMR_UPDATE_PUBLISH_TOKEN` | 自动发布必填 | 与服务器同值；缺少时仅产出签名清单，需手动部署 |
+| `THMR_UPDATE_PUBLISH_TOKEN` | 可选 | 供可选的 POST 发布工具使用；当前默认通过上传清单文件发布 |
 | `ANDROID_KEYSTORE_BASE64` | 正式标签必填 | 固定 Android keystore 文件的 Base64 内容 |
 | `ANDROID_KEYSTORE_PASSWORD` | 正式 Android 必填 | keystore 密码 |
 | `ANDROID_KEY_ALIAS` | 正式 Android 必填 | 密钥别名 |
 | `ANDROID_KEY_PASSWORD` | 正式 Android 必填 | 密钥密码 |
 
-Android 版本码是 `Actions run number × 100 + run attempt`，同一次工作流的重跑也会提高版本码。普通本地构建使用 `pubspec.yaml` 的构建号，或显式传入 `--build-number`。
+Android 版本码是 `Actions run number × 100 + run attempt`，完整重跑工作流会提高版本码；单独重试失败的平台沿用此次校验阶段确定的构建号，保持各包一致。普通本地构建使用 `pubspec.yaml` 的构建号，或显式传入 `--build-number`。
 
 如果你有正在分发的 APK，使用**原来的 keystore**；不能为了这次更新随意换钥。旧版若使用了另一把 debug 密钥，Android 不能覆盖安装，需要先迁移到固定签名的首个版本；这不能靠绕过安装器解决。首次正式分发可用 JDK `keytool -genkeypair` 创建长期密钥。备份 keystore 与密码，不要提交仓库。
 
@@ -105,7 +122,7 @@ Android 版本码是 `Actions run number × 100 + run attempt`，同一次工作
 | `APPLE_API_KEY_ID` | API Key ID |
 | `APPLE_API_ISSUER_ID` | Issuer ID |
 
-不配置证书时仍会输出本地签名的开发包，但没有 Apple 公证，不能把它视作已完成面向陌生设备的分发验收。直接分发的 Release 已关闭 App Sandbox，否则应用不能替换自身；后续如果改做 Mac App Store 渠道，应关闭此自更新器并恢复相应沙盒配置。
+默认使用 `CODE_SIGN_IDENTITY = "-"` 的 ad-hoc 开发签名，不依赖 Apple 证书或开发团队配置。配置上述材料后再执行 Developer ID 重签与公证。直接分发的 Release 已关闭 App Sandbox，否则应用不能替换自身；后续如果改做 Mac App Store 渠道，应关闭此自更新器并恢复相应沙盒配置。
 
 ## 5. 发版链路
 
@@ -116,18 +133,20 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
+普通 main 推送和手动构建同样自动上传 Release，使用 `build-版本号-构建号` 标签，并标记为预发布；PR 只产生 Actions 产物，不创建 Release。自动生成的标签以 `build-` 开头，不会再次触发 `v*` 构建。
+
 所有客户端使用同一个版本、构建号、公钥和 API 地址。CI 依次：
 
 1. 分析与测试，检查正式发布的公钥配置。
-2. 构建 Windows、macOS、Linux 和 Android；核对产物版本，使用固定 Android 签名；可选执行 Apple 签名和公证。
-3. 收集完整包、计算 SHA-256，生成并签名 `thmr-update.json`。
-4. 上传 GitHub Release；签名清单同时附在 Release 中。
-5. 检查全部下载链接可用，使用发布 token 将清单 POST 到自己的 `/updater/thmr/publish`。
-6. 客户端后续检查发现新版，按设置后台下载，用户确认安装后自动替换。
+2. 创建一个 Release 草稿，再构建 Windows、macOS、Linux 和 Android；核对版本，使用固定 Android 签名及 macOS 开发签名；可选执行 Apple 公证。
+3. 每个平台成功后立即上传对应包到此草稿，仓库所有者可先下载已完成的包。
+4. 全部平台成功后计算 SHA-256，生成并签名 `thmr-update.json`，补充上传元数据，再自动发布 Release。
+5. 你下载原包上传到镜像，修改插件顶部四个 URL，把同一 Release 的签名清单放到 `data/updates/thmr-release.json` 并重载插件。
+6. 客户端后续检查发现新版，使用镜像地址下载并校验，用户确认安装后自动替换。
 
 带 `-rc.1` 的预发布标签仅构建和上传预发布包，不覆盖正式更新 API。Mac 原生包版本采用数字核心版本，客户端通过同一 `THMR_CLIENT_VERSION` 保留完整预发布身份。
 
-如果没有配置发布 token，将 Release 中的 `thmr-update.json` 原样复制到服务器 `THMR_UPDATE_MANIFEST` 路径，原子替换该文件即可。**不要手工编辑 payload 或 signature**；改 URL、版本、哈希或说明后都需要重新签名并提高版本/构建号。
+当前默认通过文件上传发布清单。**不要手工编辑 payload 或 signature**；版本、哈希或说明发生变化时需要 CI 重新签名。镜像地址在插件顶部独立修改，无需改签名清单。
 
 ## 6. 本地构建与验收
 
@@ -163,7 +182,7 @@ npm test
 
 ## 7. 协议与故障定位
 
-API 返回 `{schema:1, algorithm:"ed25519", payload:"<Base64>", signature:"<Base64>"}`。签名覆盖 **payload 解码后的原始 UTF-8 字节**；不对 JSON 重新排序或再编码后验签。
+API 返回 `{schema:1, algorithm:"ed25519", payload:"<Base64>", signature:"<Base64>"}`，配置镜像后额外提供 `download_urls` 平台到地址的映射。签名覆盖 **payload 解码后的原始 UTF-8 字节**；不对 JSON 重新排序或再编码后验签。`download_urls` 只决定从哪里下载同一个签名保护的安装包，不覆盖版本、大小、哈希或格式。
 
 payload 包含 `program:"THMR"`、`version`、整数 `build_number`、`notes`、`pub_date`、`release_page` 和 `platforms`。平台键为 `windows-x86_64`、`darwin-x86_64`、`darwin-aarch64`、`linux-x86_64`、`android-universal`；每项包含 HTTPS `url`、小写 SHA-256 `sha256`、字节数 `size` 与 `format`（zip / tar.gz / apk）。签名格式专属于 THMR，**不复用原 CPL/Tauri 的签名格式**。
 
