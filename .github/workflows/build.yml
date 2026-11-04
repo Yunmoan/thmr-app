@@ -198,6 +198,8 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - name: Fix legacy Windows plugin build scripts
+        run: python tool/patch_windows_plugins.py
       - run: python -m unittest discover -s tool -p 'test_update_helpers.py' -v
       - run: >-
           flutter build windows --release
