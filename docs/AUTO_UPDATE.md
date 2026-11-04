@@ -32,7 +32,7 @@ node tool/update_release.cjs keygen --output .update-keys/thmr-ed25519.pem
 
 ## 3. 部署独立 JS 插件
 
-交付文件：[`server-plugin/updater.js`](../server-plugin/updater.js)。它保留你提供的 `/ofcpl` 响应，只新增 THMR 路由，使用现有 Express 和 Node 内置模块，无需安装新的运行依赖。
+交付文件：独立部署包中的 `apis/updater.js`（本机源文件位于 `server-plugin/updater.js`，该目录不提交到客户端仓库）。它保留你提供的 `/ofcpl` 响应，只新增 THMR 路由，使用现有 Express 和 Node 内置模块，无需安装新的运行依赖。
 
 1. 备份原 `apis/updater.js`，再将交付文件复制到该位置；按现有 OpenAPI 插件机制加载。文件名保持 `updater.js`。
    也支持在 `data/updates/thmr-config.json` 保存私有的 `publicKey` 与 `publishToken`，插件会自动读取；预配置部署包已经填好该文件。环境变量的优先级高于此文件。
@@ -147,6 +147,11 @@ flutter build windows --release --build-name=0.2.0 --build-number=2 `
 ```bash
 flutter test
 python -m unittest discover -s tool -p 'test_*.py' -v
+```
+
+本机持有独立 API 插件源码时，可另外运行插件测试；客户端 CI 不依赖此目录：
+
+```bash
 cd server-plugin
 npm ci
 npm test

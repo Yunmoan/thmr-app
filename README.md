@@ -25,7 +25,9 @@ flutter run -d <android-device> # Android
 
 界面、更新比较和安装包统一使用客户端构建版本。CI 标签 `v0.2.0` 对应 `0.2.0`，构建号是 `Actions run number × 100 + run attempt`；普通本地构建取 `pubspec.yaml`，可由 `--build-name` / `--build-number` 覆盖。更新 API 不依赖电台或账号后端的版本号。
 
-部署插件为 [`server-plugin/updater.js`](server-plugin/updater.js)，保留原 `/ofcpl` 路由。完整的密钥、API 插件部署、GitHub Variables/Secrets、Android 签名、macOS 公证和发版步骤见 **[自动更新配置文档](docs/AUTO_UPDATE.md)**。正式发布前必须完成文档中的密钥与签名配置。
+API 插件单独交付为 `updater.js`，保留原 `/ofcpl` 路由，不纳入客户端仓库。完整的密钥、API 插件部署、GitHub Variables/Secrets、Android 签名、macOS 公证和发版步骤见 **[自动更新配置文档](docs/AUTO_UPDATE.md)**。
+
+CI 自动获取最新 Flutter stable 和 Node.js LTS；同一次构建的四个平台共用解析后的 Flutter SDK。GitHub Actions 跟随最新稳定主版本，Dependabot 每周检查后续主版本升级。运行器使用 `*-latest`；Java 自动选取当前 Gradle 支持范围内的最新稳定版。
 
 ## 构建与发布
 
