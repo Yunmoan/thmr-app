@@ -1,57 +1,59 @@
 package cn.yunmoan.thmr.thmr_app;
 
-import android.Manifest;
-import android.content.pm.PackageManager;
-import android.media.audiofx.Visualizer;
-import io.flutter.embedding.engine.FlutterEngine;
-import io.flutter.plugin.common.MethodChannel;
 import com.ryanheise.audioservice.AudioServiceActivity;
 
-// Keep this launcher in the Java source set so Gradle compiles the
-// activity referenced by AndroidManifest.xml.
+import io.flutter.embedding.engine.FlutterEngine;
+import io.flutter.plugin.common.MethodChannel;
+
+/** Flutter bridge for a spectrum of the app's own radio stream. */
 public class MainActivity extends AudioServiceActivity {
-    private static final int SPECTRUM_PERMISSION_REQUEST = 1097;
-    private Visualizer visualizer = null;
-    private MethodChannel.Result permissionResult = null;
+    private final StreamSpectrumDecoder spectrum = new StreamSpectrumDecoder();
 
     @Override
     public void configureFlutterEngine(FlutterEngine engine) {
         super.configureFlutterEngine(engine);
+        new MethodChannel(engine.getDartExecutor().getBinaryMessenger(), "thmr/updater")
+            .setMethodCallHandler((call, result) -> {
+                if (!call.method.equals("installApk")) { result.notImplemented(); return; }
+                try {
+                    String path = call.argument("path");
+                    String version = call.argument("version");
+                    Number build = call.argument("buildNumber");
+                    if (path == null || version == null || build == null) {
+                        result.error("invalid_update", "Missing update metadata", null);
+                        return;
+                    }
+                    result.success(UpdateInstaller.install(this, path, version, build.longValue()));
+                } catch (Exception error) {
+                    result.error("install_rejected", error.getMessage(), null);
+                }
+            });
         new MethodChannel(engine.getDartExecutor().getBinaryMessenger(), "thmr/spectrum")
             .setMethodCallHandler((call, result) -> {
                 switch (call.method) {
                     case "start" -> {
-                        result.success(startVisualizer());
-                    }
-                    case "requestPermission" -> {
-                        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
-                                == PackageManager.PERMISSION_GRANTED) {
-                            result.success(true);
-                        } else if (permissionResult != null) {
-                            result.error("permission_pending", "Permission request already open", null);
+                        String url = call.argument("url");
+                        if (url == null || !(url.startsWith("https://")
+                                || url.startsWith("http://"))) {
+                            result.success("unavailable");
                         } else {
-                            permissionResult = result;
-                            requestPermissions(
-                                new String[]{Manifest.permission.RECORD_AUDIO},
-                                SPECTRUM_PERMISSION_REQUEST);
+                            spectrum.start(url);
+                            result.success("ready");
                         }
                     }
-                    case "fft" -> {
-                        Visualizer v = visualizer;
-                        if (v == null) {
-                            result.success(null);
+                    case "bands" -> {
+                        Integer count = call.argument("bands");
+                        if (count == null || count < 1 || count > 128) {
+                            result.error("invalid_bands", "Band count must be 1..128", null);
+                        } else if (spectrum.failed()) {
+                            result.error("decoder_unavailable",
+                                    "Could not decode the radio stream", null);
                         } else {
-                            try {
-                                byte[] bytes = new byte[v.getCaptureSize()];
-                                int ok = v.getFft(bytes);
-                                result.success(ok < 0 ? null : bytes);
-                            } catch (Exception e) {
-                                result.success(null);
-                            }
+                            result.success(spectrum.bands(count));
                         }
                     }
                     case "stop" -> {
-                        releaseVisualizer();
+                        spectrum.stop();
                         result.success(true);
                     }
                     default -> result.notImplemented();
@@ -59,56 +61,9 @@ public class MainActivity extends AudioServiceActivity {
             });
     }
 
-    private String startVisualizer() {
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
-                != PackageManager.PERMISSION_GRANTED) {
-            return "permissionRequired";
-        }
-        if (visualizer != null) return "ready";
-        Visualizer candidate = null;
-        try {
-            // Session 0 captures the output mix used by media_kit/mpv.
-            candidate = new Visualizer(0);
-            candidate.setCaptureSize(Visualizer.getCaptureSizeRange()[1]);
-            candidate.setScalingMode(Visualizer.SCALING_MODE_NORMALIZED);
-            candidate.setEnabled(true);
-            visualizer = candidate;
-            return "ready";
-        } catch (Exception e) {
-            if (candidate != null) {
-                try { candidate.release(); } catch (Exception ignored) {}
-            }
-            return "unavailable";
-        }
-    }
-
-    private void releaseVisualizer() {
-        Visualizer current = visualizer;
-        visualizer = null;
-        if (current == null) return;
-        try { current.setEnabled(false); } catch (Exception ignored) {}
-        try { current.release(); } catch (Exception ignored) {}
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                                           int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == SPECTRUM_PERMISSION_REQUEST && permissionResult != null) {
-            MethodChannel.Result pending = permissionResult;
-            permissionResult = null;
-            pending.success(grantResults.length > 0
-                && grantResults[0] == PackageManager.PERMISSION_GRANTED);
-        }
-    }
-
     @Override
     public void onDestroy() {
-        releaseVisualizer();
-        if (permissionResult != null) {
-            permissionResult.success(false);
-            permissionResult = null;
-        }
+        spectrum.stop();
         super.onDestroy();
     }
 }

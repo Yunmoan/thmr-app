@@ -16,6 +16,7 @@ import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import '../../shared/widgets/track_cover.dart';
 import '../../shared/widgets/network_notice.dart';
+import '../listen/widgets/feedback_sheet.dart';
 
 /// 收藏夹详情:条目列表 + 排序 + 分享开关 + 导出。
 class CollectionDetailScreen extends ConsumerStatefulWidget {
@@ -143,6 +144,38 @@ class _CollectionDetailScreenState
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('移除失败,稍后再试')));
     }
+  }
+
+  TrackRef _trackRef(CollectionItem item) => TrackRef(
+        trackId: item.trackId,
+        title: item.title,
+        artist: item.artist,
+        coverUrl: item.coverUrl,
+      );
+
+  String _copyableTrackInfo(CollectionItem item) {
+    return trackSearchText(
+      title: item.title,
+      artist: item.artist,
+      album: item.album,
+    );
+  }
+
+  Future<void> _copyTrackInfo(CollectionItem item) async {
+    await Clipboard.setData(
+      ClipboardData(text: _copyableTrackInfo(item)),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('歌曲信息已复制')));
+  }
+
+  void _showFeedback(CollectionItem item) {
+    showFeedbackSheet(
+      context,
+      track: _trackRef(item),
+      stationId: item.stationId,
+    );
   }
 
   Future<void> _export(BuildContext context, String format) async {
@@ -335,6 +368,23 @@ class _CollectionDetailScreenState
                           .bodySmall
                           ?.copyWith(color: tokens.mutedInk),
                     ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        _TrackItemAction(
+                          icon: Icons.feedback_outlined,
+                          label: '反馈',
+                          onPressed: _offline ? null : () => _showFeedback(it),
+                        ),
+                        _TrackItemAction(
+                          icon: Icons.copy_rounded,
+                          label: '复制信息',
+                          onPressed: () => _copyTrackInfo(it),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -354,6 +404,34 @@ class _CollectionDetailScreenState
           ),
         );
       },
+    );
+  }
+}
+
+class _TrackItemAction extends StatelessWidget {
+  const _TrackItemAction({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        minimumSize: Size.zero,
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        textStyle: Theme.of(context).textTheme.labelSmall,
+      ),
+      icon: Icon(icon, size: 14),
+      label: Text(label),
     );
   }
 }

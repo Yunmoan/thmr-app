@@ -1,6 +1,6 @@
 // Spectrum source abstraction and per-platform picker.
 //  - Windows: thmr_capture.dll (WASAPI loopback + FFT, dart:ffi)
-//  - Android: Visualizer(output mix) via method channel
+//  - Android: decoded PCM from this app's radio stream via method channel
 //  - others  : null -> UI stays still rather than simulating audio
 
 import 'dart:io' show Platform;

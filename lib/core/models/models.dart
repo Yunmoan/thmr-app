@@ -64,6 +64,22 @@ class TrackRef {
   String cover(String radioBase) => absolutizeCover(coverUrl, radioBase);
 }
 
+/// 适合粘贴到搜索框的曲目信息；空字段不产生多余分隔符。
+String trackSearchText({
+  required String title,
+  required String artist,
+  String album = '',
+}) {
+  final titleAndArtist = [title.trim(), artist.trim()]
+      .where((part) => part.isNotEmpty)
+      .join(' - ');
+  final trimmedAlbum = album.trim();
+  if (trimmedAlbum.isEmpty) return titleAndArtist;
+  return titleAndArtist.isEmpty
+      ? trimmedAlbum
+      : '$titleAndArtist · $trimmedAlbum';
+}
+
 class CurrentTrack extends TrackRef {
   final int startedAtMs;
   final int expectedEndMs;

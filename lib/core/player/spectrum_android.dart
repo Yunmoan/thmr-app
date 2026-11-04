@@ -1,20 +1,30 @@
-// Android output-mix FFT from the platform Visualizer. No simulated data.
+// Android spectrum from a second decoder of the app's shared radio bytes.
+// This never captures the microphone or other apps' output.
 
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 
+import 'shared_radio_stream.dart';
 import 'spectrum.dart';
 
-enum AndroidSpectrumStatus { starting, ready, permissionRequired, unavailable }
+enum AndroidSpectrumStatus { starting, ready, unavailable }
 
 class AndroidSpectrum implements SpectrumSource {
-  AndroidSpectrum._();
+  AndroidSpectrum._(this._streamUrl);
 
-  static final AndroidSpectrum _instance = AndroidSpectrum._();
+  static String? _currentStreamUrl() {
+    return sharedRadioStream.spectrumUri?.toString();
+  }
+
+  static final AndroidSpectrum _instance = AndroidSpectrum._(_currentStreamUrl);
   static AndroidSpectrum? tryCreate() => _instance;
+  AndroidSpectrum.forTesting(String? Function() streamUrl)
+      : _streamUrl = streamUrl;
+
   static const channel = MethodChannel('thmr/spectrum');
+  final String? Function() _streamUrl;
 
   int _refs = 0;
   int _generation = 0;
@@ -33,12 +43,18 @@ class AndroidSpectrum implements SpectrumSource {
 
   Future<void> _startCapture(int generation) async {
     status = AndroidSpectrumStatus.starting;
+    _last = null;
     try {
-      final result = await channel.invokeMethod<String>('start');
+      final url = _streamUrl();
+      if (url == null || url.isEmpty) {
+        status = AndroidSpectrumStatus.unavailable;
+        return;
+      }
+      final result = await channel
+          .invokeMethod<String>('start', <String, Object>{'url': url});
       if (generation != _generation || _refs == 0) return;
       status = switch (result) {
         'ready' => AndroidSpectrumStatus.ready,
-        'permissionRequired' => AndroidSpectrumStatus.permissionRequired,
         _ => AndroidSpectrumStatus.unavailable,
       };
     } catch (_) {
@@ -48,19 +64,14 @@ class AndroidSpectrum implements SpectrumSource {
     }
   }
 
-  /// Called after the user opens the in-app permission explanation.
-  Future<bool> requestAccess() async {
+  Future<bool> retry() async {
     if (_refs == 0) return false;
     final generation = _generation;
     try {
-      if (status == AndroidSpectrumStatus.permissionRequired) {
-        final granted =
-            await channel.invokeMethod<bool>('requestPermission') ?? false;
-        if (!granted) return false;
-      }
-      if (_refs == 0 || generation != _generation) return false;
       await _startCapture(generation);
-      return status == AndroidSpectrumStatus.ready;
+      return _refs > 0 &&
+          generation == _generation &&
+          status == AndroidSpectrumStatus.ready;
     } catch (_) {
       status = AndroidSpectrumStatus.unavailable;
       return false;
@@ -90,9 +101,10 @@ class AndroidSpectrum implements SpectrumSource {
   Future<void> _fetch(int bands, int generation) async {
     _fetching = true;
     try {
-      final fft = await channel.invokeMethod<Uint8List>('fft');
+      final levels = await channel
+          .invokeMethod<Uint8List>('bands', <String, Object>{'bands': bands});
       if (generation != _generation || _refs == 0) return;
-      _last = fft == null ? null : spectrumBandsFromFft(fft, bands);
+      _last = levels == null ? null : spectrumBandsFromLevels(levels, bands);
     } catch (_) {
       if (generation == _generation) {
         _last = null;
@@ -104,27 +116,11 @@ class AndroidSpectrum implements SpectrumSource {
   }
 }
 
-/// Android Visualizer format: DC at byte 0, Nyquist at byte 1, then
-/// interleaved signed real/imaginary bytes for bins 1..N/2-1.
-Float32List spectrumBandsFromFft(Uint8List fft, int bands) {
+/// Native decoder returns one unsigned 0..255 level per requested band.
+Float32List spectrumBandsFromLevels(Uint8List levels, int bands) {
   final out = Float32List(bands);
-  final maxBin = fft.length ~/ 2 - 1;
-  if (bands <= 0 || maxBin < 1) return out;
-  for (var band = 0; band < bands; band++) {
-    final lo = math.max(1, math.exp(math.log(maxBin) * band / bands).floor());
-    final next = math.exp(math.log(maxBin) * (band + 1) / bands).ceil();
-    final hi = math.min(maxBin + 1, math.max(lo + 1, next));
-    var peak = 0.0;
-    for (var bin = lo; bin < hi; bin++) {
-      final re = _signed(fft[bin * 2]);
-      final im = _signed(fft[bin * 2 + 1]);
-      peak = math.max(peak, math.sqrt(re * re + im * im));
-    }
-    if (peak < 2) continue;
-    final db = 20 * math.log(peak / 128) / math.ln10;
-    out[band] = ((db + 45) / 42).clamp(0.0, 1.0).toDouble();
+  for (var band = 0; band < math.min(bands, levels.length); band++) {
+    out[band] = levels[band] / 255;
   }
   return out;
 }
-
-int _signed(int byte) => byte >= 128 ? byte - 256 : byte;

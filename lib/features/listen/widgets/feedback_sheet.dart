@@ -25,6 +25,7 @@ const _feedbackTypes = <(String, String)>[
 Future<void> showFeedbackSheet(
   BuildContext context, {
   required TrackRef track,
+  String? stationId,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -32,15 +33,21 @@ Future<void> showFeedbackSheet(
     builder: (_) => Padding(
       padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: _FeedbackForm(track: track),
+      child: _FeedbackForm(
+        track: track,
+        stationId: stationId?.trim().isNotEmpty == true
+            ? stationId!.trim()
+            : appConfig.stationId,
+      ),
     ),
   );
 }
 
 class _FeedbackForm extends ConsumerStatefulWidget {
-  const _FeedbackForm({required this.track});
+  const _FeedbackForm({required this.track, required this.stationId});
 
   final TrackRef track;
+  final String stationId;
 
   @override
   ConsumerState<_FeedbackForm> createState() => _FeedbackFormState();
@@ -82,7 +89,7 @@ class _FeedbackFormState extends ConsumerState<_FeedbackForm> {
     try {
       final radio = RadioApi();
       final result = await radio.feedback(
-        stationId: appConfig.stationId,
+        stationId: widget.stationId,
         type: _type,
         contact: _contact.text.trim(),
         message: _message.text.trim(),

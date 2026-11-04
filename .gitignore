@@ -8,3 +8,9 @@ build/
 *.log
 # Widget Preview related
 .widget_preview/
+__pycache__/
+node_modules/
+.update-keys/
+*.private.pem
+
+server-plugin/

@@ -20,6 +20,7 @@ import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/config.dart';
 import '../../core/api/radio_api.dart';
@@ -50,6 +51,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    if (defaultTargetPlatform == TargetPlatform.linux) return;
     _initEnv();
     _startLoopback();
   }
@@ -179,6 +181,42 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (defaultTargetPlatform == TargetPlatform.linux) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(title: const Text('登录')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Linux 暂不支持内置登录'),
+                const SizedBox(height: 8),
+                const Text('你可以继续收听电台，或在网页版登录并管理收藏。',
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                OutlinedButton(
+                  onPressed: () async {
+                    var opened = false;
+                    try {
+                      opened = await launchUrl(Uri.parse(shareWebOrigin),
+                          mode: LaunchMode.externalApplication);
+                    } catch (_) {}
+                    if (!opened && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('无法打开系统浏览器')),
+                      );
+                    }
+                  },
+                  child: const Text('打开网页版'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     final ready = _envReady && _loopbackDecided;
     return Scaffold(
       backgroundColor: Colors.transparent,

@@ -1,6 +1,6 @@
 # THMR 客户端(Flutter)
 
-东方音乐电台 **THMR(TouHouMusicRadio)** 跨平台客户端 — PC / Android / iOS。
+东方音乐电台 **THMR(TouHouMusicRadio)** 跨平台客户端 — Windows / macOS / Linux / Android / iOS。
 
 对接双后端(均无需改动):
 
@@ -14,22 +14,41 @@
 ```bash
 flutter pub get
 flutter run -d windows          # Windows 桌面
+flutter run -d macos            # macOS（在 macOS 上运行）
+flutter run -d linux            # Linux（在 Linux 上运行）
 flutter run -d <android-device> # Android
 ```
 
-收藏夹联网成功后会保存账号专属的本地快照，并逐个同步曲目资料。断网时可只读浏览已同步的收藏夹和曲目，界面会显示上次同步时间；未同步过的内容需要恢复网络后重试。缓存不包含音频文件和封面图片，不能离线播放。退出登录会清除该账号的本地收藏缓存。
+## 客户端版本与自动更新
 
-Windows 标题栏的画中画按钮可切换到迷你播放器。迷你窗无系统外框，双击窗口或点击右上角展开按钮可返回主界面。尺寸可选小号 320×96、中号 344×112（默认）、大号 384×132。拖到任一显示器工作区的顶边会优先吸附，左右边也支持；贴边侧变为直角。「我的 → 迷你播放器」提供三种吸边方式：默认二段式在顶边留下封面、歌名和作者（侧边显示小条）；显示小条仅留下顶边 44×16 像素或侧边 16×44 像素的入口；完全隐藏仅在原吸附位置留下透明的鼠标触发区，也可从系统托盘恢复。同处可关闭跟随当前主题的人物立绘背景，首次启动默认开启。悬停或点击可展开，移出后再次收起。将展开后的窗口拖离边缘可取消吸附。
+客户端只向 `https://api.zyghit.cn/updater/thmr` 检查更新。支持后台下载、Ed25519 清单验签、SHA-256 文件校验、准确匹配平台架构、应用内安装；桌面端自动替换和重启，启动失败自动恢复旧版。Android 使用系统安装器，仍需用户确认。自动检查与自动下载均可关闭，支持取消下载和忽略版本。
 
-配置覆盖(可选):
+界面、更新比较和安装包统一使用客户端构建版本。CI 标签 `v0.2.0` 对应 `0.2.0`，构建号是 `Actions run number × 100 + run attempt`；普通本地构建取 `pubspec.yaml`，可由 `--build-name` / `--build-number` 覆盖。更新 API 不依赖电台或账号后端的版本号。
+
+部署插件为 [`server-plugin/updater.js`](server-plugin/updater.js)，保留原 `/ofcpl` 路由。完整的密钥、API 插件部署、GitHub Variables/Secrets、Android 签名、macOS 公证和发版步骤见 **[自动更新配置文档](docs/AUTO_UPDATE.md)**。正式发布前必须完成文档中的密钥与签名配置。
+
+## 构建与发布
+
+`.github/workflows/build.yml` 在各平台系统上构建，并打包完整安装目录：
+
+| 平台 | 产物 |
+| --- | --- |
+| Windows x64 | `thmr-app-windows-x64.zip` |
+| macOS 12+，Intel / Apple Silicon | `thmr-app-macos-universal.zip` |
+| Linux x64 | `thmr-app-linux-x64.tar.gz` |
+| Android | `thmr-app-android.apk` |
+
+普通构建保存在 Actions Artifacts。正式标签在全部构建通过后生成 Release 和签名更新清单，并按配置自动发布到自有更新 API；尚未配置发布 token 时可手动部署签名清单。macOS、Linux 的本地构建必须在对应系统进行。
+
+Linux Debian/Ubuntu 构建依赖：
 
 ```bash
-flutter run \
-  --dart-define=THMR_RADIO_BASE_URL=http://localhost:3323 \
-  --dart-define=THMR_BASE_URL=http://localhost:3324 \
-  --dart-define=THMR_STATION_ID=main \
-  --dart-define=THMR_STREAM_TOKEN=...
+sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev \
+  liblzma-dev libstdc++-12-dev libsecret-1-dev libjsoncpp-dev \
+  libayatana-appindicator3-dev libmpv-dev mpv
 ```
+
+分发时保留整个 `bundle/`，运行系统仍需 libmpv、GTK、libsecret、jsoncpp 和 Ayatana AppIndicator 等运行库。Linux 内置 WebView 登录暂不支持，可使用网页版；macOS/Linux 暂用原生标题栏。Windows 托盘和迷你播放器保持原有行为。
 
 ## 设计语言:「幻想乡放送局」
 
@@ -76,15 +95,15 @@ lib/
 - **系统媒体控制**:Windows SMTC 与 Android/iOS `audio_service` 同步曲目信息、播放状态和进度；系统播放/暂停键共用直播流状态机，不提供直播流 seek。
 - **M5 反馈**:曲目反馈表单(10 类枚举、联系方式必填、`autoSkipped` 提示)
 - **M4 部分**:切歌投票(阈值来自 `/api/meta`,公开接口可看票数)
-- **M2 骨架**:Bearer 会话存取(flutter_secure_storage)、`/auth/me` 引导、昵称修改;**WebView 登录流程待接入**(见下)
+- **M2 账号**:Bearer 会话存取、`/auth/me` 引导、昵称修改与内置 WebView 登录（Linux 除外）
 - **M3 骨架**:收藏夹 CRUD / 曲库搜索加曲 / 收藏 toggle / 默认收藏夹约定(首个 position 最小)/ 409 幂等提示;分享开关已接 `/share`
 
 ## 待接入
 
 | 项 | 说明 |
 | --- | --- |
-| WebView 登录(M2) | `flutter_inappwebview` 打开 `/api/auth/login?redirect=https://thmr.yunmoan.cn/`,落地后读 `thmr_session` Cookie(必须 in-app WebView,HttpOnly),存 Bearer |
-| 桌面托盘 | 关窗最小化到托盘继续播放(window_manager / tray_manager) |
+| Linux 登录 | 当前 WebView 插件不支持 Linux，需替换登录方案或提供系统浏览器回调接口 |
+| macOS/Linux 桌面扩展 | 托盘、迷你窗口和频谱原生实现待接入；Windows 已支持 |
 | 评论 / 广场 | 等后端 `/api/social/*` 接口落地后再对接(FLUTTER.md 第十章) |
 
 ## 平台注意

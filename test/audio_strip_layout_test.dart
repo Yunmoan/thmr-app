@@ -4,7 +4,7 @@ import 'package:thmr_app/core/player/spectrum_android.dart';
 import 'package:thmr_app/features/listen/widgets/now_playing_panel.dart';
 
 void main() {
-  testWidgets('Android spectrum permission action fits a narrow play bar',
+  testWidgets('Android spectrum retry action fits a narrow play bar',
       (tester) async {
     tester.view.physicalSize = const Size(120, 100);
     tester.view.devicePixelRatio = 1;
@@ -13,7 +13,7 @@ void main() {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(AndroidSpectrum.channel, (call) async {
-      if (call.method == 'start') return 'permissionRequired';
+      if (call.method == 'start') return 'unavailable';
       if (call.method == 'stop') return true;
       return null;
     });
@@ -26,7 +26,7 @@ void main() {
           width: 100,
           child: AudioStrip(
             playing: true,
-            source: AndroidSpectrum.tryCreate(),
+            source: AndroidSpectrum.forTesting(() => 'https://radio.test/live'),
           ),
         ),
       ),

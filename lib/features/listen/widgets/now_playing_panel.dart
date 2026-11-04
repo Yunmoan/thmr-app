@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/radio_api.dart';
@@ -115,7 +116,7 @@ class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
               _Cover96(cur: cur),
               const SizedBox(width: 14),
               Expanded(
-                child: _TrackCopy(
+                child: NowPlayingTrackInfo(
                   cur: cur,
                   favorited: favorited,
                   onFavorite: cur == null ? null : () => _toggleFavorite(cur),
@@ -201,8 +202,9 @@ class _Cover96 extends StatelessWidget {
 }
 
 /// track copy block: eyebrow + title + artist row + actions (web layout).
-class _TrackCopy extends ConsumerWidget {
-  const _TrackCopy({
+class NowPlayingTrackInfo extends ConsumerWidget {
+  const NowPlayingTrackInfo({
+    super.key,
     required this.cur,
     required this.favorited,
     this.onFavorite,
@@ -215,6 +217,17 @@ class _TrackCopy extends ConsumerWidget {
   final VoidCallback? onFeedback;
 
   static final GlobalKey _favKey = GlobalKey();
+
+  Future<void> _copyTrackInfo(BuildContext context) async {
+    final track = cur;
+    if (track == null) return;
+    await Clipboard.setData(ClipboardData(
+      text: trackSearchText(title: track.title, artist: track.artist),
+    ));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('歌曲信息已复制')));
+  }
 
   Future<void> _handleFavoriteTap(BuildContext context, WidgetRef ref) async {
     if (cur == null || onFavorite == null) return;
@@ -363,6 +376,10 @@ class _TrackCopy extends ConsumerWidget {
                   : () => _handleFavoriteTap(context, ref),
             ),
             _TextAction(label: '反馈', onTap: onFeedback),
+            _TextAction(
+              label: '复制信息',
+              onTap: cur == null ? null : () => _copyTrackInfo(context),
+            ),
           ],
         ),
       ],
@@ -481,8 +498,8 @@ class _PlayBar extends ConsumerWidget {
   }
 }
 
-/// Captured output spectrum. When capture is unavailable the strip settles to
-/// rest instead of showing motion unrelated to the playing audio.
+/// Live audio spectrum. When decoding is unavailable the strip settles to rest
+/// instead of showing motion unrelated to the playing audio.
 ///
 /// 性能:单一 Ticker 节流到 ~20fps(被 TickerMode 静音时零开销,切页即停),
 /// 并以 CustomPaint 一次绘制全部频谱条,替代逐帧构建上百个 widget。
@@ -567,36 +584,15 @@ class _AudioStripState extends State<AudioStrip>
     _capturing = false;
   }
 
-  Future<void> _requestCapture() async {
+  Future<void> _retrySpectrum() async {
     final source = _cap;
     if (source is! AndroidSpectrum) return;
-    if (source.status == AndroidSpectrumStatus.permissionRequired) {
-      final agreed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('启用实时频谱'),
-          content:
-              const Text('Android 需要音频采集权限来读取设备播放输出并绘制实时频谱。应用不会录制或保存麦克风声音。'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('暂不开启'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('继续'),
-            ),
-          ],
-        ),
-      );
-      if (agreed != true || !mounted) return;
-    }
-    final ready = await source.requestAccess();
+    final ready = await source.retry();
     if (!mounted) return;
     setState(() {});
     if (!ready) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('实时频谱暂不可用；若已拒绝权限，请在系统设置中为本应用开启音频采集权限。'),
+        content: Text('实时频谱暂不可用，请检查电台连接后重试。'),
       ));
     }
   }
@@ -661,8 +657,7 @@ class _AudioStripState extends State<AudioStrip>
       final android = _cap is AndroidSpectrum ? _cap : null;
       final needsAction = widget.playing &&
           android != null &&
-          (android.status == AndroidSpectrumStatus.permissionRequired ||
-              android.status == AndroidSpectrumStatus.unavailable);
+          android.status == AndroidSpectrumStatus.unavailable;
       return RepaintBoundary(
         child: Stack(
           alignment: Alignment.center,
@@ -680,12 +675,9 @@ class _AudioStripState extends State<AudioStrip>
             if (needsAction)
               box.maxWidth < 180
                   ? Tooltip(
-                      message: android.status ==
-                              AndroidSpectrumStatus.permissionRequired
-                          ? '启用实时频谱'
-                          : '重试实时频谱',
+                      message: '重试实时频谱',
                       child: TextButton(
-                        onPressed: _requestCapture,
+                        onPressed: _retrySpectrum,
                         style: TextButton.styleFrom(
                           minimumSize: const Size(44, 32),
                           padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -695,12 +687,9 @@ class _AudioStripState extends State<AudioStrip>
                       ),
                     )
                   : TextButton.icon(
-                      onPressed: _requestCapture,
+                      onPressed: _retrySpectrum,
                       icon: const Icon(Icons.graphic_eq_rounded, size: 16),
-                      label: Text(android.status ==
-                              AndroidSpectrumStatus.permissionRequired
-                          ? '启用实时频谱'
-                          : '重试实时频谱'),
+                      label: const Text('重试实时频谱'),
                     ),
           ],
         ),
@@ -801,7 +790,7 @@ class _VolumeControlState extends ConsumerState<_VolumeControl> {
             borderRadius: BorderRadius.circular(8),
             onTap: () => showModalBottomSheet<void>(
               context: context,
-              builder: (sheetContext) => _VolumeSheet(initial: volume),
+              builder: (sheetContext) => const _VolumeSheet(),
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -854,8 +843,9 @@ class _VolumeControlState extends ConsumerState<_VolumeControl> {
               size: 18,
               color: tokens.mutedInk,
             ),
-            onPressed: () =>
-                ref.read(playbackProvider.notifier).setVolume(muted ? 100 : 0),
+            onPressed: () => ref
+                .read(playbackProvider.notifier)
+                .setVolume(ref.read(playbackProvider).volumeAfterMuteToggle),
           ),
         ),
         Expanded(
@@ -880,21 +870,13 @@ class _VolumeControlState extends ConsumerState<_VolumeControl> {
   }
 }
 
-class _VolumeSheet extends ConsumerStatefulWidget {
-  const _VolumeSheet({required this.initial});
-
-  final double initial;
+class _VolumeSheet extends ConsumerWidget {
+  const _VolumeSheet();
 
   @override
-  ConsumerState<_VolumeSheet> createState() => _VolumeSheetState();
-}
-
-class _VolumeSheetState extends ConsumerState<_VolumeSheet> {
-  late double _value = widget.initial;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).thmr;
+    final value = ref.watch(playbackProvider.select((s) => s.volume));
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 6, 20, 18),
@@ -908,53 +890,40 @@ class _VolumeSheetState extends ConsumerState<_VolumeSheet> {
                     .titleSmall
                     ?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            Row(
-              children: [
-                VolumeWheelControl(
-                  value: _value,
-                  onChanged: (v) {
-                    ref.read(playbackProvider.notifier).setVolume(v);
-                    setState(() => _value = v);
-                  },
-                  child: IconButton(
-                    tooltip: _value <= 0 ? '取消静音' : '静音',
-                    icon: Icon(
-                      _value <= 0
+            Row(children: [
+              VolumeWheelControl(
+                value: value,
+                onChanged: (v) =>
+                    ref.read(playbackProvider.notifier).setVolume(v),
+                child: IconButton(
+                  tooltip: value <= 0 ? '取消静音' : '静音',
+                  icon: Icon(
+                      value <= 0
                           ? Icons.volume_off_rounded
-                          : _value < 50
+                          : value < 50
                               ? Icons.volume_down_rounded
                               : Icons.volume_up_rounded,
-                      color: tokens.mutedInk,
-                    ),
-                    onPressed: () {
-                      final next = _value <= 0 ? 100.0 : 0.0;
-                      ref.read(playbackProvider.notifier).setVolume(next);
-                      setState(() => _value = next);
-                    },
-                  ),
+                      color: tokens.mutedInk),
+                  onPressed: () => ref
+                      .read(playbackProvider.notifier)
+                      .setVolume(
+                          ref.read(playbackProvider).volumeAfterMuteToggle),
                 ),
-                Expanded(
+              ),
+              Expanded(
                   child: VolumeSlider(
-                    value: _value,
-                    onChanged: (v) {
-                      ref.read(playbackProvider.notifier).setVolume(v);
-                      setState(() => _value = v);
-                    },
-                  ),
-                ),
-                SizedBox(
-                  width: 42,
-                  child: Text(
-                    '${_value.round()}%',
-                    textAlign: TextAlign.right,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: tokens.mutedInk,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ),
-              ],
-            ),
+                      value: value,
+                      onChanged: (v) =>
+                          ref.read(playbackProvider.notifier).setVolume(v))),
+              SizedBox(
+                  width: 48,
+                  child: Text('${value.round()}%',
+                      textAlign: TextAlign.right,
+                      style: Theme.of(context)
+                          .textTheme
+                          .labelSmall
+                          ?.copyWith(color: tokens.mutedInk))),
+            ]),
           ],
         ),
       ),
@@ -962,7 +931,6 @@ class _VolumeSheetState extends ConsumerState<_VolumeSheet> {
   }
 }
 
-/// 投票切歌条(阈值来自 /api/meta)。
 class _VoteStrip extends ConsumerStatefulWidget {
   const _VoteStrip();
 

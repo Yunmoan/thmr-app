@@ -53,7 +53,7 @@ class AboutPanel extends StatelessWidget {
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              child: Text('客户端 · Alpha v${version ?? '…'}',
+              child: Text('客户端 · v${version ?? '…'}',
                   style: theme.textTheme.labelSmall?.copyWith(
                       color: tokens.ink, fontWeight: FontWeight.w700)),
             ),

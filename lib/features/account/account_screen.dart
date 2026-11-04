@@ -5,17 +5,57 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-import '../../core/state/app_providers.dart';
 import '../../core/state/auth_provider.dart';
 import '../../core/state/settings_provider.dart';
 import '../../core/theme/thmr_theme.dart';
+import '../../core/update/app_update.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import 'about_panel.dart';
 import 'login_screen.dart';
+import 'update_panel.dart';
 
 /// 「我的」:账号(WebView 登录 M2 接入)+ 偏好设置 + 关于。
 class AccountScreen extends ConsumerWidget {
   const AccountScreen({super.key});
+
+  /// Keep the login flow on this screen: the signed-out card is replaced as
+  /// soon as authentication succeeds, while this context remains mounted.
+  Future<void> _login(BuildContext context, WidgetRef ref) async {
+    final token = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+    if (token == null || token.isEmpty) return;
+    try {
+      await ref.read(authProvider.notifier).signInWithToken(token);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('登录成功,欢迎回到幻想乡')));
+      final user = ref.read(authProvider).user;
+      if (user?.needsNickname == true) {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('设置昵称'),
+            content: const Text('首次登录需要设置一个昵称(2–64 字符)。'),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('去设置'),
+              ),
+            ],
+          ),
+        );
+        if (context.mounted && ref.read(authProvider).user != null) {
+          await _editNickname(context, ref, '');
+        }
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('登录状态校验失败,请重试')));
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,7 +78,7 @@ class AccountScreen extends ConsumerWidget {
           ThmrPanel(
             child: auth.signedIn
                 ? _SignedInBody(auth: auth)
-                : const _SignedOutBody(),
+                : _SignedOutBody(onLogin: () => _login(context, ref)),
           ),
           const SizedBox(height: 18),
           // 外观
@@ -283,7 +323,9 @@ class AccountScreen extends ConsumerWidget {
           ],
           const SizedBox(height: 18),
           const SectionHeader(title: '关于'),
-          AboutPanel(version: ref.watch(metaProvider).valueOrNull?.version),
+          AboutPanel(
+              version: ref.watch(clientVersionProvider).valueOrNull?.label),
+          const UpdatePanel(),
           const SizedBox(height: 30),
         ],
       ),
@@ -468,46 +510,9 @@ class _MiniEdgeChoice extends StatelessWidget {
 }
 
 class _SignedOutBody extends ConsumerWidget {
-  const _SignedOutBody();
+  const _SignedOutBody({required this.onLogin});
 
-  /// 打开 WebView 登录,成功后用返回的会话 token 建立 Bearer 会话。
-  Future<void> _login(BuildContext context, WidgetRef ref) async {
-    final token = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-    );
-    if (token == null || token.isEmpty) return;
-    try {
-      await ref.read(authProvider.notifier).signInWithToken(token);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('登录成功,欢迎回到幻想乡')));
-      final user = ref.read(authProvider).user;
-      if (user?.needsNickname == true && context.mounted) {
-        // First-time login: backend requires a nickname before proceeding.
-        await showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => AlertDialog(
-            title: const Text('设置昵称'),
-            content: const Text('首次登录需要设置一个昵称(2–64 字符)。'),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('去设置'),
-              ),
-            ],
-          ),
-        );
-        if (context.mounted && ref.read(authProvider).user != null) {
-          await _editNickname(context, ref, '');
-        }
-      }
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('登录状态校验失败,请重试')));
-    }
-  }
+  final VoidCallback onLogin;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -548,7 +553,7 @@ class _SignedOutBody extends ConsumerWidget {
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed: auth.loggingIn ? null : () => _login(context, ref),
+            onPressed: auth.loggingIn ? null : onLogin,
             icon: const Icon(Icons.login_rounded, size: 18),
             label: const Text('使用 Natayark 账号登录'),
           ),

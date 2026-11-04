@@ -8,6 +8,7 @@ import 'core/state/settings_provider.dart';
 import 'core/theme/thmr_theme.dart';
 import 'features/mini/mini_player.dart';
 import 'features/shell/home_shell.dart';
+import 'features/account/update_panel.dart';
 import 'shared/widgets/desktop_title_bar.dart';
 import 'shared/widgets/thmr_background.dart';
 
@@ -100,7 +101,7 @@ class ThmrApp extends ConsumerWidget {
           ],
         );
       },
-      home: const HomeShell(),
+      home: const AppUpdateMonitor(child: HomeShell()),
     );
   }
 }
