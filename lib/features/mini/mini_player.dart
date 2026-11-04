@@ -19,6 +19,7 @@ import '../../core/state/station_provider.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/track_cover.dart';
 import '../../shared/widgets/volume_slider.dart';
+import '../../shared/widgets/volume_wheel_control.dart';
 
 /// Three selectable mini window sizes in logical pixels.
 const Size kMiniSmallWindowSize = Size(320, 96);
@@ -947,23 +948,27 @@ class _MiniControls extends ConsumerWidget {
           ),
         ),
         SizedBox(width: layout.gap),
-        IconButton(
-          constraints: BoxConstraints.tightFor(
-              width: layout.volume, height: layout.volume),
-          padding: EdgeInsets.zero,
-          visualDensity: VisualDensity.compact,
-          icon: Icon(
-            volume <= 0
-                ? Icons.volume_off_rounded
-                : volume < 50
-                    ? Icons.volume_down_rounded
-                    : Icons.volume_up_rounded,
-            size: 17,
-            color: tokens.mutedInk,
+        VolumeWheelControl(
+          value: volume,
+          onChanged: (v) => ref.read(playbackProvider.notifier).setVolume(v),
+          child: IconButton(
+            constraints: BoxConstraints.tightFor(
+                width: layout.volume, height: layout.volume),
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            icon: Icon(
+              volume <= 0
+                  ? Icons.volume_off_rounded
+                  : volume < 50
+                      ? Icons.volume_down_rounded
+                      : Icons.volume_up_rounded,
+              size: 17,
+              color: tokens.mutedInk,
+            ),
+            onPressed: () => ref
+                .read(playbackProvider.notifier)
+                .setVolume(volume <= 0 ? 100 : 0),
           ),
-          onPressed: () => ref
-              .read(playbackProvider.notifier)
-              .setVolume(volume <= 0 ? 100 : 0),
         ),
         Expanded(
           child: VolumeSlider(

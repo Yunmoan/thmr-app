@@ -11,6 +11,7 @@ import '../../core/state/station_provider.dart';
 import '../../core/theme/thmr_theme.dart';
 import 'track_cover.dart';
 import 'volume_slider.dart';
+import 'volume_wheel_control.dart';
 
 /// 非收听页时的窗口底部播放条(参照 Web 端 dock bar)。
 /// compact = 窄屏/移动端:省略音量滑杆与码率选择。
@@ -154,19 +155,23 @@ class _DockVolumeState extends ConsumerState<_DockVolume> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
-          visualDensity: VisualDensity.compact,
-          icon: Icon(
-            muted
-                ? Icons.volume_off_rounded
-                : shown < 50
-                    ? Icons.volume_down_rounded
-                    : Icons.volume_up_rounded,
-            size: 18,
-            color: tokens.mutedInk,
+        VolumeWheelControl(
+          value: shown,
+          onChanged: (v) => ref.read(playbackProvider.notifier).setVolume(v),
+          child: IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: Icon(
+              muted
+                  ? Icons.volume_off_rounded
+                  : shown < 50
+                      ? Icons.volume_down_rounded
+                      : Icons.volume_up_rounded,
+              size: 18,
+              color: tokens.mutedInk,
+            ),
+            onPressed: () =>
+                ref.read(playbackProvider.notifier).setVolume(muted ? 100 : 0),
           ),
-          onPressed: () =>
-              ref.read(playbackProvider.notifier).setVolume(muted ? 100 : 0),
         ),
         SizedBox(
           width: 120,
