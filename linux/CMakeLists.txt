@@ -74,6 +74,19 @@ set_target_properties(${BINARY_NAME}
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# Newer system headers and Clang deprecate APIs used by these dependencies.
+# Keep the warnings visible and keep all other warnings as errors.
+if(TARGET tray_manager_plugin)
+  target_compile_options(tray_manager_plugin PRIVATE
+    -Wno-error=deprecated-declarations)
+endif()
+if(TARGET flutter_secure_storage_linux_plugin AND
+   CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND
+   CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 17)
+  target_compile_options(flutter_secure_storage_linux_plugin PRIVATE
+    -Wno-error=deprecated-literal-operator)
+endif()
+
 
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build
