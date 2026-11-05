@@ -103,19 +103,23 @@ jobs:
             --release-page "https://github.com/$GITHUB_REPOSITORY/releases/tag/v$RELEASE_VERSION"
           node tool/update_release.cjs inspect --file release/metadata/thmr-update.json \
             --version "$RELEASE_VERSION" --build-number "$RELEASE_BUILD"
-      - uses: softprops/action-gh-release@v3
-        with:
-          tag_name: v${{ inputs.version }}
-          target_commitish: ${{ steps.source.outputs.sha }}
-          name: THMR ${{ inputs.version }}+${{ inputs.build_number }}
-          draft: false
-          prerelease: false
-          make_latest: 'true'
-          fail_on_unmatched_files: true
-          files: |
-            release/thmr-app-*
-            release/metadata/*
-          body: |
-            四个平台的正式版安装包、macOS 拖拽安装 DMG、SHA256SUMS 和签名更新清单已上传。
-            本次复用原构建的已验证产物，保留相同版本与构建号。
-            Next 更新插件可读取 thmr-update.json，部署目录为 apis/updater/data/。
+      - name: Upload assets and publish without changing the release target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_BUILD: ${{ inputs.build_number }}
+        run: |
+          gh release upload "v$RELEASE_VERSION" release/thmr-app-* release/metadata/* --clobber
+          python3 - <<'PY'
+          import json, os, subprocess
+          repo = os.environ['GITHUB_REPOSITORY']
+          tag = 'v' + os.environ['RELEASE_VERSION']
+          release = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/releases/tags/{tag}']))
+          payload = {'name': f"THMR {os.environ['RELEASE_VERSION']}+{os.environ['RELEASE_BUILD']}",
+              'draft': False, 'prerelease': False, 'make_latest': 'true',
+              'body': '四个平台的正式版安装包、macOS 拖拽安装 DMG、SHA256SUMS 和签名更新清单已上传。\n'
+                  '本次复用原构建的已验证产物，保留相同版本与构建号。\n'
+                  'Next 更新插件部署目录为 apis/updater/data/，可读取 thmr-update.json。'}
+          subprocess.run(['gh', 'api', '--method', 'PATCH', f"repos/{repo}/releases/{release['id']}",
+              '--input', '-', '--jq', '.html_url'], input=json.dumps(payload), text=True, check=True)
+          PY

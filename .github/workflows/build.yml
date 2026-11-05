@@ -119,16 +119,13 @@ jobs:
           path: thmr-app-linux-x64.tar.gz
           if-no-files-found: error
           overwrite: true
-      - uses: softprops/action-gh-release@v3
+      - name: Upload Linux package to the release draft
         if: github.event_name != 'pull_request'
         continue-on-error: true
-        with:
-          tag_name: ${{ needs.validate.outputs.release_tag }}
-          files: thmr-app-linux-x64.tar.gz
-          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
-          draft: true
-          fail_on_unmatched_files: true
-          make_latest: 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+        run: gh release upload "$RELEASE_TAG" thmr-app-linux-x64.tar.gz --clobber
 
   macos:
     needs: [validate, prepare_release]
@@ -182,18 +179,13 @@ jobs:
             thmr-app-macos-universal.zip
           if-no-files-found: error
           overwrite: true
-      - uses: softprops/action-gh-release@v3
+      - name: Upload macOS packages to the release draft
         if: github.event_name != 'pull_request'
         continue-on-error: true
-        with:
-          tag_name: ${{ needs.validate.outputs.release_tag }}
-          files: |
-            thmr-app-macos-universal.dmg
-            thmr-app-macos-universal.zip
-          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
-          draft: true
-          fail_on_unmatched_files: true
-          make_latest: 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+        run: gh release upload "$RELEASE_TAG" thmr-app-macos-universal.dmg thmr-app-macos-universal.zip --clobber
 
   windows:
     needs: [validate, prepare_release]
@@ -233,16 +225,13 @@ jobs:
           path: thmr-app-windows-x64.zip
           if-no-files-found: error
           overwrite: true
-      - uses: softprops/action-gh-release@v3
+      - name: Upload Windows package to the release draft
         if: github.event_name != 'pull_request'
         continue-on-error: true
-        with:
-          tag_name: ${{ needs.validate.outputs.release_tag }}
-          files: thmr-app-windows-x64.zip
-          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
-          draft: true
-          fail_on_unmatched_files: true
-          make_latest: 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+        run: gh release upload $env:RELEASE_TAG thmr-app-windows-x64.zip --clobber
 
   android:
     needs: [validate, prepare_release]
@@ -303,16 +292,13 @@ jobs:
           path: thmr-app-android.apk
           if-no-files-found: error
           overwrite: true
-      - uses: softprops/action-gh-release@v3
+      - name: Upload Android package to the release draft
         if: github.event_name != 'pull_request'
         continue-on-error: true
-        with:
-          tag_name: ${{ needs.validate.outputs.release_tag }}
-          files: thmr-app-android.apk
-          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
-          draft: true
-          fail_on_unmatched_files: true
-          make_latest: 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+        run: gh release upload "$RELEASE_TAG" thmr-app-android.apk --clobber
 
   release:
     if: github.event_name != 'pull_request'
@@ -354,20 +340,25 @@ jobs:
             --release-page "https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
           node tool/update_release.cjs inspect --file release/metadata/thmr-update.json \
             --version "$RELEASE_VERSION" --build-number "$RELEASE_BUILD"
-      - uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ needs.validate.outputs.release_tag }}
-          target_commitish: ${{ github.sha }}
-          generate_release_notes: true
-          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
-          draft: false
-          make_latest: ${{ needs.validate.outputs.prerelease == 'false' && 'true' || 'false' }}
-          fail_on_unmatched_files: true
-          files: |
-            release/thmr-app-*
-            release/metadata/*
-          body: |
-            本次构建已完成，四个平台安装包与 SHA256SUMS 已上传。
-            稳定版本号的构建同时提供 thmr-update.json；带 -rc 等标记的版本用于测试。
-            下载原始安装包上传到镜像后，修改 updater.js 顶部 THMR_DOWNLOAD_URLS 的四个地址，
-            再把本 Release 的 thmr-update.json 原样放到 API 的 data/updates/thmr-release.json 并重载插件。
+      - name: Upload all assets and publish without changing the release target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_BUILD: ${{ needs.validate.outputs.build_number }}
+          RELEASE_PREVIEW: ${{ needs.validate.outputs.prerelease }}
+        run: |
+          gh release upload "$RELEASE_TAG" release/thmr-app-* release/metadata/* --clobber
+          python3 - <<'PY'
+          import json, os, subprocess
+          repo, tag = os.environ['GITHUB_REPOSITORY'], os.environ['RELEASE_TAG']
+          release = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/releases/tags/{tag}']))
+          preview = os.environ['RELEASE_PREVIEW'] == 'true'
+          payload = {'name': f"THMR {os.environ['RELEASE_VERSION']}+{os.environ['RELEASE_BUILD']}",
+              'draft': False, 'prerelease': preview, 'make_latest': 'false' if preview else 'true',
+              'body': '四个平台安装包、macOS DMG、SHA256SUMS 已上传。稳定版本同时提供签名更新清单。\n'
+                  '更新 API 插件的镜像地址，将签名清单放到 Next 插件 data/（legacy 为根目录 data/updates/）。'}
+          # Do not resend target_commitish: GITHUB_TOKEN cannot modify workflows.
+          subprocess.run(['gh', 'api', '--method', 'PATCH', f"repos/{repo}/releases/{release['id']}",
+              '--input', '-', '--jq', '.html_url'], input=json.dumps(payload), text=True, check=True)
+          PY
