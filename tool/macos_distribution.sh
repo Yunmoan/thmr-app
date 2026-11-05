@@ -1,10 +1,7 @@
 #!/bin/bash
 set -euo pipefail
-if [ -z "${MACOS_CERTIFICATE_BASE64:-}" ]; then
-  echo 'Developer ID not configured: macOS artifact uses local signing and is not notarized.'
-  exit 0
-fi
 app=build/macos/Build/Products/Release/THMR.app
+if [ -n "${MACOS_CERTIFICATE_BASE64:-}" ]; then
 keychain="$RUNNER_TEMP/thmr-signing.keychain-db"
 password=$(openssl rand -hex 24)
 trap 'security delete-keychain "$keychain" >/dev/null 2>&1 || true; rm -f "$RUNNER_TEMP/thmr-signing.p12" "$RUNNER_TEMP/thmr-apple-api.p8"' EXIT
@@ -31,4 +28,19 @@ xcrun notarytool submit "$RUNNER_TEMP/thmr-notarize.zip" --wait \
   --key "$RUNNER_TEMP/thmr-apple-api.p8" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID"
 xcrun stapler staple "$app"
 codesign --verify --deep --strict "$app"
+else
+  echo 'Developer ID not configured: macOS artifacts use local signing and are not notarized.'
+fi
+
+# Both distributions come from the same app, after signing and stapling.
 ditto -c -k --sequesterRsrc --keepParent "$app" thmr-app-macos-universal.zip
+bash tool/package_macos_dmg.sh "$app"
+if [ -n "${MACOS_CERTIFICATE_BASE64:-}" ]; then
+  codesign --force --timestamp --sign "$MACOS_CODESIGN_IDENTITY" \
+    --keychain "$keychain" thmr-app-macos-universal.dmg
+  xcrun notarytool submit thmr-app-macos-universal.dmg --wait \
+    --key "$RUNNER_TEMP/thmr-apple-api.p8" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID"
+  xcrun stapler staple thmr-app-macos-universal.dmg
+  xcrun stapler validate thmr-app-macos-universal.dmg
+fi
+python3 tool/verify_macos_dmg.py thmr-app-macos-universal.dmg

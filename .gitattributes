@@ -1,0 +1,2 @@
+# These scripts run on macOS/Linux even when edited on Windows.
+*.sh text eol=lf

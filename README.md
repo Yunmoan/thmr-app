@@ -38,11 +38,13 @@ CI 自动获取最新 Flutter stable 和 Node.js LTS；同一次构建的四个�
 | 平台 | 产物 |
 | --- | --- |
 | Windows x64 | `thmr-app-windows-x64.zip` |
-| macOS 12+，Intel / Apple Silicon | `thmr-app-macos-universal.zip` |
+| macOS 12+，Intel / Apple Silicon | `thmr-app-macos-universal.dmg`（拖拽安装）；另附 `.zip` 供客户端自更新 |
 | Linux x64 | `thmr-app-linux-x64.tar.gz` |
 | Android | `thmr-app-android.apk` |
 
-普通构建保存在 Actions Artifacts。正式标签在全部构建通过后生成 Release 和签名更新清单，并按配置自动发布到自有更新 API；尚未配置发布 token 时可手动部署签名清单。macOS、Linux 的本地构建必须在对应系统进行。
+普通构建保存在 Actions Artifacts。所有平台完成后发布 Release；稳定版本同时生成签名更新清单，需要按上述步骤部署到自有更新 API。macOS、Linux 的本地构建必须在对应系统进行。
+
+macOS DMG 包含 THMR 应用、Applications 拖拽入口和中英文安装引导背景。先拖入 Applications，再从该目录启动。更新镜像中的 macOS 地址仍填写 ZIP，现有客户端的安装器使用此格式。
 
 Linux Debian/Ubuntu 构建依赖：
 

@@ -26,6 +26,10 @@ const THMR_DOWNLOAD_URLS = {
 
 地址留空时使用该版 GitHub Release 地址。macOS 只填一个通用包地址。搬运时保持原包字节不变，不能解压重打包；版本、大小、SHA-256 来自签名清单，不需要手改。
 
+macOS 的 DMG 用于用户首次拖拽安装；镜像配置中的 `macos` 仍填写同一 Release 的 ZIP，用于应用内更新。两者来自同一个已签名应用。
+
+首次部署包中的 `data/updates/thmr-config.json` 仅保存公钥和发布凭据，**不包含发布版本**。没有 `thmr-release.json` 时接口返回 204，客户端无法发现新版。完成上面第 3 步才会发布版本；实际版本和构建号位于签名清单的 Base64 `payload` 中，不能手工补一个外层 `version` 代替。
+
 普通 main / 手动构建会生成 `build-版本号-构建号` 预发布 Release；`v0.2.0` 这类稳定标签生成正式 Release。每个平台成功后立即上传对应包到同一个 Release 草稿，仓库所有者可先下载；全部完成后补充签名清单与校验和并自动发布。PR 仅保留 Actions 产物。
 
 ## API 首次部署
@@ -37,6 +41,12 @@ const THMR_DOWNLOAD_URLS = {
 3. 按上面的步骤填镜像地址并上传签名清单。清单缺失时读取接口返回 `204`，表示尚未发布新版本。
 
 此流程通过上传文件发布更新。若以后改用可选的 POST 发布接口，它仍需要把服务器 `config.ini` 的 `[security] maxPostSizeKB` 设为 `1024` 后重启，以解决此前实测的 `413`。
+
+**针对 OPENAPI-Next-Core：** 上述 ZIP 用于文件管理器/SSH 解压到含 `index.js` 的项目根目录，不是后台“上传 ZIP 安装插件”用的包；后台安装会将整个 ZIP 放到 `apis/<插件名>/`，导致目录不符。`data/updates/` 由插件通过 Node 文件系统读取，无需公开 URL，客户端只访问 `/updater/thmr`。服务账户需有读取权限，不能把含发布凭据的配置文件放进 `public`。
+
+现有 legacy 安装继续直接替换 `apis/updater.js` 即可，不用迁移为目录插件。加载日志会显示 `Configuration file` 和 `Release manifest` 两个绝对路径，可据此核对实际上传位置。
+
+目前插件同时支持 `apis/updater.js` 与 `apis/updater/index.js` 两种入口，私有数据都从项目根目录的 `data/updates/` 读取；同名入口只保留一个。完整目录示例见 [OPENAPI-Next-Core 的文件位置](AUTO_UPDATE.md#openapi-next-core-的文件位置)。
 
 ## Android 首次安装
 

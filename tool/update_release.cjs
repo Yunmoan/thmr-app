@@ -56,6 +56,22 @@ async function createManifest(opt, env = process.env) {
     signature: crypto.sign(null, bytes, key).toString('base64') };
 }
 
+function inspectManifest(envelope, publicKey) {
+  const rawKey = Buffer.from(publicKey || '', 'base64');
+  if (rawKey.length !== 32) throw new Error('A pinned Ed25519 public key is required');
+  if (envelope.schema !== 1 || envelope.algorithm !== 'ed25519') throw new Error('Invalid update envelope');
+  const payload = Buffer.from(envelope.payload, 'base64');
+  const key = crypto.createPublicKey({ format: 'der', type: 'spki',
+    key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), rawKey]) });
+  if (!crypto.verify(null, payload, key, Buffer.from(envelope.signature, 'base64'))) {
+    throw new Error('Invalid update signature');
+  }
+  const data = JSON.parse(payload.toString('utf8'));
+  if (data.program !== 'THMR' || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(data.version) ||
+      !Number.isSafeInteger(data.build_number) || data.build_number < 1) throw new Error('Invalid release identity');
+  return data;
+}
+
 async function main() {
   const [command, ...args] = process.argv.slice(2);
   const opt = options(args);
@@ -69,6 +85,15 @@ async function main() {
     const envelope = await createManifest(opt);
     fs.writeFileSync(opt.output, JSON.stringify(envelope, null, 2) + '\n');
     console.log(`Signed THMR manifest: ${opt.output}`);
+  } else if (command === 'inspect') {
+    const data = inspectManifest(JSON.parse(fs.readFileSync(opt.file, 'utf8')),
+      opt['public-key'] || process.env.THMR_UPDATE_PUBLIC_KEY);
+    if ((opt.version && data.version !== opt.version) ||
+        (opt['build-number'] && String(data.build_number) !== opt['build-number'])) {
+      throw new Error('Signed version does not match the build');
+    }
+    console.log(JSON.stringify({ version: data.version, build_number: data.build_number,
+      platforms: data.platforms }, null, 2));
   } else if (command === 'publish') {
     const url = new URL(opt.url);
     if (url.protocol !== 'https:' || url.username || url.password) throw new Error('HTTPS publish URL required');
@@ -101,8 +126,8 @@ async function main() {
       body: JSON.stringify(envelope) });
     if (!response.ok) throw new Error(`Update API publication failed (HTTP ${response.status})`);
     console.log('Update API published successfully');
-  } else throw new Error('Commands: keygen, manifest, publish');
+  } else throw new Error('Commands: keygen, manifest, inspect, publish');
 }
 
-module.exports = { createManifest, publicBytes };
+module.exports = { createManifest, inspectManifest, publicBytes };
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });

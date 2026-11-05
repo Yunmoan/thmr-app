@@ -18,6 +18,8 @@
 
 本机制面向本仓库输出的 zip / tar.gz / APK；不替换系统包管理器安装的 DEB/RPM、只读目录、Mac App Store 或 Google Play 的更新渠道。Windows `Program Files` 等受保护目录需要改用有权限的安装方案，不会偷偷请求管理员权限或修改系统策略。
 
+macOS 首次安装使用 `thmr-app-macos-universal.dmg`，带安装引导背景、THMR 图标和 Applications 拖拽入口。请先拖入 Applications，再启动应用。另附的 `thmr-app-macos-universal.zip` 专供现有自更新器使用，更新镜像仍填写 ZIP 地址；DMG 和 ZIP 来自同一个签名后的 `.app`。
+
 ## 2. 先生成更新签名密钥
 
 在可信本机安装 Node.js 22+，在仓库根目录运行：
@@ -48,6 +50,28 @@ node tool/update_release.cjs keygen --output .update-keys/thmr-ed25519.pem
 
 3. 为公开 GET 更新检查提供 HTTPS，并确保没有面向网页的验证码或交互挑战。可选的 POST 发布工具还需要代理保留 `Authorization` 请求头、允许 `/updater/thmr/publish`，并为 JSON 请求留出 1 MiB 上限；文件上传发布方式使用上面的清单文件路径。
 4. 检查 `https://api.zyghit.cn/updater/thmr`。尚未发布清单时返回 **204**；有有效签名清单时返回 **200**；已存在的清单损坏、签名错误或公钥未正确配置时返回 **503**，不会伪装成“已经是最新版”。
+
+### OPENAPI-Next-Core 的文件位置
+
+已核对 [OPENAPI-Next-Core 插件加载器](https://github.com/ZGIT-Network/OPENAPI-Next-Core/blob/18b170a51c63b4128ba300de60c2966c43e77ed1/core/pluginManager.js) 和 [静态资源挂载](https://github.com/ZGIT-Network/OPENAPI-Next-Core/blob/18b170a51c63b4128ba300de60c2966c43e77ed1/index.js)：插件通过 Node `require` 加载，可用 `fs` 读取服务器本地文件；只有 `public` 目录作为静态资源发布。客户端请求 `/updater/thmr`，由插件读取并验签本地清单后返回 JSON，**不会请求 `/data/updates/...`**。
+
+手动部署时把 `api-upload.zip` 解压到包含 `index.js`、`config.ini` 的项目根目录，得到：
+
+```text
+<OpenAPI>/
+  index.js
+  apis/updater.js
+  data/updates/thmr-config.json
+  data/updates/thmr-release.json  # 另从对应客户端 Release 下载部署
+```
+
+`data` 不需要对公网可访问，也不要移入 `public`；`thmr-config.json` 含发布凭据。服务进程需要有这些文件的读取权限；使用 POST 发布时还需要该目录的写入权限。
+
+**这个根目录部署包不能交给管理后台的“上传 ZIP 安装插件”。** [后台安装器](https://github.com/ZGIT-Network/OPENAPI-Next-Core/blob/18b170a51c63b4128ba300de60c2966c43e77ed1/core/adminPluginsApi.js) 只会把 ZIP 内容写到 `apis/<插件名>/`，不会把其中的 `data` 放到项目根目录。若单独制作 Next 插件包，入口应为 `apis/updater/index.js`（带 `manifest.json`），配置和清单仍放在上图的项目根目录 `data/updates/`。插件已兼容两种入口的路径计算；不要同时保留同名的单文件和目录插件。
+
+判定方式：`/data/updates/...` 返回 404 是预期行为；`/updater/thmr` 的 200 才表示清单可用。204 仅说明插件解析到的清单路径不存在，也可能是目录层级错误，不能仅凭 204 判断文件一定未上传。
+
+现有 `apis/updater.js` legacy 单文件安装无需改为目录插件。加载时控制台会打印 `Configuration file` 与 `Release manifest` 的绝对路径；根据此日志核对文件是否上传到位、服务账户是否有读取权限。手动替换有效的清单后，下次 GET 会重新读取，无需因清单变化重启；修改 JS 镜像配置时才需热重载或重启。
 
 ### 手动修改镜像地址
 
@@ -111,7 +135,7 @@ Android 版本码是 `Actions run number × 100 + run attempt`，完整重跑工
 
 ### macOS Developer ID / 公证（公开分发时配置）
 
-提供以下 Secrets 后，`tool/macos_distribution.sh` 会在打包后自动重签、向 Apple 公证、staple 并重新打包：
+提供以下 Secrets 后，`tool/macos_distribution.sh` 会重签并公证应用、staple，再从同一个应用生成 ZIP 和 DMG；DMG 也会签名、公证和 staple。构建最终挂载只读 DMG，检查引导背景、Finder 布局、Applications 入口、应用签名和版本：
 
 | Secret | 说明 |
 | --- | --- |
@@ -185,6 +209,20 @@ npm test
 API 返回 `{schema:1, algorithm:"ed25519", payload:"<Base64>", signature:"<Base64>"}`，配置镜像后额外提供 `download_urls` 平台到地址的映射。签名覆盖 **payload 解码后的原始 UTF-8 字节**；不对 JSON 重新排序或再编码后验签。`download_urls` 只决定从哪里下载同一个签名保护的安装包，不覆盖版本、大小、哈希或格式。
 
 payload 包含 `program:"THMR"`、`version`、整数 `build_number`、`notes`、`pub_date`、`release_page` 和 `platforms`。平台键为 `windows-x86_64`、`darwin-x86_64`、`darwin-aarch64`、`linux-x86_64`、`android-universal`；每项包含 HTTPS `url`、小写 SHA-256 `sha256`、字节数 `size` 与 `format`（zip / tar.gz / apk）。签名格式专属于 THMR，**不复用原 CPL/Tauri 的签名格式**。
+
+### 为什么 data 中看不到版本号
+
+首次 API 部署包中的 `data/updates/thmr-config.json` 是公钥和发布凭据配置，不是版本清单。只有把 Release 的 `thmr-update.json` 原样部署为 `data/updates/thmr-release.json`，接口才会提供版本信息；缺少清单时返回 204。
+
+清单外层是验签信封，版本藏在 Base64 `payload` 中。CI 会在生成后重新验签并检查它与本次构建的版本、构建号一致。可在本地使用公开的公钥检查：
+
+```powershell
+node tool/update_release.cjs inspect --file thmr-release.json --public-key <Base64公钥>
+```
+
+命令验签后显示 `version`、`build_number` 和各平台包信息；不要手工编辑 `payload` 或在配置文件里添加版本。客户端按语义版本比较，同一版本下再比较构建号，较高构建号也会提示更新。
+
+若指安装包里的 `data` 目录：Windows 从 EXE 的 ProductVersion 读取版本，macOS 从 `Contents/Info.plist` 读取，Android 从包信息读取；Linux 则读取 `data/flutter_assets/version.json`。各平台不要求在 `data` 根目录重复放版本文件。
 
 | 现象 | 检查 |
 | --- | --- |

@@ -237,9 +237,26 @@ class UpdatePackageManager {
           'Print:CFBundleIdentifier',
           p.join(payload.path, 'Contents/Info.plist')
         ]);
+        final version = await Process.run('/usr/libexec/PlistBuddy', [
+          '-c',
+          'Print:CFBundleShortVersionString',
+          p.join(payload.path, 'Contents/Info.plist')
+        ]);
+        final build = await Process.run('/usr/libexec/PlistBuddy', [
+          '-c',
+          'Print:CFBundleVersion',
+          p.join(payload.path, 'Contents/Info.plist')
+        ]);
         if (checked.exitCode != 0 ||
+            bundle.exitCode != 0 ||
             bundle.stdout.toString().trim() != 'cn.yunmoan.thmr.thmrApp') {
           throw const UpdateCheckException('macOS 应用签名或 Bundle ID 校验失败');
+        }
+        if (version.exitCode != 0 ||
+            build.exitCode != 0 ||
+            version.stdout.toString().trim() != release.version.toString() ||
+            build.stdout.toString().trim() != '${release.buildNumber}') {
+          throw const UpdateCheckException('更新包版本与签名信息不一致');
         }
       }
       await payload.rename(stage.path);
