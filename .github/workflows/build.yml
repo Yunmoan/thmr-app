@@ -65,20 +65,31 @@ jobs:
       - name: Keep pull request packages in Actions only
         if: github.event_name == 'pull_request'
         run: echo 'Pull requests do not publish Releases.'
-      - uses: softprops/action-gh-release@v3
+      - name: Prepare the release draft
         if: github.event_name != 'pull_request'
-        with:
-          tag_name: ${{ needs.validate.outputs.release_tag }}
-          target_commitish: ${{ github.sha }}
-          name: THMR ${{ needs.validate.outputs.version }}+${{ needs.validate.outputs.build_number }}
-          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
-          draft: true
-          make_latest: 'false'
-          body: |
-            各平台安装包将在构建成功后逐个上传到此 Release 草稿，仓库所有者可先下载。
-            全部平台完成后会补充 SHA256SUMS 和 thmr-update.json。
-            下载包上传到自己的镜像后，修改 updater.js 顶部的 THMR_DOWNLOAD_URLS，
-            再把 thmr-update.json 原样放到 API 的 data/updates/thmr-release.json 并重载插件。
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_BUILD: ${{ needs.validate.outputs.build_number }}
+          RELEASE_PREVIEW: ${{ needs.validate.outputs.prerelease }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          repo, tag = os.environ['GITHUB_REPOSITORY'], os.environ['RELEASE_TAG']
+          pages = json.loads(subprocess.check_output(['gh', 'api', '--paginate', '--slurp',
+              f'repos/{repo}/releases?per_page=100']))
+          release = next((r for page in pages for r in page if r['tag_name'] == tag), None)
+          if release is None:
+              payload = {'tag_name': tag, 'target_commitish': os.environ['GITHUB_SHA'],
+                  'name': f"THMR {os.environ['RELEASE_VERSION']}+{os.environ['RELEASE_BUILD']}",
+                  'draft': True, 'prerelease': os.environ['RELEASE_PREVIEW'] == 'true',
+                  'make_latest': 'false', 'body': '平台安装包将逐个上传，全部完成后发布签名更新清单。'}
+              subprocess.run(['gh', 'api', '--method', 'POST', f'repos/{repo}/releases',
+                  '--input', '-', '--jq', '.html_url'], input=json.dumps(payload), text=True, check=True)
+          else:
+              print(f"Using existing release draft: {release['id']}")
+          PY
 
   linux:
     needs: [validate, prepare_release]
@@ -352,7 +363,9 @@ jobs:
           python3 - <<'PY'
           import json, os, subprocess
           repo, tag = os.environ['GITHUB_REPOSITORY'], os.environ['RELEASE_TAG']
-          release = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/releases/tags/{tag}']))
+          pages = json.loads(subprocess.check_output(['gh', 'api', '--paginate', '--slurp',
+              f'repos/{repo}/releases?per_page=100']))
+          release = next(r for page in pages for r in page if r['tag_name'] == tag)
           preview = os.environ['RELEASE_PREVIEW'] == 'true'
           payload = {'name': f"THMR {os.environ['RELEASE_VERSION']}+{os.environ['RELEASE_BUILD']}",
               'draft': False, 'prerelease': preview, 'make_latest': 'false' if preview else 'true',

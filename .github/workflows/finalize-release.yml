@@ -114,7 +114,9 @@ jobs:
           import json, os, subprocess
           repo = os.environ['GITHUB_REPOSITORY']
           tag = 'v' + os.environ['RELEASE_VERSION']
-          release = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/releases/tags/{tag}']))
+          pages = json.loads(subprocess.check_output(['gh', 'api', '--paginate', '--slurp',
+              f'repos/{repo}/releases?per_page=100']))
+          release = next(r for page in pages for r in page if r['tag_name'] == tag)
           payload = {'name': f"THMR {os.environ['RELEASE_VERSION']}+{os.environ['RELEASE_BUILD']}",
               'draft': False, 'prerelease': False, 'make_latest': 'true',
               'body': '四个平台的正式版安装包、macOS 拖拽安装 DMG、SHA256SUMS 和签名更新清单已上传。\n'
