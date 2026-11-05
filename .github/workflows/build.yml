@@ -121,6 +121,7 @@ jobs:
           overwrite: true
       - uses: softprops/action-gh-release@v3
         if: github.event_name != 'pull_request'
+        continue-on-error: true
         with:
           tag_name: ${{ needs.validate.outputs.release_tag }}
           files: thmr-app-linux-x64.tar.gz
@@ -183,6 +184,7 @@ jobs:
           overwrite: true
       - uses: softprops/action-gh-release@v3
         if: github.event_name != 'pull_request'
+        continue-on-error: true
         with:
           tag_name: ${{ needs.validate.outputs.release_tag }}
           files: |
@@ -233,6 +235,7 @@ jobs:
           overwrite: true
       - uses: softprops/action-gh-release@v3
         if: github.event_name != 'pull_request'
+        continue-on-error: true
         with:
           tag_name: ${{ needs.validate.outputs.release_tag }}
           files: thmr-app-windows-x64.zip
@@ -302,6 +305,7 @@ jobs:
           overwrite: true
       - uses: softprops/action-gh-release@v3
         if: github.event_name != 'pull_request'
+        continue-on-error: true
         with:
           tag_name: ${{ needs.validate.outputs.release_tag }}
           files: thmr-app-android.apk
@@ -359,7 +363,9 @@ jobs:
           draft: false
           make_latest: ${{ needs.validate.outputs.prerelease == 'false' && 'true' || 'false' }}
           fail_on_unmatched_files: true
-          files: release/metadata/*
+          files: |
+            release/thmr-app-*
+            release/metadata/*
           body: |
             本次构建已完成，四个平台安装包与 SHA256SUMS 已上传。
             稳定版本号的构建同时提供 thmr-update.json；带 -rc 等标记的版本用于测试。
