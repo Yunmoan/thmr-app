@@ -25,9 +25,9 @@ flutter run -d <android-device> # Android
 
 界面、更新比较和安装包统一使用客户端构建版本。CI 标签 `v0.2.0` 对应 `0.2.0`，构建号是 `Actions run number × 100 + run attempt`；普通本地构建取 `pubspec.yaml`，可由 `--build-name` / `--build-number` 覆盖。更新 API 不依赖电台或账号后端的版本号。
 
-API 插件单独交付为 `updater.js`，保留原 `/ofcpl` 路由，不纳入客户端仓库。完整的密钥、API 插件部署、GitHub Variables/Secrets、Android 签名、macOS 公证和发版步骤见 **[自动更新配置文档](docs/AUTO_UPDATE.md)**。
+API 插件单独交付为 OPENAPI-Next-Core 的 Next ZIP 包，也兼容 legacy 单文件方式；保留原 `/ofcpl` 路由，不纳入客户端仓库。完整的密钥、API 插件部署、GitHub Variables/Secrets、Android 签名、macOS 公证和发版步骤见 **[自动更新配置文档](docs/AUTO_UPDATE.md)**。
 
-安装包构建完成后会逐个平台上传到同一个 GitHub Release 草稿，仓库所有者可先下载；全部平台完成后自动发布（普通构建为预发布，`v*` 稳定标签为正式发布）。你下载原包上传到镜像后，直接改 `updater.js` 顶部 `THMR_DOWNLOAD_URLS` 的四个地址，再把 Release 的 `thmr-update.json` 原样放到 API 的 `data/updates/thmr-release.json` 并重载插件。镜像地址可以单独调整，版本、文件大小与哈希仍经过验签。
+安装包构建完成后会逐个平台上传到同一个 GitHub Release 草稿，仓库所有者可先下载；全部平台完成后自动发布（普通构建为预发布，`v*` 稳定标签为正式发布）。你下载原包上传到镜像后，修改 Next 插件 `apis/updater/index.js` 顶部 `THMR_DOWNLOAD_URLS` 的四个地址，再把 Release 的签名清单放到插件的 `data/`。支持 `thmr-update.json` 和 `thmr-release.json`，后者优先；legacy 使用项目根目录的 `data/updates/`。`/updater/thmr/status` 可检查已验签的版本和故障类型。镜像地址可以单独调整，版本、文件大小与哈希仍经过验签。
 
 CI 自动获取最新 Flutter stable 和 Node.js LTS；同一次构建的四个平台共用解析后的 Flutter SDK。GitHub Actions 跟随最新稳定主版本，Dependabot 每周检查后续主版本升级。Windows / Linux 使用 `*-latest`；macOS 因 arm64 容量不足暂用当前稳定版 Intel 运行器，仓库 Variable `THMR_MACOS_RUNNER` 可覆盖为 `macos-latest`。Java 自动选取当前 Gradle 支持范围内的最新稳定版。
 

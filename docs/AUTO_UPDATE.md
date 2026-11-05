@@ -32,7 +32,15 @@ node tool/update_release.cjs keygen --output .update-keys/thmr-ed25519.pem
 
 把输出的同一个公钥配置到客户端构建和 API 服务器。**私钥只交给发布 CI，服务器只需要公钥。** 不要把私钥或发布 token 写入 JS 插件、客户端、仓库或公开配置文件。首次发出的客户端必须已经包含正确公钥，之后不能只修改服务器公钥，否则旧客户端会拒绝新签名；换钥需要专门的迁移版本。
 
-## 3. 部署独立 JS 插件
+## 3. 部署更新插件
+
+推荐使用为 OPENAPI-Next-Core 制作的私有 Next 包 `.update-keys/thmr-updater-next.zip`。在后台上传 ZIP，插件名为 `updater`，启用覆盖更新，即可替换原 legacy 单文件插件。ZIP 内含 `updater/index.js`、`manifest.json`、说明和 `data/thmr-config.json`；生成时可附带已验签的客户端发布清单。包内含发布凭据，不上传公开仓库或 Release。
+
+Next 安装后，私有文件位于 `apis/updater/data/`。`GET /updater/thmr/status` 返回 `ready` 和已验签的客户端 `version` / `build_number`；其他状态区分清单缺失、配置无效、清单不可读及验签失败。`GET /updater/thmr` 继续兼容现有客户端，`/updater/ofcpl` 保留。
+
+后续只更新该目录中的签名清单，无需重装插件。后台覆盖升级会删除原插件目录，升级插件前备份 `data` 并在升级后恢复，或设置下方环境变量使用目录外的持久化文件。Next 本地配置不存在时仍兼容旧根目录配置。
+
+### 保留 legacy 单文件安装
 
 交付文件：独立部署包中的 `apis/updater.js`（本机源文件位于 `server-plugin/updater.js`，该目录不提交到客户端仓库）。它保留你提供的 `/ofcpl` 响应，只新增 THMR 路由，使用现有 Express 和 Node 内置模块，无需安装新的运行依赖。
 
@@ -43,7 +51,8 @@ node tool/update_release.cjs keygen --output .update-keys/thmr-ed25519.pem
 | 服务端环境变量 | 值 |
 | --- | --- |
 | `THMR_UPDATE_PUBLIC_KEY` | 上一步输出的 Base64 公钥 |
-| `THMR_UPDATE_MANIFEST` | 清单绝对路径，例如 `/var/lib/openapi-updates/thmr-release.json`；默认 `<OpenAPI>/data/updates/thmr-release.json` |
+| `THMR_UPDATE_CONFIG` | 可选，私有配置的绝对路径；Next 默认 `apis/updater/data/thmr-config.json`，legacy 默认 `data/updates/thmr-config.json` |
+| `THMR_UPDATE_MANIFEST` | 可选，清单的绝对路径；默认与选中的配置同目录，识别 `thmr-release.json` 和 `thmr-update.json`；显式指定时严格读取该路径 |
 | `THMR_UPDATE_PUBLISH_TOKEN` | 随机发布凭据，至少 32 字符；与 GitHub Secret 中的值相同 |
 
 可以用 `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` 生成发布凭据。清单父目录必须允许服务账户写入。插件原子替换清单，校验发布签名并拒绝版本倒退。
@@ -67,7 +76,7 @@ node tool/update_release.cjs keygen --output .update-keys/thmr-ed25519.pem
 
 `data` 不需要对公网可访问，也不要移入 `public`；`thmr-config.json` 含发布凭据。服务进程需要有这些文件的读取权限；使用 POST 发布时还需要该目录的写入权限。
 
-**这个根目录部署包不能交给管理后台的“上传 ZIP 安装插件”。** [后台安装器](https://github.com/ZGIT-Network/OPENAPI-Next-Core/blob/18b170a51c63b4128ba300de60c2966c43e77ed1/core/adminPluginsApi.js) 只会把 ZIP 内容写到 `apis/<插件名>/`，不会把其中的 `data` 放到项目根目录。若单独制作 Next 插件包，入口应为 `apis/updater/index.js`（带 `manifest.json`），配置和清单仍放在上图的项目根目录 `data/updates/`。插件已兼容两种入口的路径计算；不要同时保留同名的单文件和目录插件。
+**上述 `api-upload.zip` 根目录部署包不能交给管理后台的“上传 ZIP 安装插件”。** [后台安装器](https://github.com/ZGIT-Network/OPENAPI-Next-Core/blob/18b170a51c63b4128ba300de60c2966c43e77ed1/core/adminPluginsApi.js) 只会把 ZIP 内容写到 `apis/<插件名>/`。后台安装应改用专门的 `thmr-updater-next.zip`：入口为 `apis/updater/index.js`（带 `manifest.json`），配置和清单放在 `apis/updater/data/`。不要同时保留同名的单文件和目录插件。
 
 判定方式：`/data/updates/...` 返回 404 是预期行为；`/updater/thmr` 的 200 才表示清单可用。204 仅说明插件解析到的清单路径不存在，也可能是目录层级错误，不能仅凭 204 判断文件一定未上传。
 
@@ -75,7 +84,7 @@ node tool/update_release.cjs keygen --output .update-keys/thmr-ed25519.pem
 
 ### 手动修改镜像地址
 
-直接修改 `apis/updater.js` **顶部**的 `THMR_DOWNLOAD_URLS`：
+直接修改 Next 插件 `apis/updater/index.js`（legacy 为 `apis/updater.js`）**顶部**的 `THMR_DOWNLOAD_URLS`：
 
 ```js
 const THMR_DOWNLOAD_URLS = {
@@ -86,7 +95,7 @@ const THMR_DOWNLOAD_URLS = {
 };
 ```
 
-先把 Release 原始安装包上传到镜像，再修改这四个完整 HTTPS 地址；macOS 通用包只填一次。地址留空使用该版本的 GitHub Release 地址。将**同一个 Release** 的 `thmr-update.json` 重命名为 `thmr-release.json`，放到 API 根目录的 `data/updates/`，然后重载插件或重启服务。
+先把 Release 原始安装包上传到镜像，再修改这四个完整 HTTPS 地址；macOS 通用包只填一次。地址留空使用该版本的 GitHub Release 地址。将**同一个 Release** 的签名清单放到 Next 的 `apis/updater/data/`（legacy 为根目录 `data/updates/`）。可使用原名 `thmr-update.json`，也可改为 `thmr-release.json`；两者同时存在时优先读取后者，建议只保留一个。仅替换清单无需重启，修改 JS 镜像地址需要重载插件。
 
 镜像地址通过响应中的 `download_urls` 提供，客户端先验签，再使用镜像位置下载，仍强制核对签名保护的版本、文件大小、格式和 SHA-256。只改镜像地址不需要私钥，也不需要重新签名；不要改 `payload`、`signature` 或解压重打包安装文件。
 
@@ -96,6 +105,7 @@ const THMR_DOWNLOAD_URLS = {
 | --- | --- |
 | `GET /updater/ofcpl` | 保留原 CPL 更新响应 |
 | `GET /updater/thmr` | THMR 签名更新清单，`Cache-Control: no-store` |
+| `GET /updater/thmr/status` | Next 插件健康检查，显示已验签版本或故障类型，不返回凭据和本地路径 |
 | `POST /updater/thmr/publish` | 带 `Authorization: Bearer <发布凭据>` 的发布请求 |
 
 ## 4. 配置 GitHub Actions

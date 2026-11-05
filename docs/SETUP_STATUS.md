@@ -32,7 +32,15 @@ macOS 的 DMG 用于用户首次拖拽安装；镜像配置中的 `macos` 仍填
 
 普通 main / 手动构建会生成 `build-版本号-构建号` 预发布 Release；`v0.2.0` 这类稳定标签生成正式 Release。每个平台成功后立即上传对应包到同一个 Release 草稿，仓库所有者可先下载；全部完成后补充签名清单与校验和并自动发布。PR 仅保留 Actions 产物。
 
-## API 首次部署
+## API Next 插件部署
+
+新的 `.update-keys/thmr-updater-next.zip` 可直接通过 OPENAPI-Next-Core 后台“上传 ZIP 安装插件”安装，插件名 `updater`，勾选覆盖更新可替换同名 legacy 插件。若手动安装，将 ZIP 内的 `updater/` 放到 `apis/` 并移走原 `apis/updater.js`。
+
+Next 包的私有配置和清单位于 `apis/updater/data/`，不依赖根目录 `data/updates/`。安装后先访问 `/updater/thmr/status`，应返回 `state: ready` 以及签名中的版本与构建号。后续把同一客户端 Release 的清单原样放到此目录，可用 `thmr-update.json` 或 `thmr-release.json`；同时存在时优先后者。每次请求重新读取，无需重装插件。
+
+包内含私有发布凭据，仅用于自己的后台安装。后台覆盖升级会删除旧目录，升级插件前备份 `data/` 并恢复；发布客户端新版只需替换清单。
+
+## API legacy 首次部署
 
 预配置部署包在项目本机的 `.update-keys/api-upload.zip`。
 
@@ -46,7 +54,7 @@ macOS 的 DMG 用于用户首次拖拽安装；镜像配置中的 `macos` 仍填
 
 现有 legacy 安装继续直接替换 `apis/updater.js` 即可，不用迁移为目录插件。加载日志会显示 `Configuration file` 和 `Release manifest` 两个绝对路径，可据此核对实际上传位置。
 
-目前插件同时支持 `apis/updater.js` 与 `apis/updater/index.js` 两种入口，私有数据都从项目根目录的 `data/updates/` 读取；同名入口只保留一个。完整目录示例见 [OPENAPI-Next-Core 的文件位置](AUTO_UPDATE.md#openapi-next-core-的文件位置)。
+目前插件同时支持 `apis/updater.js` 与 `apis/updater/index.js` 两种入口。legacy 读取根目录 `data/updates/`，Next 优先读取插件自己的 `data/`，本地配置不存在时兼容旧根目录配置；同名入口只保留一个。完整说明见 [更新插件部署](AUTO_UPDATE.md#3-部署更新插件)。
 
 ## Android 首次安装
 
