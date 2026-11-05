@@ -96,10 +96,9 @@ jobs:
         run: |
           mkdir -p release/metadata
           (cd release && sha256sum thmr-app-* > metadata/SHA256SUMS)
-          git log -15 --pretty=format:'- %s' > "$RUNNER_TEMP/thmr-release-notes.txt"
           node tool/update_release.cjs manifest --version "$RELEASE_VERSION" --build-number "$RELEASE_BUILD" \
             --artifacts release --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/v$RELEASE_VERSION/" \
-            --output release/metadata/thmr-update.json --notes-file "$RUNNER_TEMP/thmr-release-notes.txt" \
+            --output release/metadata/thmr-update.json \
             --release-page "https://github.com/$GITHUB_REPOSITORY/releases/tag/v$RELEASE_VERSION"
           node tool/update_release.cjs inspect --file release/metadata/thmr-update.json \
             --version "$RELEASE_VERSION" --build-number "$RELEASE_BUILD"

@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../platform/windows_process_exit.dart';
+import '../platform/windows_update_process.dart';
 import 'update_manifest.dart';
 
 Future<Directory> updateCacheDirectory() async => Directory(p.join(
@@ -200,6 +201,10 @@ class UpdatePackageManager {
             .exists()) {
       throw const UpdateCheckException('请从完整的 THMR 应用目录运行，开发运行器不能执行自更新');
     }
+    if (Platform.isWindows) {
+      await _installWindows(release, file, artifact, target);
+      return;
+    }
     final parent = p.dirname(target);
     final token = _randomToken();
     final stage = Directory(p.join(parent, '.thmr-update-$token'));
@@ -285,55 +290,30 @@ class UpdatePackageManager {
       };
       await File(p.join(tx.path, 'plan.json'))
           .writeAsString(jsonEncode(plan), flush: true);
-      final windows = Platform.isWindows;
-      final helper =
-          File(p.join(tx.path, windows ? 'install.ps1' : 'install.sh'));
+      final helper = File(p.join(tx.path, 'install.sh'));
       await helper.writeAsString(
-          await rootBundle.loadString(windows
-              ? 'assets/updater/install_windows.ps1'
-              : 'assets/updater/install_unix.sh'),
+          await rootBundle.loadString('assets/updater/install_unix.sh'),
           flush: true);
       await File(p.join(cache.path, 'last-transaction'))
           .writeAsString('tx-$token', flush: true);
-      if (windows) {
-        final systemRoot = Platform.environment['SystemRoot'] ?? r'C:\Windows';
-        await Process.start(
-            p.join(
-                systemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
-            [
-              '-NoProfile',
-              '-NonInteractive',
-              '-WindowStyle',
-              'Hidden',
-              '-ExecutionPolicy',
-              'Bypass',
-              '-File',
-              helper.path,
-              '-PlanPath',
-              p.join(tx.path, 'plan.json')
-            ],
-            workingDirectory: parent,
-            mode: ProcessStartMode.detached);
-      } else {
-        await Process.start(
-            '/bin/sh',
-            [
-              helper.path,
-              '$pid',
-              target,
-              stage.path,
-              backup,
-              ack,
-              token,
-              relativeExe,
-              result,
-              ready,
-              '60',
-              Platform.isMacOS ? 'macos' : 'linux'
-            ],
-            workingDirectory: parent,
-            mode: ProcessStartMode.detached);
-      }
+      await Process.start(
+          '/bin/sh',
+          [
+            helper.path,
+            '$pid',
+            target,
+            stage.path,
+            backup,
+            ack,
+            token,
+            relativeExe,
+            result,
+            ready,
+            '60',
+            Platform.isMacOS ? 'macos' : 'linux'
+          ],
+          workingDirectory: parent,
+          mode: ProcessStartMode.detached);
       for (var i = 0; i < 100; i++) {
         if (await File(ready).exists() &&
             await File(ready).readAsString() == token) {
@@ -360,6 +340,116 @@ class UpdatePackageManager {
         if (await unpack.exists()) {
           await _removeStage(unpack, parent, '.thmr-unpack-');
         }
+      }
+    }
+  }
+
+  Future<void> _installWindows(AppRelease release, File file,
+      UpdateArtifact artifact, String target) async {
+    final parent = p.dirname(target);
+    final token = _randomToken();
+    final cache = await _cacheDirectory();
+    final tx = await Directory(p.join(cache.path, 'tx-$token'))
+        .create(recursive: true);
+    final payload = await Directory(p.join(tx.path, 'payload')).create();
+    final stage = Directory(p.join(parent, '.thmr-update-$token'));
+    final cancel = File(p.join(tx.path, 'cancel'));
+    final result = File(p.join(tx.path, 'result.json'));
+    final ready = File(p.join(tx.path, 'ready'));
+    WindowsUpdateProcess? process;
+    var started = false;
+    try {
+      await _extractChecked(file, artifact, payload);
+      if (!await File(p.join(payload.path, 'thmr_app.exe')).exists()) {
+        throw const UpdateCheckException('更新包缺少 THMR 主程序');
+      }
+      var elevated = await windowsUpdateNeedsElevation(target, token);
+      final plan = <String, Object>{
+        'processId': pid,
+        'parent': parent,
+        'target': target,
+        'source': payload.path,
+        'stage': stage.path,
+        'backup': p.join(parent, '.thmr-backup-$token'),
+        'ack': p.join(tx.path, 'ack'),
+        'token': token,
+        'ready': ready.path,
+        'result': result.path,
+        'timeout': 60,
+        'identity': release.identity,
+        'requiresElevation': elevated,
+      };
+      final planFile = File(p.join(tx.path, 'plan.json'));
+      final helper = File(p.join(tx.path, 'install.ps1'));
+      await helper.writeAsString(
+          await rootBundle.loadString('assets/updater/install_windows.ps1'),
+          flush: true);
+      await File(p.join(cache.path, 'last-transaction'))
+          .writeAsString('tx-$token', flush: true);
+      for (var attempt = 0; attempt < 2; attempt++) {
+        plan['requiresElevation'] = elevated;
+        await planFile.writeAsString(jsonEncode(plan), flush: true);
+        if (await result.exists()) await result.delete();
+        process?.close();
+        // The unelevated supervisor keeps the original user session for restart.
+        // Its worker requests UAC only when writing the installation requires it.
+        process = await startWindowsUpdateProcess(
+            helper: helper.path,
+            plan: planFile.path,
+            workingDirectory: tx.path,
+            elevated: false);
+        var retryElevated = false;
+        for (var i = 0; i < 1200; i++) {
+          if (await ready.exists() && await ready.readAsString() == token) {
+            started = true;
+            await _quit();
+            return;
+          }
+          if (await result.exists()) {
+            final status = jsonDecode(
+                    (await result.readAsString()).replaceFirst('\ufeff', ''))
+                as Map;
+            final code = status['code'];
+            if (code == 'permission_required' && !elevated) {
+              elevated = retryElevated = true;
+              await Future<void>.delayed(const Duration(milliseconds: 250));
+              break;
+            }
+            if (code == 'authorization_cancelled') {
+              throw const UpdateCheckException('已取消管理员授权，应用保持原版本。需要时可再次安装。');
+            }
+            throw const UpdateCheckException('安装准备失败，原版本未改动。可查看安装诊断日志。');
+          }
+          final exitCode = process.exitCode;
+          if (exitCode != null) {
+            throw UpdateCheckException('安装程序提前退出（代码 $exitCode），请查看安装诊断日志后重试。');
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+        if (!retryElevated) {
+          throw const UpdateCheckException(
+              '安装准备超时。请留意 Windows 授权提示，原版本仍可继续使用。');
+        }
+      }
+    } on WindowsUpdateStartException catch (error) {
+      throw UpdateCheckException(error.code == 1223
+          ? '已取消管理员授权，应用保持原版本。'
+          : 'Windows 无法启动安装程序（代码 ${error.code}），原版本未改动。');
+    } on UpdateCheckException {
+      rethrow;
+    } catch (_) {
+      throw const UpdateCheckException('无法准备安装，请检查磁盘空间与安装诊断日志，原版本未改动。');
+    } finally {
+      process?.close();
+      if (!started) {
+        await cancel.writeAsString('cancel', flush: true);
+        if (await payload.exists()) await payload.delete(recursive: true);
+        // A protected sibling is cleaned by the elevated worker itself.
+        try {
+          if (await stage.exists()) {
+            await _removeStage(stage, parent, '.thmr-update-');
+          }
+        } catch (_) {}
       }
     }
   }
@@ -424,6 +514,24 @@ class UpdatePackageManager {
       throw const UpdateCheckException('拒绝清理不安全的更新目录');
     }
     await directory.delete(recursive: true);
+  }
+}
+
+/// Probe only fresh, randomly named entries; never alter existing app files.
+Future<bool> windowsUpdateNeedsElevation(String target, String token) async {
+  final parentProbe =
+      Directory(p.join(p.dirname(target), '.thmr-access-$token'));
+  final appProbe = File(p.join(target, '.thmr-access-$token'));
+  try {
+    await parentProbe.create();
+    await appProbe.writeAsString('permission check', flush: true);
+    return false;
+  } on FileSystemException catch (error) {
+    if ([5, 1314].contains(error.osError?.errorCode)) return true;
+    rethrow;
+  } finally {
+    if (await appProbe.exists()) await appProbe.delete();
+    if (await parentProbe.exists()) await parentProbe.delete();
   }
 }
 

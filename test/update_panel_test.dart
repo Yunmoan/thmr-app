@@ -20,6 +20,19 @@ class _UiUpdateService extends AppUpdateService {
   }
 }
 
+class _PreviewController extends AppUpdateController {
+  _PreviewController(this.preview)
+      : super(
+            service: AppUpdateService(),
+            installedVersion: () async => const ClientVersion('0.1.3', '1'));
+  final AppUpdateState preview;
+  @override
+  Future<void> check({bool manual = false}) async {
+    await ready;
+    state = preview;
+  }
+}
+
 void main() {
   late AppRelease uiRelease;
   setUpAll(() async {
@@ -56,7 +69,7 @@ void main() {
       await tester.tap(find.text('检查更新'));
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsOneWidget);
-      expect(find.text('下载并自动更新'), findsOneWidget);
+      expect(find.text('下载更新'), findsOneWidget);
       expect(find.text('更新说明'), findsOneWidget);
       expect(adapter.requests, 1);
       expect(tester.takeException(), isNull);
@@ -83,13 +96,53 @@ void main() {
       )),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('发现客户端新版本 v0.1.10+2'), findsOneWidget);
-    await tester.tap(find.text('忽略此版本'));
+    expect(find.text('发现新版本 · v0.1.10'), findsOneWidget);
+    await tester.tap(find.byTooltip('忽略此版本'));
     await tester.pumpAndSettle();
-    expect(find.byType(MaterialBanner), findsNothing);
+    expect(find.byKey(const ValueKey('app-update-notice')), findsNothing);
     expect(find.text('电台页面'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  for (final width in [320.0, 1280.0]) {
+    testWidgets(
+        'ready notice stays compact and error dialog fits at ${width}px',
+        (tester) async {
+      tester.view.physicalSize = Size(width, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final controller = _PreviewController(AppUpdateState(
+          status: UpdateStatus.ready,
+          release: uiRelease,
+          error: '已取消管理员授权，应用保持原版本。'));
+      final container = ProviderContainer(
+          overrides: [appUpdateProvider.overrideWith((ref) => controller)]);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+              theme: ThmrTheme.dark(),
+              builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                      textScaler: TextScaler.linear(width < 480 ? 1.4 : 1)),
+                  child: child!),
+              home: const Scaffold(
+                  body:
+                      AppUpdateMonitor(child: Center(child: Text('电台页面')))))));
+      await tester.pumpAndSettle();
+      final notice = find.byKey(const ValueKey('app-update-notice'));
+      expect(tester.getSize(notice).height,
+          lessThanOrEqualTo(width < 480 ? 120 : 60));
+      await tester.tap(find.text('查看更新'));
+      await tester.pumpAndSettle();
+      expect(find.text('更新未完成'), findsOneWidget);
+      expect(find.text('构建 2'), findsOneWidget);
+      expect(find.text('更新内容'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }
 
   testWidgets('Linux login explains unsupported WebView without invoking it',
       (tester) async {

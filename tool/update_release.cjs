@@ -17,6 +17,17 @@ function publicBytes(key) {
   return crypto.createPublicKey(key).export({ format: 'der', type: 'spki' }).subarray(-32).toString('base64');
 }
 
+function releaseNotes(version, changelog = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8')) {
+  const lines = changelog.split(/\r?\n/);
+  const start = lines.findIndex(line => line.trim() === `## ${version}` || line.trim() === `## [${version}]`);
+  if (start < 0) throw new Error(`Add release notes for ${version} to CHANGELOG.md before publishing`);
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex(line => /^##\s/.test(line));
+  const notes = (end < 0 ? rest : rest.slice(0, end)).join('\n').trim();
+  if (!notes) throw new Error(`Release notes for ${version} are empty`);
+  return notes;
+}
+
 async function createManifest(opt, env = process.env) {
   const version = opt.version;
   const build = Number(opt['build-number']);
@@ -47,7 +58,7 @@ async function createManifest(opt, env = process.env) {
     platforms[platform] = { url: new URL(name, base.href.replace(/\/?$/, '/')).href,
       sha256: hash.digest('hex'), size: stat.size, format };
   }
-  const notes = opt['notes-file'] ? fs.readFileSync(opt['notes-file'], 'utf8') : '客户端更新';
+  const notes = opt['notes-file'] ? fs.readFileSync(opt['notes-file'], 'utf8') : releaseNotes(version);
   if (notes.length > 65536) throw new Error('Release notes are too large');
   const data = { program: 'THMR', version, build_number: build, notes,
     pub_date: new Date().toISOString(), release_page: opt['release-page'] || 'https://thmr.yunmoan.cn', platforms };
@@ -129,5 +140,5 @@ async function main() {
   } else throw new Error('Commands: keygen, manifest, inspect, publish');
 }
 
-module.exports = { createManifest, inspectManifest, publicBytes };
+module.exports = { createManifest, inspectManifest, publicBytes, releaseNotes };
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });

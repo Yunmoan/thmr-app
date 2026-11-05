@@ -56,28 +56,96 @@ class _AppUpdateMonitorState extends ConsumerState<AppUpdateMonitor>
       if (update.showNotice)
         SafeArea(
           bottom: false,
-          child: MaterialBanner(
-            content: Text(update.status == UpdateStatus.ready
-                ? '更新已就绪 v${update.release!.identity}'
-                : update.status == UpdateStatus.downloading
-                    ? '正在下载更新 ${(update.progress * 100).round()}%'
-                    : '发现客户端新版本 v${update.release!.identity}'),
-            forceActionsBelow: MediaQuery.sizeOf(context).width < 600,
-            actions: [
-              TextButton(
-                onPressed: () =>
-                    ref.read(appUpdateProvider.notifier).ignoreRelease(),
-                child: const Text('忽略此版本'),
-              ),
-              TextButton(
-                onPressed: () => showAppUpdate(context, update.release!),
-                child: const Text('查看更新'),
-              ),
-            ],
+          child: _UpdateNotice(
+            update: update,
+            onIgnore: () =>
+                ref.read(appUpdateProvider.notifier).ignoreRelease(),
+            onView: () => showAppUpdate(context, update.release!),
           ),
         ),
       Expanded(child: widget.child),
     ]);
+  }
+}
+
+class _UpdateNotice extends StatelessWidget {
+  const _UpdateNotice(
+      {required this.update, required this.onIgnore, required this.onView});
+  final AppUpdateState update;
+  final VoidCallback onIgnore;
+  final VoidCallback onView;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final label = switch (update.status) {
+      UpdateStatus.ready => '更新已就绪',
+      UpdateStatus.downloading => '正在下载更新 ${(update.progress * 100).round()}%',
+      UpdateStatus.installing => '正在准备安装…',
+      _ => '发现新版本',
+    };
+    final message = '$label · v${update.release!.version}';
+    final buttonStyle = TextButton.styleFrom(
+      minimumSize: const Size(0, 36),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      textStyle: theme.textTheme.labelLarge,
+    );
+    final view = TextButton(
+        onPressed: onView, style: buttonStyle, child: const Text('查看更新'));
+    final dismiss = IconButton(
+      tooltip: '忽略此版本',
+      onPressed: update.status == UpdateStatus.installing ? null : onIgnore,
+      constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+      padding: const EdgeInsets.all(8),
+      iconSize: 18,
+      icon: const Icon(Icons.close),
+    );
+    return Material(
+      key: const ValueKey('app-update-notice'),
+      color: theme.colorScheme.surface,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: theme.dividerColor))),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: LayoutBuilder(builder: (context, constraints) {
+              final narrow = constraints.maxWidth < 480 ||
+                  MediaQuery.textScalerOf(context).scale(13) > 18;
+              final text = Expanded(
+                  child: Tooltip(
+                message: '$label · v${update.release!.identity}',
+                child: Text(message,
+                    maxLines: narrow ? 2 : 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(fontSize: 13, height: 1.4)),
+              ));
+              return Column(mainAxisSize: MainAxisSize.min, children: [
+                Row(children: [
+                  Icon(
+                      update.status == UpdateStatus.ready
+                          ? Icons.task_alt
+                          : Icons.system_update_alt,
+                      size: 18,
+                      color: theme.colorScheme.primary),
+                  const SizedBox(width: 10),
+                  text,
+                  const SizedBox(width: 8),
+                  if (!narrow) view,
+                  dismiss,
+                ]),
+                if (narrow)
+                  Align(alignment: Alignment.centerRight, child: view),
+              ]);
+            }),
+          ),
+          if (update.status == UpdateStatus.downloading)
+            LinearProgressIndicator(value: update.progress, minHeight: 2),
+        ]),
+      ),
+    );
   }
 }
 
@@ -174,40 +242,124 @@ Future<void> showAppUpdate(BuildContext context, AppRelease release) =>
         final controller = ref.read(appUpdateProvider.notifier);
         final current = state.release ?? release;
         final artifact = current.artifactFor();
+        final theme = Theme.of(context);
+        final ready = state.status == UpdateStatus.ready;
+        final installing = state.status == UpdateStatus.installing;
+        final downloading = state.status == UpdateStatus.downloading;
+        final title = state.error != null
+            ? '更新未完成'
+            : installing
+                ? '正在准备安装'
+                : downloading
+                    ? '正在下载更新'
+                    : ready
+                        ? '更新已就绪'
+                        : '发现新版本';
         return AlertDialog(
-          title: Text('发现新版本 v${current.identity}'),
+          titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 12),
+          contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          title: Row(children: [
+            Icon(
+                state.error != null
+                    ? Icons.error_outline
+                    : ready
+                        ? Icons.task_alt
+                        : Icons.system_update_alt,
+                size: 22,
+                color: state.error != null
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.primary),
+            const SizedBox(width: 12),
+            Expanded(
+                child: Text(title,
+                    style: theme.textTheme.titleLarge
+                        ?.copyWith(fontSize: 20, fontWeight: FontWeight.w600))),
+          ]),
           content: SizedBox(
-              width: 480,
-              child: SingleChildScrollView(
-                  child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SelectableText(current.notes.trim().isEmpty
-                      ? '该版本未提供更新说明。'
-                      : current.notes),
-                  const SizedBox(height: 16),
-                  Text(artifact == null
-                      ? '此版本暂未提供当前架构的安装包。'
-                      : defaultTargetPlatform == TargetPlatform.android
-                          ? '应用会下载并校验 APK，随后打开系统安装器。首次安装需在系统设置中允许此应用安装更新。'
-                          : '应用会自动下载并校验更新包，点击安装后退出并替换程序，再自动重启。启动失败会恢复原版本。'),
-                  if (state.status == UpdateStatus.downloading) ...[
-                    const SizedBox(height: 12),
-                    LinearProgressIndicator(value: state.progress),
-                    Text(state.progress >= 1
-                        ? '正在校验更新包…'
-                        : '下载进度 ${(state.progress * 100).round()}%'),
-                  ],
-                  if (state.error != null) ...[
-                    const SizedBox(height: 12),
-                    Text(state.error!,
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.error))
-                  ],
-                  if (state.installNotice != null) Text(state.installNotice!),
-                ],
-              ))),
+              width: 460,
+              child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                      maxHeight: MediaQuery.sizeOf(context).height * .55),
+                  child: SingleChildScrollView(
+                      child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(spacing: 12, runSpacing: 4, children: [
+                        Text('v${current.version}',
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(fontWeight: FontWeight.w600)),
+                        Text('构建 ${current.buildNumber}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant)),
+                        if (artifact != null)
+                          Text(
+                              '${(artifact.size / (1024 * 1024)).toStringAsFixed(1)} MB',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant)),
+                      ]),
+                      const SizedBox(height: 16),
+                      Text('更新内容',
+                          style: theme.textTheme.labelLarge
+                              ?.copyWith(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      _UpdateNotes(notes: current.notes),
+                      const SizedBox(height: 16),
+                      const Divider(),
+                      const SizedBox(height: 12),
+                      Text(
+                          artifact == null
+                              ? '此版本暂未提供当前架构的安装包。'
+                              : installing
+                                  ? '正在准备安装，请留意系统的授权提示。'
+                                  : ready
+                                      ? '更新包已下载并通过校验。安装后将自动重启应用。'
+                                      : '下载完成并校验后，即可安装更新。',
+                          style: theme.textTheme.bodySmall),
+                      if (artifact != null &&
+                          defaultTargetPlatform == TargetPlatform.windows) ...[
+                        const SizedBox(height: 6),
+                        Text('需要管理员权限时，Windows 会请求授权。',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant)),
+                      ],
+                      if (downloading || installing) ...[
+                        const SizedBox(height: 10),
+                        LinearProgressIndicator(
+                            value: installing || state.progress >= 1
+                                ? null
+                                : state.progress,
+                            minHeight: 3),
+                        if (downloading)
+                          Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                  state.progress >= 1
+                                      ? '正在校验更新包…'
+                                      : '${(state.progress * 100).round()}%',
+                                  style: theme.textTheme.labelSmall)),
+                      ],
+                      if (state.error != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                                color: theme.colorScheme.error
+                                    .withValues(alpha: .06),
+                                border: Border.all(
+                                    color: theme.colorScheme.error
+                                        .withValues(alpha: .25)),
+                                borderRadius: BorderRadius.circular(6)),
+                            child: Text(state.error!,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.error))),
+                      ],
+                      if (state.installNotice != null)
+                        Text(state.installNotice!),
+                    ],
+                  )))),
           actions: [
             TextButton(
                 onPressed: state.status == UpdateStatus.installing
@@ -235,11 +387,43 @@ Future<void> showAppUpdate(BuildContext context, AppRelease release) =>
             else if (artifact != null)
               FilledButton(
                   onPressed: state.busy ? null : controller.downloadUpdate,
-                  child: const Text('下载并自动更新')),
+                  child: const Text('下载更新')),
           ],
         );
       }),
     );
+
+class _UpdateNotes extends StatelessWidget {
+  const _UpdateNotes({required this.notes});
+  final String notes;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context)
+        .textTheme
+        .bodyMedium
+        ?.copyWith(fontSize: 14, height: 1.6);
+    final lines =
+        notes.trim().isEmpty ? ['该版本未提供更新说明。'] : notes.trim().split('\n');
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      for (final line in lines)
+        if (line.trim().isNotEmpty)
+          Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: RegExp(r'^\s*[-*]\s+').hasMatch(line)
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                          Text('•  ', style: style),
+                          Expanded(
+                              child: SelectableText(
+                                  line.replaceFirst(RegExp(r'^\s*[-*]\s+'), ''),
+                                  style: style)),
+                        ])
+                  : SelectableText(line, style: style)),
+    ]);
+  }
+}
 
 Future<void> _openUpdateLink(BuildContext context, Uri url) async {
   try {

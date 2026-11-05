@@ -8,7 +8,7 @@
 
 | 平台 | 安装方式 | 必要条件 |
 | --- | --- | --- |
-| Windows x64 | 关闭旧进程、替换完整目录、重启；新版启动失败自动恢复旧目录 | 完整便携包放在当前用户可写的独立目录；不要只更新 exe |
+| Windows x64 | 关闭旧进程、替换完整目录、重启；新版启动失败自动恢复旧目录 | 完整便携包；受保护目录安装时需确认 Windows 管理员授权；不要只更新 exe |
 | macOS Intel / Apple Silicon | 校验 `.app` 签名和 Bundle ID、替换应用、重启；失败恢复 | 直接分发的非沙盒版本；目录可写；公开分发应配置 Developer ID 与 Apple 公证 |
 | Linux x64 | 替换完整 `bundle`、重启；失败恢复 | 当前用户可写的独立便携目录；系统提供 libmpv/GTK 等运行库 |
 | Android | 后台下载并校验 APK，核对包名、版本码和签名后打开系统安装器 | 首次允许 THMR 安装应用；**系统要求用户确认安装**；每次发布保持相同签名密钥 |
@@ -16,7 +16,7 @@
 
 下载不会自动退出正在使用的应用。桌面端在点击“安装并重启”后自动完成替换；重启后需要成功渲染首帧、经过 3 秒无 Flutter 启动错误并返回事务回执，否则 60 秒后恢复旧版。数据和设置仍在系统应用数据目录，不放进被替换的程序目录。
 
-本机制面向本仓库输出的 zip / tar.gz / APK；不替换系统包管理器安装的 DEB/RPM、只读目录、Mac App Store 或 Google Play 的更新渠道。Windows `Program Files` 等受保护目录需要改用有权限的安装方案，不会偷偷请求管理员权限或修改系统策略。
+本机制面向本仓库输出的 zip / tar.gz / APK；不替换系统包管理器安装的 DEB/RPM、Mac App Store 或 Google Play 的更新渠道。Windows 在用户点击安装后检查目录权限，必要时由安装辅助程序弹出 UAC；取消授权时保留原版，重启播放器使用原用户会话。不会修改系统安全策略。macOS/Linux 仍需当前用户可写的安装目录。
 
 macOS 首次安装使用 `thmr-app-macos-universal.dmg`，带安装引导背景、THMR 图标和 Applications 拖拽入口。请先拖入 Applications，再启动应用。另附的 `thmr-app-macos-universal.zip` 专供现有自更新器使用，更新镜像仍填写 ZIP 地址；DMG 和 ZIP 来自同一个签名后的 `.app`。
 
@@ -219,6 +219,8 @@ npm test
 API 返回 `{schema:1, algorithm:"ed25519", payload:"<Base64>", signature:"<Base64>"}`，配置镜像后额外提供 `download_urls` 平台到地址的映射。签名覆盖 **payload 解码后的原始 UTF-8 字节**；不对 JSON 重新排序或再编码后验签。`download_urls` 只决定从哪里下载同一个签名保护的安装包，不覆盖版本、大小、哈希或格式。
 
 payload 包含 `program:"THMR"`、`version`、整数 `build_number`、`notes`、`pub_date`、`release_page` 和 `platforms`。平台键为 `windows-x86_64`、`darwin-x86_64`、`darwin-aarch64`、`linux-x86_64`、`android-universal`；每项包含 HTTPS `url`、小写 SHA-256 `sha256`、字节数 `size` 与 `format`（zip / tar.gz / apk）。签名格式专属于 THMR，**不复用原 CPL/Tauri 的签名格式**。
+
+更新说明从随代码提交的 `CHANGELOG.md` 对应版本段落生成，完整放入签名保护的 `payload.notes`。客户端随 API 响应读取并缓存，展示日志不会额外访问 GitHub；镜像只需分发同一个签名清单及安装包。发布新版本前先补齐对应的更新说明，缺少该版本段落时停止生成清单。
 
 ### 为什么 data 中看不到版本号
 
