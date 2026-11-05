@@ -204,12 +204,12 @@ void main() {
     final adapter = ReleaseAdapter();
     final controller = AppUpdateController(
       service: serviceFor(adapter),
-      installedVersion: () async => const ClientVersion('0.1.2', '99'),
+      installedVersion: () async => const ClientVersion('0.1.3', '99'),
     );
     addTearDown(controller.dispose);
     await controller.check(manual: true);
     expect(controller.state.status, UpdateStatus.available);
-    adapter.data = releaseJson('0.1.2');
+    adapter.data = releaseJson('0.1.3');
     await controller.check(manual: true);
     expect(controller.state.status, UpdateStatus.current);
     expect(controller.state.release, isNull);
@@ -260,7 +260,7 @@ void main() {
     final adapter = ReleaseAdapter();
     final controller = AppUpdateController(
       service: serviceFor(adapter),
-      installedVersion: () async => const ClientVersion('0.1.2', '1'),
+      installedVersion: () async => const ClientVersion('0.1.3', '1'),
     );
     addTearDown(controller.dispose);
     await controller.check();
@@ -276,7 +276,7 @@ void main() {
     final adapter = ReleaseAdapter();
     AppUpdateController makeController() => AppUpdateController(
           service: serviceFor(adapter),
-          installedVersion: () async => const ClientVersion('0.1.2', '1'),
+          installedVersion: () async => const ClientVersion('0.1.3', '1'),
           now: () => now,
         );
     final first = makeController();
@@ -298,7 +298,7 @@ void main() {
     final adapter = ReleaseAdapter();
     AppUpdateController makeController() => AppUpdateController(
           service: serviceFor(adapter),
-          installedVersion: () async => const ClientVersion('0.1.2', '1'),
+          installedVersion: () async => const ClientVersion('0.1.3', '1'),
         );
     final first = makeController();
     await first.check();
@@ -320,7 +320,7 @@ void main() {
     final adapter = ReleaseAdapter()..status = 500;
     final controller = AppUpdateController(
       service: serviceFor(adapter),
-      installedVersion: () async => const ClientVersion('0.1.2', '1'),
+      installedVersion: () async => const ClientVersion('0.1.3', '1'),
     );
     addTearDown(controller.dispose);
     await controller.check();
@@ -335,7 +335,7 @@ void main() {
     final adapter = ReleaseAdapter()..gate = Completer<void>();
     final controller = AppUpdateController(
       service: serviceFor(adapter),
-      installedVersion: () async => const ClientVersion('0.1.2', '1'),
+      installedVersion: () async => const ClientVersion('0.1.3', '1'),
     );
     await controller.ready;
     final first = controller.check();

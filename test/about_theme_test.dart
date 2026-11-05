@@ -21,7 +21,7 @@ void main() {
             body: SingleChildScrollView(
               child: Padding(
                 padding: EdgeInsets.all(12),
-                child: AboutPanel(version: '0.1.2'),
+                child: AboutPanel(version: '0.1.3'),
               ),
             ),
           ),
@@ -29,7 +29,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
-        expect(find.text('客户端 · v0.1.2'), findsOneWidget);
+        expect(find.text('客户端 · v0.1.3'), findsOneWidget);
         expect(find.text('云默安'), findsOneWidget);
         expect(find.text('1094578162'), findsOneWidget);
         final title = tester.widget<Text>(find.text('版权与服务'));

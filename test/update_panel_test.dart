@@ -40,7 +40,7 @@ void main() {
       final container = ProviderContainer(overrides: [
         appUpdateProvider.overrideWith((ref) => AppUpdateController(
               service: _UiUpdateService(uiRelease, adapter),
-              installedVersion: () async => const ClientVersion('0.1.2', '1'),
+              installedVersion: () async => const ClientVersion('0.1.3', '1'),
             )),
       ]);
       addTearDown(container.dispose);
@@ -71,7 +71,7 @@ void main() {
     final container = ProviderContainer(overrides: [
       appUpdateProvider.overrideWith((ref) => AppUpdateController(
             service: _UiUpdateService(uiRelease, ReleaseAdapter()),
-            installedVersion: () async => const ClientVersion('0.1.2', '1'),
+            installedVersion: () async => const ClientVersion('0.1.3', '1'),
           )),
     ]);
     addTearDown(container.dispose);

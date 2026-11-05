@@ -189,7 +189,7 @@ void main() {
     final controller = AppUpdateController(
         service: serviceFor(ReleaseAdapter()),
         packages: packages,
-        installedVersion: () async => const ClientVersion('0.1.2', '1'));
+        installedVersion: () async => const ClientVersion('0.1.3', '1'));
     addTearDown(controller.dispose);
     await controller.check();
     expect(controller.state.status, UpdateStatus.ready);
@@ -206,11 +206,11 @@ void main() {
   test('same version with a higher build updates the installed client',
       () async {
     final controller = AppUpdateController(
-        service: serviceFor(ReleaseAdapter()..data = releaseJson('0.1.2')),
-        installedVersion: () async => const ClientVersion('0.1.2', '1'));
+        service: serviceFor(ReleaseAdapter()..data = releaseJson('0.1.3')),
+        installedVersion: () async => const ClientVersion('0.1.3', '1'));
     addTearDown(controller.dispose);
     await controller.check();
     expect(controller.state.status, UpdateStatus.available);
-    expect(controller.state.release!.identity, '0.1.2+2');
+    expect(controller.state.release!.identity, '0.1.3+2');
   });
 }
