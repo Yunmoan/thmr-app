@@ -18,25 +18,33 @@ class DesktopTitleBar extends StatelessWidget {
       height: 38,
       color: tokens.pageBg,
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(width: 14),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(7),
-            child: Image.asset('assets/brand/logo.png',
-                width: 22, height: 22),
+          // Cover the full title height, logo, text and empty space. Keep
+          // caption buttons outside this area so their gestures stay separate.
+          Expanded(
+            child: DragToMoveArea(
+              child: Row(
+                children: [
+                  const SizedBox(width: 14),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(7),
+                    child: Image.asset('assets/brand/logo.png',
+                        width: 22, height: 22),
+                  ),
+                  const SizedBox(width: 9),
+                  Text(
+                    '东方音乐电台 THMR',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: tokens.mutedInk,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const Spacer(),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(width: 9),
-          Text(
-            '东方音乐电台 THMR',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: tokens.mutedInk,
-                  fontWeight: FontWeight.w600,
-                ),
-          ),
-          const Spacer(),
-          // DragToMoveArea covers the empty middle so the window can be
-          // dragged by any empty spot.
-          const Expanded(child: DragToMoveArea(child: SizedBox.expand())),
           if (onMini != null)
             _CaptionButton(
               icon: Icons.picture_in_picture_alt_rounded,
