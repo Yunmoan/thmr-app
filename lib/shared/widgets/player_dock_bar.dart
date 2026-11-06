@@ -169,8 +169,12 @@ class _DockVolumeState extends ConsumerState<_DockVolume> {
               size: 18,
               color: tokens.mutedInk,
             ),
-            onPressed: () =>
-                ref.read(playbackProvider.notifier).setVolume(muted ? 100 : 0),
+            onPressed: () {
+              final pb = ref.read(playbackProvider);
+              ref
+                  .read(playbackProvider.notifier)
+                  .setVolume(pb.volumeAfterMuteToggle);
+            },
           ),
         ),
         SizedBox(

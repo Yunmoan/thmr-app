@@ -68,6 +68,7 @@ class _CollectionDetailScreenState
   }
 
   Future<void> _load({bool retryOnline = false}) async {
+    if (!mounted) return;
     setState(() => _loading = true);
     final userId = ref.read(authProvider).user?.id;
     const cache = CollectionCache();
@@ -136,6 +137,7 @@ class _CollectionDetailScreenState
     try {
       final api = ref.read(authProvider.notifier).api;
       await api.removeItem(widget.collectionId, item.id);
+      if (!mounted) return;
       _load();
       ref.invalidate(collectionsProvider);
     } catch (error) {

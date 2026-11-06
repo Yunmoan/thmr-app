@@ -100,8 +100,11 @@ class SettingsController extends StateNotifier<AppSettings> {
     _load();
   }
 
+  int _revision = 0;
+
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    if (_revision != 0) return;
     final modeIdx = prefs.getInt('themeMode') ?? ThemeMode.system.index;
     final autoPlay = prefs.getBool('autoPlay') ?? false;
     final accentIdx = prefs.getInt('accentTheme') ?? 0;
@@ -132,18 +135,21 @@ class SettingsController extends StateNotifier<AppSettings> {
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
+    _revision++;
     state = state.copyWith(themeMode: mode);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('themeMode', mode.index);
   }
 
   Future<void> setAccentTheme(AccentTheme theme) async {
+    _revision++;
     state = state.copyWith(accentTheme: theme);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('accentTheme', theme.index);
   }
 
   Future<void> setAutoPlay(bool value) async {
+    _revision++;
     state = state.copyWith(autoPlay: value);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('autoPlay', value);
@@ -151,18 +157,21 @@ class SettingsController extends StateNotifier<AppSettings> {
 
   /// 记住关闭按钮行为(「不再提醒」时写入)。
   Future<void> setCloseAction(CloseAction action) async {
+    _revision++;
     state = state.copyWith(closeAction: action);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('closeAction', action.name);
   }
 
   Future<void> setMiniEdgeHideMode(MiniEdgeHideMode mode) async {
+    _revision++;
     state = state.copyWith(miniEdgeHideMode: mode);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('miniEdgeHideMode', mode.name);
   }
 
   Future<void> setMiniShowIllustration(bool value) async {
+    _revision++;
     state = state.copyWith(miniShowIllustration: value);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('miniShowIllustration', value);
@@ -171,6 +180,7 @@ class SettingsController extends StateNotifier<AppSettings> {
   /// 记录码率选择(按 station 隔离持久化)。
   Future<void> setBitrate(String stationId, String profileId) async {
     final next = {...state.bitrateByStation, stationId: profileId};
+    _revision++;
     state = state.copyWith(bitrateByStation: next);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('bitrateByStation',

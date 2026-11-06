@@ -187,11 +187,10 @@ class ThmrApi {
         .toList();
   }
 
-  Future<VoteStatus> castVote(String stationId) async {
+  Future<void> castVote(String stationId) async {
     final r =
         await _dio.post<Object?>('/api/vote', data: {'stationId': stationId});
     if (r.statusCode != 200) _throwApiError(r);
-    return VoteStatus.fromJson((r.data as Map).cast<String, dynamic>());
   }
 
   Future<void> cancelVote(String stationId) async {

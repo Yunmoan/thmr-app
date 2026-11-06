@@ -56,7 +56,14 @@ class SpectrumCapture implements SpectrumSource {
   void stop() {
     if (_refs <= 0) return;
     _refs--;
-    if (_refs == 0) _stopFn();
+    if (_refs == 0) {
+      _stopFn();
+      if (_native != null) {
+        calloc.free(_native!);
+        _native = null;
+        _bands = 0;
+      }
+    }
   }
 
   @override

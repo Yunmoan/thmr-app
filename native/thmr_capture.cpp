@@ -180,6 +180,9 @@ void fft_inplace(float* re, float* im, int n) {
   }
 }
 
+// Per-band sliding peak (auto gain control); reset on each capture start.
+float g_peak[128];
+
 }  // namespace
 
 extern "C" {
@@ -188,6 +191,7 @@ __declspec(dllexport) int thmr_start(void) {
   bool expected = false;
   if (!g_run.compare_exchange_strong(expected, true)) return 0;  // already on
   g_init.store(-2);
+  std::fill(g_peak, g_peak + 128, 0.0f);
 
   std::thread t(capture_main);
   g_thread = std::move(t);
@@ -214,7 +218,6 @@ __declspec(dllexport) int thmr_poll(float* out, int bands) {
       bands > 128) return -1;
   // Per-band sliding peak (auto gain control) so bass-heavy bands stop
   // pinning at full scale; values breathe within each band's own range.
-  static float g_peak[128];
 
   static float re[kFft];
   static float im[kFft];
@@ -268,7 +271,8 @@ __declspec(dllexport) int thmr_poll(float* out, int bands) {
       v = (db - (peak - 30.0f)) / 30.0f;
     }
     // gentle tilt so the low end reads calmer than the high end
-    v *= 1.0f - 0.22f * (static_cast<float>(b) / static_cast<float>(bands - 1));
+    v *= 1.0f - 0.22f * (static_cast<float>(b) /
+                         static_cast<float>(std::max(1, bands - 1)));
     out[b] = std::min(1.0f, std::max(0.0f, v));
   }
   return 1;

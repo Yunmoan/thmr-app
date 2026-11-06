@@ -965,9 +965,12 @@ class _MiniControls extends ConsumerWidget {
               size: 17,
               color: tokens.mutedInk,
             ),
-            onPressed: () => ref
-                .read(playbackProvider.notifier)
-                .setVolume(volume <= 0 ? 100 : 0),
+            onPressed: () {
+              final pb = ref.read(playbackProvider);
+              ref
+                  .read(playbackProvider.notifier)
+                  .setVolume(pb.volumeAfterMuteToggle);
+            },
           ),
         ),
         Expanded(

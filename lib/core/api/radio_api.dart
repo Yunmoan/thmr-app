@@ -42,8 +42,12 @@ class RadioApi {
   }
 
   Future<List<QueueEntry>> playlist(String stationId) async {
-    final j = await _getJson('/api/stations/$stationId/playlist');
-    return ((j['queue'] as List?) ?? const [])
+    final r = await _dio.get<Object?>('/api/stations/$stationId/playlist',
+        queryParameters: _tokenQuery.isEmpty ? null : _tokenQuery);
+    if (r.statusCode != 200) _throwApiError(r);
+    final data = r.data;
+    final raw = data is Map ? data['queue'] as List? : data as List?;
+    return (raw ?? const [])
         .map((e) => QueueEntry.fromJson(e))
         .toList();
   }

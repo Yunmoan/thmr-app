@@ -154,7 +154,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
 
   void _onError(String message) {
     if (_disposed) return;
-    if (state.userPaused) return;
+    if (state.userPaused || _currentUrl == null) return;
     state = state.copyWith(
         phase: PlaybackPhase.reconnecting,
         error: message.isEmpty ? null : message);

@@ -70,6 +70,7 @@ class _SharedCollectionScreenState
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
