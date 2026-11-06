@@ -15,14 +15,21 @@ on:
         description: 'Build number embedded in those artifacts'
         required: true
         type: string
+      rebuild_windows:
+        description: 'Rebuild a missing Windows artifact from the original tagged source'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
   actions: read
 
 jobs:
-  publish:
+  source:
     runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
     steps:
       - name: Check the source build and release tag
         id: source
@@ -45,6 +52,7 @@ jobs:
           assert source['name'] == 'Build Clients' and source['event'] == 'push'
           assert source['status'] == 'completed' and source['head_branch'] == f'v{version}'
           assert source['head_repository']['full_name'] == repo
+          assert int(build) == source['run_number'] * 100 + source['run_attempt']
           tag = api(f'git/ref/tags/v{version}')['object']
           if tag['type'] == 'tag':
               tag = api(f"git/tags/{tag['sha']}")['object']
@@ -52,9 +60,81 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write(f"sha={source['head_sha']}\n")
           PY
+
+  windows:
+    if: inputs.rebuild_windows
+    needs: source
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ steps.source.outputs.sha }}
+          ref: ${{ needs.source.outputs.sha }}
+      - name: Get the corrected test harness without changing application source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: tool/test_update_helpers.py
+          sparse-checkout-cone-mode: false
+      - shell: pwsh
+        run: Copy-Item -LiteralPath .release-tools/tool/test_update_helpers.py -Destination tool/test_update_helpers.py -Force
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: python tool/patch_windows_plugins.py
+      - run: python -m unittest discover -s tool -p test_update_helpers.py -v
+      - name: Build the original Windows release
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_BUILD: ${{ inputs.build_number }}
+          UPDATE_API_URL: ${{ vars.THMR_UPDATE_API_URL || 'https://api.zyghit.cn/updater/thmr' }}
+          UPDATE_PUBLIC_KEY: ${{ vars.THMR_UPDATE_PUBLIC_KEY }}
+        run: >-
+          flutter build windows --release
+          --build-name=$env:RELEASE_VERSION
+          --build-number=$env:RELEASE_BUILD
+          --dart-define=THMR_CLIENT_VERSION=$env:RELEASE_VERSION
+          --dart-define=THMR_UPDATE_API_URL=$env:UPDATE_API_URL
+          --dart-define=THMR_UPDATE_PUBLIC_KEY=$env:UPDATE_PUBLIC_KEY
+      - name: Check and package Windows
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_BUILD: ${{ inputs.build_number }}
+        run: |
+          $actual = (Get-Item build/windows/x64/runner/Release/thmr_app.exe).VersionInfo.ProductVersion
+          if ($actual -ne "$env:RELEASE_VERSION+$env:RELEASE_BUILD") { throw "Unexpected package version: $actual" }
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath thmr-app-windows-x64.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: thmr-app-windows
+          path: thmr-app-windows-x64.zip
+          if-no-files-found: error
+          overwrite: true
+
+  publish:
+    if: ${{ !cancelled() && needs.source.result == 'success' && (needs.windows.result == 'success' || needs.windows.result == 'skipped') }}
+    needs: [source, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+      - name: Use the current release tooling with the original changelog
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: |
+            tool/update_release.cjs
+            CHANGELOG.md
+          sparse-checkout-cone-mode: false
+      - run: |
+          cp .release-tools/tool/update_release.cjs tool/update_release.cjs
+          if [ ! -f CHANGELOG.md ]; then cp .release-tools/CHANGELOG.md CHANGELOG.md; fi
       - uses: actions/setup-node@v7
         with:
           node-version: 'lts/*'
@@ -65,6 +145,12 @@ jobs:
           run-id: ${{ inputs.run_id }}
           pattern: thmr-app-*
           merge-multiple: true
+          path: release
+      - name: Download the recovered Windows artifact
+        if: inputs.rebuild_windows
+        uses: actions/download-artifact@v8
+        with:
+          name: thmr-app-windows
           path: release
       - name: Check the artifact set and embedded versions
         env:
@@ -96,9 +182,11 @@ jobs:
         run: |
           mkdir -p release/metadata
           (cd release && sha256sum thmr-app-* > metadata/SHA256SUMS)
+          node tool/update_release.cjs notes --version "$RELEASE_VERSION" --output release/metadata/RELEASE_NOTES.md
           node tool/update_release.cjs manifest --version "$RELEASE_VERSION" --build-number "$RELEASE_BUILD" \
             --artifacts release --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/v$RELEASE_VERSION/" \
             --output release/metadata/thmr-update.json \
+            --notes-file release/metadata/RELEASE_NOTES.md \
             --release-page "https://github.com/$GITHUB_REPOSITORY/releases/tag/v$RELEASE_VERSION"
           node tool/update_release.cjs inspect --file release/metadata/thmr-update.json \
             --version "$RELEASE_VERSION" --build-number "$RELEASE_BUILD"
@@ -111,6 +199,7 @@ jobs:
           gh release upload "v$RELEASE_VERSION" release/thmr-app-* release/metadata/* --clobber
           python3 - <<'PY'
           import json, os, subprocess
+          from pathlib import Path
           repo = os.environ['GITHUB_REPOSITORY']
           tag = 'v' + os.environ['RELEASE_VERSION']
           pages = json.loads(subprocess.check_output(['gh', 'api', '--paginate', '--slurp',
@@ -118,9 +207,8 @@ jobs:
           release = next(r for page in pages for r in page if r['tag_name'] == tag)
           payload = {'name': f"THMR {os.environ['RELEASE_VERSION']}+{os.environ['RELEASE_BUILD']}",
               'draft': False, 'prerelease': False, 'make_latest': 'true',
-              'body': '四个平台的正式版安装包、macOS 拖拽安装 DMG、SHA256SUMS 和签名更新清单已上传。\n'
-                  '本次复用原构建的已验证产物，保留相同版本与构建号。\n'
-                  'Next 更新插件部署目录为 apis/updater/data/，可读取 thmr-update.json。'}
+              'body': '## 更新内容\n\n' + Path('release/metadata/RELEASE_NOTES.md').read_text(encoding='utf-8').strip()
+                  + '\n\n安装包见下方附件，macOS 首次安装使用 DMG。'}
           subprocess.run(['gh', 'api', '--method', 'PATCH', f"repos/{repo}/releases/{release['id']}",
               '--input', '-', '--jq', '.html_url'], input=json.dumps(payload), text=True, check=True)
           PY

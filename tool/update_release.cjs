@@ -96,6 +96,11 @@ async function main() {
     const envelope = await createManifest(opt);
     fs.writeFileSync(opt.output, JSON.stringify(envelope, null, 2) + '\n');
     console.log(`Signed THMR manifest: ${opt.output}`);
+  } else if (command === 'notes') {
+    // Preview builds use the same user-facing changes as their core version.
+    const notes = releaseNotes((opt.version || '').split('-')[0]);
+    if (opt.output) fs.writeFileSync(opt.output, notes + '\n');
+    else console.log(notes);
   } else if (command === 'inspect') {
     const data = inspectManifest(JSON.parse(fs.readFileSync(opt.file, 'utf8')),
       opt['public-key'] || process.env.THMR_UPDATE_PUBLIC_KEY);
@@ -137,7 +142,7 @@ async function main() {
       body: JSON.stringify(envelope) });
     if (!response.ok) throw new Error(`Update API publication failed (HTTP ${response.status})`);
     console.log('Update API published successfully');
-  } else throw new Error('Commands: keygen, manifest, inspect, publish');
+  } else throw new Error('Commands: keygen, notes, manifest, inspect, publish');
 }
 
 module.exports = { createManifest, inspectManifest, publicBytes, releaseNotes };

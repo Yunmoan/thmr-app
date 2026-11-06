@@ -222,6 +222,8 @@ payload 包含 `program:"THMR"`、`version`、整数 `build_number`、`notes`、
 
 更新说明从随代码提交的 `CHANGELOG.md` 对应版本段落生成，完整放入签名保护的 `payload.notes`。客户端随 API 响应读取并缓存，展示日志不会额外访问 GitHub；镜像只需分发同一个签名清单及安装包。发布新版本前先补齐对应的更新说明，缺少该版本段落时停止生成清单。
 
+发布流程在平台编译前检查该版本的更新说明。完成构建后自动将同一段中文说明写入 GitHub Release 正文、`RELEASE_NOTES.md` 附件和签名清单；恢复发布也使用相同规则，无需再手工填写 GitHub 发布页。
+
 ### 为什么 data 中看不到版本号
 
 首次 API 部署包中的 `data/updates/thmr-config.json` 是公钥和发布凭据配置，不是版本清单。只有把 Release 的 `thmr-update.json` 原样部署为 `data/updates/thmr-release.json`，接口才会提供版本信息；缺少清单时返回 204。

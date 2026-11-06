@@ -49,6 +49,10 @@ jobs:
           check-latest: true
           package-manager-cache: false
       - run: node --test tool/test_update_release.cjs
+      - name: Check release notes before building platform packages
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: node tool/update_release.cjs notes --version "$RELEASE_VERSION"
       - name: Require a pinned update key for official releases
         if: startsWith(github.ref, 'refs/tags/v')
         run: node -e 'if(Buffer.from(process.env.UPDATE_PUBLIC_KEY || "", "base64").length !== 32) throw new Error("Configure repository variable THMR_UPDATE_PUBLIC_KEY before tagging a release")'
@@ -334,6 +338,10 @@ jobs:
         run: |
           mkdir -p metadata
           sha256sum thmr-app-* > metadata/SHA256SUMS
+      - name: Prepare the release notes for GitHub and the update API
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: node tool/update_release.cjs notes --version "$RELEASE_VERSION" --output release/metadata/RELEASE_NOTES.md
       - name: Sign the updater manifest
         if: ${{ !contains(needs.validate.outputs.version, '-') }}
         env:
@@ -346,6 +354,7 @@ jobs:
           base="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG"
           node tool/update_release.cjs manifest --version "$RELEASE_VERSION" --build-number "$RELEASE_BUILD" \
             --artifacts release --base-url "$base/" --output release/metadata/thmr-update.json \
+            --notes-file release/metadata/RELEASE_NOTES.md \
             --release-page "https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
           node tool/update_release.cjs inspect --file release/metadata/thmr-update.json \
             --version "$RELEASE_VERSION" --build-number "$RELEASE_BUILD"
@@ -360,6 +369,7 @@ jobs:
           gh release upload "$RELEASE_TAG" release/thmr-app-* release/metadata/* --clobber
           python3 - <<'PY'
           import json, os, subprocess
+          from pathlib import Path
           repo, tag = os.environ['GITHUB_REPOSITORY'], os.environ['RELEASE_TAG']
           pages = json.loads(subprocess.check_output(['gh', 'api', '--paginate', '--slurp',
               f'repos/{repo}/releases?per_page=100']))
@@ -367,8 +377,8 @@ jobs:
           preview = os.environ['RELEASE_PREVIEW'] == 'true'
           payload = {'name': f"THMR {os.environ['RELEASE_VERSION']}+{os.environ['RELEASE_BUILD']}",
               'draft': False, 'prerelease': preview, 'make_latest': 'false' if preview else 'true',
-              'body': '四个平台安装包、macOS DMG、SHA256SUMS 已上传。稳定版本同时提供签名更新清单。\n'
-                  '更新 API 插件的镜像地址，将签名清单放到 Next 插件 data/（legacy 为根目录 data/updates/）。'}
+              'body': '## 更新内容\n\n' + Path('release/metadata/RELEASE_NOTES.md').read_text(encoding='utf-8').strip()
+                  + '\n\n安装包见下方附件，macOS 首次安装使用 DMG。'}
           # Do not resend target_commitish: GITHUB_TOKEN cannot modify workflows.
           subprocess.run(['gh', 'api', '--method', 'PATCH', f"repos/{repo}/releases/{release['id']}",
               '--input', '-', '--jq', '.html_url'], input=json.dumps(payload), text=True, check=True)

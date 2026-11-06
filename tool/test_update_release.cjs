@@ -54,3 +54,12 @@ test('release notes come from the matching packaged changelog section', () => {
   assert.throws(() => releaseNotes('0.2.0', changelog), /Add release notes/);
   assert.throws(() => releaseNotes('0.2.0', '## 0.2.0\n'), /empty/);
 });
+
+test('release notes CLI exports the same Chinese text used by the signed manifest', () => {
+  const script = path.join(__dirname, 'update_release.cjs');
+  const notes = execFileSync(process.execPath, [script, 'notes', '--version', '0.1.4'], { encoding: 'utf8' }).trim();
+  assert.equal(notes, releaseNotes('0.1.4'));
+  assert.match(notes, /修复 Windows/);
+  assert.equal(execFileSync(process.execPath, [script, 'notes', '--version', '0.1.4-rc.1'],
+    { encoding: 'utf8' }).trim(), notes);
+});

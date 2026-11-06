@@ -71,7 +71,11 @@ class UpdateHelperTests(unittest.TestCase):
                         self.skipTest('Dart SDK is unavailable')
                     if Path(dart).suffix.lower() in ['.bat', '.cmd']:
                         dart = str(Path(dart).parent / 'cache/dart-sdk/bin/dart.exe')
-                    command = [dart, 'run', str(ROOT / 'tool/run_windows_update_helper.dart'), str(helper), str(plan_path)]
+                    # Run the VM with the resolved packages directly. `dart run`
+                    # invokes unrelated Flutter native build hooks on a clean
+                    # runner, before the Windows installer harness can start.
+                    command = [dart, f'--packages={ROOT / ".dart_tool/package_config.json"}',
+                               str(ROOT / 'tool/run_windows_update_helper.dart'), str(helper), str(plan_path)]
             else:
                 for directory, good in ((target, False), (stage, succeeds)):
                     exe = directory / "thmr_app"
@@ -82,9 +86,17 @@ class UpdateHelperTests(unittest.TestCase):
                            plan["result"], plan["ready"], "2", "linux"]
             result = subprocess.run(command, capture_output=True, text=True, timeout=50)
             if native_launcher:
+                diagnostics = f'Launcher exited {result.returncode}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}'
+                for name in ('helper.log', 'worker.log', 'helper-error.log', 'result.json'):
+                    if (tx / name).exists():
+                        diagnostics += f'\n{name}:\n' + (tx / name).read_text(encoding='utf-8-sig', errors='replace')
+                self.assertEqual(result.returncode, 0, diagnostics)
+                self.assertTrue((tx / 'helper.pid').exists(), diagnostics)
                 deadline = time.monotonic() + 15
                 while (not Path(plan['result']).exists() or not (tx / 'helper.done').exists()) and time.monotonic() < deadline:
                     time.sleep(.1)
+                self.assertTrue(Path(plan['result']).exists(), diagnostics)
+                self.assertTrue((tx / 'helper.done').exists(), diagnostics)
                 import ctypes
                 kernel = ctypes.WinDLL('kernel32', use_last_error=True)
                 kernel.OpenProcess.restype = ctypes.c_void_p
