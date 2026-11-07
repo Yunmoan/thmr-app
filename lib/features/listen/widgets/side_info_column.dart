@@ -165,6 +165,37 @@ class _QueueList extends StatelessWidget {
         ),
       );
     }
+    final labelStyle = Theme.of(context).textTheme.labelSmall;
+    final indexStyle = labelStyle?.copyWith(
+      color: Theme.of(context).colorScheme.primary,
+      fontWeight: FontWeight.w800,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    final timeStyle = labelStyle?.copyWith(
+      color: tokens.mutedInk,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    // Reserve columns from the whole queue, so newly visible rows cannot shift
+    // the title when index digits or schedule availability change.
+    final indexWidth = _textColumnWidth(
+      context,
+      Iterable.generate(queue.length, (i) => '#${i + 1}'),
+      indexStyle,
+    );
+    final durationWidth = _textColumnWidth(
+      context,
+      queue.map((entry) => formatDuration(entry.durationSec)),
+      timeStyle,
+    );
+    final plannedWidth = _textColumnWidth(
+      context,
+      queue.map(queuePlannedHHmm).whereType<String>(),
+      timeStyle,
+    );
+    final scheduleWidth =
+        _textColumnWidth(context, ['预计'], timeStyle) + 4 + plannedWidth;
+    final timeWidth =
+        durationWidth > scheduleWidth ? durationWidth : scheduleWidth;
     return Column(
       children: [
         Expanded(
@@ -194,6 +225,7 @@ class _QueueList extends StatelessWidget {
                 ),
                 itemBuilder: (context, i) {
                   final e = queue[i];
+                  final planned = queuePlannedHHmm(e);
                   return InkWell(
                     onTap: () => showQueueEntryDetail(context, e, i),
                     child: Padding(
@@ -209,19 +241,13 @@ class _QueueList extends StatelessWidget {
                               children: [
                                 Row(
                                   children: [
-                                    Text(
-                                      '#${i + 1}',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelSmall
-                                          ?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
-                                        fontWeight: FontWeight.w800,
-                                        fontFeatures: const [
-                                          FontFeature.tabularFigures()
-                                        ],
+                                    SizedBox(
+                                      width: indexWidth,
+                                      child: Text(
+                                        '#${i + 1}',
+                                        maxLines: 1,
+                                        softWrap: false,
+                                        style: indexStyle,
                                       ),
                                     ),
                                     const SizedBox(width: 6),
@@ -253,30 +279,39 @@ class _QueueList extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                formatDuration(e.durationSec),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelSmall
-                                    ?.copyWith(
-                                  color: tokens.mutedInk,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures()
-                                  ],
-                                ),
-                              ),
-                              if (queuePlannedHHmm(e) != null)
+                          SizedBox(
+                            width: timeWidth,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
                                 Text(
-                                  '预计 ${queuePlannedHHmm(e)}',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelSmall
-                                      ?.copyWith(color: tokens.mutedInk),
+                                  formatDuration(e.durationSec),
+                                  textAlign: TextAlign.right,
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  style: timeStyle,
                                 ),
-                            ],
+                                if (planned != null)
+                                  // This font has proportional digits even
+                                  // with tabularFigures. Anchor the prefix
+                                  // separately so time widths cannot move it.
+                                  Row(
+                                    children: [
+                                      Text('预计', style: timeStyle),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          planned,
+                                          textAlign: TextAlign.right,
+                                          maxLines: 1,
+                                          softWrap: false,
+                                          style: timeStyle,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -301,6 +336,25 @@ class _QueueList extends StatelessWidget {
       ],
     );
   }
+}
+
+double _textColumnWidth(
+    BuildContext context, Iterable<String> labels, TextStyle? style) {
+  final painter = TextPainter(
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+    locale: Localizations.maybeLocaleOf(context),
+    maxLines: 1,
+  );
+  final effectiveStyle = DefaultTextStyle.of(context).style.merge(style);
+  var width = 0.0;
+  for (final label in labels) {
+    painter.text = TextSpan(text: label, style: effectiveStyle);
+    painter.layout();
+    if (painter.width > width) width = painter.width;
+  }
+  painter.dispose();
+  return width.ceilToDouble();
 }
 
 /// Half-screen queue drawer (expand action from the side column / mobile).
