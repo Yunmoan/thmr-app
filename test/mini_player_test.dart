@@ -107,7 +107,8 @@ void main() {
     await mouse.removePointer();
   });
 
-  testWidgets('drag cancels an in-flight edge animation', (tester) async {
+  testWidgets('drag and mode changes cancel in-flight edge animations',
+      (tester) async {
     SharedPreferences.setMockInitialValues({});
     tester.view.physicalSize = kMiniWindowSize;
     tester.view.devicePixelRatio = 1;
@@ -200,6 +201,22 @@ void main() {
     }
     expect(windowPosition, const Offset(100, 100));
     expect(positions.length, movesAtDragStart);
+
+    windowPosition = const Offset(100, 5);
+    listener.onWindowMoved();
+    for (var i = 0; i < 13; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(positions.length, greaterThan(movesAtDragStart));
+    final movesAtModeChange = positions.length;
+    ProviderScope.containerOf(tester.element(find.byType(MiniPlayerWindow)))
+        .read(miniTransitionBusyProvider.notifier)
+        .state = true;
+    listener.onWindowMoved();
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(positions.length, movesAtModeChange);
   });
 
   test('mini player tucks against either edge of a monitor work area', () {

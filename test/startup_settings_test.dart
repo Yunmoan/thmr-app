@@ -1,0 +1,57 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:thmr_app/core/state/settings_provider.dart';
+import 'package:thmr_app/core/theme/thmr_colors.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('the first app build uses the saved theme and accent',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'themeMode': ThemeMode.dark.index,
+      'accentTheme': AccentTheme.cirno.index,
+    });
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    await tester
+        .runAsync(() => container.read(settingsProvider.notifier).ready);
+
+    final rendered = <AppSettings>[];
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: Consumer(builder: (context, ref, child) {
+        rendered.add(ref.watch(settingsProvider));
+        return const SizedBox.shrink();
+      }),
+    ));
+    await tester.pump();
+
+    expect(rendered, isNotEmpty);
+    expect(rendered.map((s) => s.themeMode), everyElement(ThemeMode.dark));
+    expect(rendered.map((s) => s.accentTheme), everyElement(AccentTheme.cirno));
+  });
+
+  test('startup readiness preserves defaults on a fresh install', () async {
+    SharedPreferences.setMockInitialValues({});
+    final controller = SettingsController();
+    addTearDown(controller.dispose);
+    await controller.ready;
+    expect(controller.state.themeMode, ThemeMode.system);
+    expect(controller.state.accentTheme, AccentTheme.reimu);
+  });
+
+  test('a user change wins over an in-flight settings load', () async {
+    SharedPreferences.setMockInitialValues({
+      'themeMode': ThemeMode.dark.index,
+    });
+    final controller = SettingsController();
+    addTearDown(controller.dispose);
+    final change = controller.setThemeMode(ThemeMode.light);
+    await controller.ready;
+    await change;
+    expect(controller.state.themeMode, ThemeMode.light);
+  });
+}

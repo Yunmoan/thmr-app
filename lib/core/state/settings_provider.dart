@@ -97,8 +97,11 @@ class AppSettings {
 
 class SettingsController extends StateNotifier<AppSettings> {
   SettingsController() : super(const AppSettings()) {
-    _load();
+    ready = _load();
   }
+
+  /// Startup waits for persisted preferences before building the first UI.
+  late final Future<void> ready;
 
   int _revision = 0;
 

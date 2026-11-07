@@ -5,13 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/radio_api.dart';
-import '../../core/api/network_failure.dart';
 import '../../core/models/models.dart';
 import '../../core/state/station_provider.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/delay_fade_in.dart';
 import '../../shared/widgets/thmr_panel.dart';
-import '../../shared/widgets/network_notice.dart';
 import 'widgets/bitrate_row.dart';
 import 'widgets/now_playing_panel.dart';
 import 'widgets/queue_strip.dart';
@@ -256,24 +254,12 @@ class _NarrowLayout extends ConsumerWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
-          _TopBar(stationName: stationName, status: status),
-          if (error != null && st == null)
-            isNetworkFailure(error!)
-                ? SizedBox(
-                    height: 320,
-                    child: NetworkIssueView(
-                      onRetry: () =>
-                          ref.read(stationProvider.notifier).refresh(),
-                      message: '请检查网络连接。电台直播需要联网，恢复后可重试。',
-                    ),
-                  )
-                : _ErrorCard(
-                    error: error!,
-                    onRetry: () => ref.read(stationProvider.notifier).refresh(),
-                  ),
-          if (error != null && st != null)
+          if (st != null || error == null)
+            _TopBar(stationName: stationName, status: status),
+          if (error != null)
             _ErrorCard(
               error: error!,
+              topSpacing: st == null ? 0 : 14,
               onRetry: () => ref.read(stationProvider.notifier).refresh(),
             ),
           if (st != null) ...[
@@ -364,10 +350,15 @@ class _TopBar extends StatelessWidget {
 }
 
 class _ErrorCard extends StatelessWidget {
-  const _ErrorCard({required this.error, required this.onRetry});
+  const _ErrorCard({
+    required this.error,
+    required this.onRetry,
+    this.topSpacing = 14,
+  });
 
   final Object error;
   final VoidCallback onRetry;
+  final double topSpacing;
 
   String get _friendly {
     if (error is ApiException) {
@@ -388,7 +379,7 @@ class _ErrorCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).thmr;
     return Padding(
-      padding: const EdgeInsets.only(top: 14),
+      padding: EdgeInsets.only(top: topSpacing),
       child: ThmrPanel(
         child: Row(
           children: [

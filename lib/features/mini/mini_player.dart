@@ -14,6 +14,7 @@ import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/player/playback_controller.dart';
+import '../../core/platform/window_presentation.dart';
 import '../../core/state/settings_provider.dart';
 import '../../core/state/station_provider.dart';
 import '../../core/theme/thmr_theme.dart';
@@ -58,60 +59,181 @@ const Size kMainMinWindowSize = Size(430, 660);
 /// 是否处于迷你模式。
 final miniPlayerProvider = StateProvider<bool>((ref) => false);
 
-/// Controls the short fade when the window enters or leaves mini mode.
-final miniContentVisibleProvider = StateProvider<bool>((ref) => true);
+/// Prevent overlapping mode changes and edge motion during a presentation.
+final miniTransitionBusyProvider = StateProvider<bool>((ref) => false);
 
 /// 进入迷你模式前记录的主窗口边界(逻辑像素)。
 final miniSavedBoundsProvider = StateProvider<Rect?>((ref) => null);
 
 final _miniWasMaximizedProvider = StateProvider<bool>((ref) => false);
 
-/// 进入迷你模式:先切 UI 再缩窗,避免主界面被挤压的一帧产生溢出。
-Future<void> enterMiniMode(WidgetRef ref, TextScaler textScaler) async {
-  if (kIsWeb || !Platform.isWindows) return;
-  final wasMax = await windowManager.isMaximized();
-  if (wasMax) {
-    await windowManager.unmaximize();
-    // 给 WM 一拍把还原后的边界稳定下来,再读取正常尺寸
-    await Future<void>.delayed(const Duration(milliseconds: 60));
+final miniModeTransitionProvider = Provider((ref) => MiniModeTransition(ref));
+
+Future<void> enterMiniMode(WidgetRef ref, TextScaler textScaler) =>
+    ref.read(miniModeTransitionProvider).change(true, textScaler);
+
+Future<void> exitMiniMode(WidgetRef ref) =>
+    ref.read(miniModeTransitionProvider).change(false, TextScaler.noScaling);
+
+/// Owns the whole transition, rather than racing a Flutter animation against
+/// independent native window_manager calls. The provider Ref outlives the mini
+/// widget that is removed when returning to the main UI.
+class MiniModeTransition {
+  MiniModeTransition(this._ref);
+
+  final Ref _ref;
+  final _presentation = WindowPresentation();
+  Future<void>? _inFlight;
+  Future<void> Function(bool)? animateMini;
+
+  Future<void> change(bool mini, TextScaler textScaler) {
+    if (kIsWeb || !Platform.isWindows) return Future.value();
+    if (_inFlight != null) return _inFlight!;
+    if (_ref.read(miniPlayerProvider) == mini) return Future.value();
+    _ref.read(miniTransitionBusyProvider.notifier).state = true;
+    return _inFlight = _change(mini, textScaler).whenComplete(() {
+      _inFlight = null;
+      _ref.read(miniTransitionBusyProvider.notifier).state = false;
+    });
   }
-  final bounds = await windowManager.getBounds();
-  ref.read(miniSavedBoundsProvider.notifier).state = bounds;
-  ref.read(_miniWasMaximizedProvider.notifier).state = wasMax;
-  ref.read(miniContentVisibleProvider.notifier).state = false;
-  ref.read(miniPlayerProvider.notifier).state = true;
-  await windowManager.setAsFrameless();
-  await windowManager.setHasShadow(false);
-  final size = miniWindowSize(
-    textScaler,
-    preset: ref.read(miniPlayerSizeProvider),
-  );
-  await windowManager.setMinimumSize(size);
-  await windowManager.setResizable(false);
-  await windowManager.setSize(size);
-  await windowManager.setAlwaysOnTop(true);
-  await Future<void>.delayed(const Duration(milliseconds: 20));
-  ref.read(miniContentVisibleProvider.notifier).state = true;
+
+  Future<void> _configureMini(Size size) async {
+    await windowManager.setAsFrameless();
+    await windowManager.setHasShadow(false);
+    await windowManager.setMinimumSize(size);
+    await windowManager.setResizable(false);
+    await windowManager.setSize(size);
+    await windowManager.setAlwaysOnTop(true);
+  }
+
+  Future<void> _configureMain(Rect bounds, bool maximized) async {
+    await windowManager.setAlwaysOnTop(false);
+    await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+    await windowManager.setResizable(true);
+    await windowManager.setMinimumSize(kMainMinWindowSize);
+    await windowManager.setBounds(bounds);
+    // window_manager.maximize/unmaximize post a WM_SYSCOMMAND and return
+    // before it runs. Use the synchronous native operation under the cloak.
+    if (maximized) await _presentation.setMaximized(true);
+  }
+
+  Future<void> _change(bool mini, TextScaler textScaler) async {
+    var concealed = false;
+    Rect? previousBounds;
+    var wasMaximized = false;
+    try {
+      if (!mini) await animateMini?.call(false);
+      // No UI, geometry or style change is allowed before this completes.
+      await _presentation.conceal();
+      concealed = true;
+      wasMaximized = await windowManager.isMaximized();
+      if (wasMaximized) await _presentation.setMaximized(false);
+      previousBounds = await windowManager.getBounds();
+      if (mini) {
+        _ref.read(miniSavedBoundsProvider.notifier).state = previousBounds;
+        _ref.read(_miniWasMaximizedProvider.notifier).state = wasMaximized;
+        _ref.read(miniPlayerProvider.notifier).state = true;
+        // Keep the main tree offstage before native resize delivers new metrics.
+        await WidgetsBinding.instance.endOfFrame;
+        await _configureMini(miniWindowSize(textScaler,
+            preset: _ref.read(miniPlayerSizeProvider)));
+      } else {
+        await _configureMain(
+          _ref.read(miniSavedBoundsProvider) ??
+              (previousBounds.topLeft & kMainMinWindowSize),
+          _ref.read(_miniWasMaximizedProvider),
+        );
+      }
+      _ref.read(miniPlayerProvider.notifier).state = mini;
+      await _presentation.waitForFrame();
+      await _presentation.reveal();
+      concealed = false;
+      if (mini) await animateMini?.call(true);
+      await windowManager.focus();
+    } catch (error, stack) {
+      // Restore the previous mode before revealing after a plugin/fence error;
+      // in particular a failed raster fence must not strand a cloaked HWND.
+      if (concealed && previousBounds != null) {
+        try {
+          if (mini) {
+            await _configureMain(previousBounds, wasMaximized);
+          } else {
+            await _presentation.setMaximized(false);
+            _ref.read(miniPlayerProvider.notifier).state = true;
+            await WidgetsBinding.instance.endOfFrame;
+            await _configureMini(previousBounds.size);
+            await windowManager.setBounds(previousBounds);
+          }
+          _ref.read(miniPlayerProvider.notifier).state = !mini;
+          await _presentation.waitForFrame();
+        } catch (rollbackError) {
+          debugPrint('Window mode rollback failed: $rollbackError');
+        }
+      }
+      if (!mini) await animateMini?.call(true);
+      Error.throwWithStackTrace(error, stack);
+    } finally {
+      if (concealed) await _presentation.reveal();
+    }
+  }
 }
 
-/// 退出迷你模式:先恢复窗口尺寸再切回主界面(迷你 UI 可自由拉伸)。
-Future<void> exitMiniMode(WidgetRef ref) async {
-  if (kIsWeb || !Platform.isWindows) return;
-  ref.read(miniContentVisibleProvider.notifier).state = false;
-  await Future<void>.delayed(const Duration(milliseconds: 180));
-  await windowManager.setAlwaysOnTop(false);
-  await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
-  await windowManager.setResizable(true);
-  await windowManager.setMinimumSize(kMainMinWindowSize);
-  final saved = ref.read(miniSavedBoundsProvider);
-  if (saved != null) await windowManager.setBounds(saved);
-  ref.read(miniPlayerProvider.notifier).state = false;
-  ref.read(miniContentVisibleProvider.notifier).state = true;
-  if (ref.read(_miniWasMaximizedProvider.notifier).state) {
-    await windowManager.maximize();
+/// A single animation supplies both opacity and scale; transition code awaits
+/// its actual completion, including reduced motion, instead of sleeping 180ms.
+class MiniPlayerTransition extends ConsumerStatefulWidget {
+  const MiniPlayerTransition(
+      {super.key, this.child = const MiniPlayerWindow()});
+
+  final Widget child;
+
+  @override
+  ConsumerState<MiniPlayerTransition> createState() =>
+      _MiniPlayerTransitionState();
+}
+
+class _MiniPlayerTransitionState extends ConsumerState<MiniPlayerTransition>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animation;
+  late final MiniModeTransition _transition;
+
+  @override
+  void initState() {
+    super.initState();
+    _animation = AnimationController(vsync: this);
+    _transition = ref.read(miniModeTransitionProvider);
+    _transition.animateMini = _animate;
   }
-  await windowManager.show();
-  await windowManager.focus();
+
+  Future<void> _animate(bool visible) async {
+    _animation.duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 180);
+    try {
+      await _animation
+          .animateTo(visible ? 1 : 0, curve: Curves.easeOutCubic)
+          .orCancel;
+    } on TickerCanceled {
+      // Disposal removes the mini surface, which also completes its exit.
+    }
+  }
+
+  @override
+  void dispose() {
+    _transition.animateMini = null;
+    _animation.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _animation,
+      child: ScaleTransition(
+        scale: _animation.drive(Tween(begin: 0.96, end: 1.0)),
+        child: widget.child,
+      ),
+    );
+  }
 }
 
 /// 迷你播放窗:全区域可拖动,双击还原,置顶显示。
@@ -209,10 +331,11 @@ class MiniPlayerWindow extends ConsumerStatefulWidget {
 }
 
 class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
-    with WindowListener {
+    with SingleTickerProviderStateMixin, WindowListener {
   MiniEdgePlacement? _placement;
   Timer? _hideTimer;
   bool _tucked = false;
+  bool _tuckRequested = false;
   bool _hovered = false;
   bool _dragging = false;
   bool _settingPosition = false;
@@ -220,10 +343,23 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
   int _moveSerial = 0;
   int _positionSerial = 0;
   Timer? _moveTimer;
+  late final AnimationController _positionAnimation;
+  Offset? _positionStart;
+  Offset? _positionTarget;
+  Offset? _pendingPosition;
+  Future<void>? _positionWrite;
+  Completer<void>? _positionDone;
+  final _edgeProgress = ValueNotifier<double>(0);
+
+  bool get _transitioning => ref.read(miniTransitionBusyProvider);
 
   @override
   void initState() {
     super.initState();
+    _positionAnimation = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 160),
+    )..addListener(_onPositionTick);
     if (!kIsWeb && Platform.isWindows) windowManager.addListener(this);
   }
 
@@ -232,14 +368,16 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     _hideTimer?.cancel();
     _moveTimer?.cancel();
     _moveSerial++;
-    _positionSerial++;
+    _cancelPosition();
+    _positionAnimation.dispose();
+    _edgeProgress.dispose();
     if (!kIsWeb && Platform.isWindows) windowManager.removeListener(this);
     super.dispose();
   }
 
   @override
   void onWindowMoved() {
-    if (_settingPosition || _dragging) return;
+    if (_transitioning || _settingPosition || _dragging) return;
     _moveTimer?.cancel();
     final serial = ++_moveSerial;
     _moveTimer = Timer(const Duration(milliseconds: 180), () {
@@ -255,10 +393,14 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
   }
 
   Future<void> _snapAfterMove(int serial) async {
-    if (_settingPosition || _dragging || !mounted) return;
+    if (!mounted || _transitioning || _settingPosition || _dragging) return;
     final bounds = await windowManager.getBounds();
     final displays = await screenRetriever.getAllDisplays();
-    if (!mounted || _dragging || serial != _moveSerial || displays.isEmpty) {
+    if (!mounted ||
+        _transitioning ||
+        _dragging ||
+        serial != _moveSerial ||
+        displays.isEmpty) {
       return;
     }
     final currentTarget = _tucked ? _tuckedTarget : _placement?.expanded;
@@ -277,9 +419,11 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     if (nearest == null) return;
     final placement = miniEdgePlacement(bounds, nearest);
     if (placement == null) {
+      _edgeProgress.value = 0;
       setState(() {
         _placement = null;
         _tucked = false;
+        _tuckRequested = false;
         _tuckedTarget = null;
       });
       return;
@@ -293,34 +437,101 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
   }
 
   Future<void> _setPosition(Offset position) async {
-    final serial = ++_positionSerial;
+    if (!mounted || _transitioning) return;
+    _cancelPosition();
+    final serial = _positionSerial;
+    final done = _positionDone = Completer<void>();
     _settingPosition = true;
     try {
+      // A reversed animation starts from the last applied native position.
+      // Finish the one outstanding write before sampling that position.
+      await _positionWrite;
+      if (!mounted || _transitioning || serial != _positionSerial) return;
       final start = (await windowManager.getBounds()).topLeft;
-      for (var step = 1; step <= 9; step++) {
-        if (!mounted || serial != _positionSerial) return;
-        final progress = Curves.easeOutCubic.transform(step / 9);
-        await windowManager
-            .setPosition(Offset.lerp(start, position, progress)!);
-        if (step < 9) {
-          await Future<void>.delayed(const Duration(milliseconds: 16));
-        }
-      }
+      if (!mounted || _transitioning || serial != _positionSerial) return;
+      _positionStart = start;
+      _positionTarget = position;
+      _positionAnimation.duration = MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 160);
+      _positionAnimation.forward(from: 0);
+      await done.future;
     } catch (error) {
       debugPrint('Mini player position update failed: $error');
+      if (serial == _positionSerial) _cancelPosition();
     } finally {
       if (serial == _positionSerial) _settingPosition = false;
     }
   }
 
+  void _cancelPosition() {
+    _positionSerial++;
+    _positionAnimation.stop();
+    _pendingPosition = null;
+    _settingPosition = false;
+    _positionDone?.complete();
+    _positionDone = null;
+  }
+
+  void _onPositionTick() {
+    if (!_settingPosition || _transitioning || _positionAnimation.value == 0) {
+      return;
+    }
+    _pendingPosition = Offset.lerp(_positionStart, _positionTarget,
+        Curves.easeOutCubic.transform(_positionAnimation.value));
+    _flushPosition();
+  }
+
+  void _flushPosition() {
+    if (_positionWrite != null || _pendingPosition == null) return;
+    final serial = _positionSerial;
+    final position = _pendingPosition!;
+    _pendingPosition = null;
+    // Only one platform call may be in flight. If it takes longer than a
+    // frame, replace intermediate samples with the latest frame's position.
+    _positionWrite = windowManager.setPosition(position).then((_) {
+      if (!mounted || serial != _positionSerial || _transitioning) return;
+      final placement = _placement;
+      final target = _tuckedTarget;
+      if (placement == null || target == null) return;
+      final travel = target - placement.expanded;
+      final moved = position - placement.expanded;
+      // Tie the surface to applied window positions, not just elapsed time:
+      // a slow native move must not leave an already-hidden Flutter body.
+      _edgeProgress.value = travel.distanceSquared == 0
+          ? 0
+          : ((moved.dx * travel.dx + moved.dy * travel.dy) /
+                  travel.distanceSquared)
+              .clamp(0.0, 1.0);
+    }).catchError((Object e) {
+      debugPrint('Mini player position update failed: $e');
+      if (serial == _positionSerial) _cancelPosition();
+    }).whenComplete(() {
+      _positionWrite = null;
+      if (!mounted || serial != _positionSerial || _transitioning) return;
+      if (_pendingPosition == position) _pendingPosition = null;
+      if (_pendingPosition != null) {
+        _flushPosition();
+      } else if (_positionAnimation.isCompleted) {
+        _positionDone?.complete();
+        _positionDone = null;
+      }
+    });
+  }
+
+  double _visibleExtent(MiniEdgeHideMode mode, MiniEdge? edge) =>
+      switch (mode) {
+        MiniEdgeHideMode.compact when edge == MiniEdge.top =>
+          miniSummaryHeight(MediaQuery.textScalerOf(context)),
+        MiniEdgeHideMode.hidden => 3.0,
+        _ => 16.0,
+      };
+
   Future<void> _tuck(MiniEdgePlacement placement) async {
+    if (!mounted || _transitioning) return;
+    _tuckRequested = true;
     final mode = ref.read(settingsProvider).miniEdgeHideMode;
-    final extent = switch (mode) {
-      MiniEdgeHideMode.compact when placement.edge == MiniEdge.top =>
-        miniSummaryHeight(MediaQuery.textScalerOf(context)),
-      MiniEdgeHideMode.hidden => 3.0,
-      _ => 16.0,
-    };
+    final extent = _visibleExtent(mode, placement.edge);
     final target = placement.tuckedAt(extent);
     _tuckedTarget = target;
     final movement = _setPosition(target);
@@ -328,6 +539,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     await movement;
     if (!mounted ||
         _dragging ||
+        !_tuckRequested ||
         _placement != placement ||
         serial != _positionSerial) {
       return;
@@ -342,22 +554,26 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
   }
 
   Future<void> _reveal() async {
+    if (!mounted || _transitioning) return;
     final placement = _placement;
-    if (!_tucked || placement == null) return;
+    if ((!_tucked && !_tuckRequested) || placement == null) return;
+    _tuckRequested = false;
     setState(() => _tucked = false);
     await _setPosition(placement.expanded);
   }
 
   Future<void> _dragWindow() async {
+    if (_transitioning) return;
     _dragging = true;
     _hideTimer?.cancel();
     _moveTimer?.cancel();
     _moveSerial++;
-    _positionSerial++;
-    _settingPosition = false;
+    _cancelPosition();
+    _edgeProgress.value = 0;
     setState(() {
       _placement = null;
       _tucked = false;
+      _tuckRequested = false;
       _tuckedTarget = null;
     });
     try {
@@ -372,6 +588,36 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     }
   }
 
+  Widget _edgeHandle(Widget child) => ValueListenableBuilder<double>(
+        valueListenable: _edgeProgress,
+        child: child,
+        builder: (context, progress, child) => progress == 0
+            ? const SizedBox.shrink()
+            : IgnorePointer(
+                ignoring: !_tucked,
+                child: ExcludeSemantics(
+                  excluding: !_tucked,
+                  child: Opacity(opacity: progress, child: child),
+                ),
+              ),
+      );
+
+  Widget _edgeTab(Widget child) => TweenAnimationBuilder<double>(
+        // Keep the fade's state when removing the preceding player body.
+        key: const ValueKey('mini-edge-tab'),
+        tween: Tween(begin: 0, end: _tucked ? 1 : 0),
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : Duration(milliseconds: _tucked ? 150 : 90),
+        curve: Curves.easeOutCubic,
+        child: IgnorePointer(
+          ignoring: !_tucked,
+          child: ExcludeSemantics(excluding: !_tucked, child: child),
+        ),
+        builder: (context, opacity, child) =>
+            Opacity(opacity: opacity, child: child),
+      );
+
   void _onExit(PointerExitEvent event) {
     _hovered = false;
     if (_placement == null || _tucked) return;
@@ -385,6 +631,13 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(miniTransitionBusyProvider, (previous, busy) {
+      if (!busy) return;
+      _hideTimer?.cancel();
+      _moveTimer?.cancel();
+      _moveSerial++;
+      _cancelPosition();
+    });
     final mode = ref.watch(settingsProvider.select((s) => s.miniEdgeHideMode));
     ref.listen(settingsProvider.select((s) => s.miniEdgeHideMode),
         (previous, next) {
@@ -400,26 +653,41 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     return MouseRegion(
       onEnter: _onEnter,
       onExit: _onExit,
-      child: Stack(
+      child: ClipRect(
+          child: Stack(
         fit: StackFit.expand,
         children: [
           if (!_tucked)
-            _MiniPlayerBody(
-              attachedEdge: edge,
-              onDragStart: _dragWindow,
-              stationState: widget.stationState,
-              playbackState: widget.playbackState,
+            ValueListenableBuilder<double>(
+              valueListenable: _edgeProgress,
+              child: _MiniPlayerBody(
+                attachedEdge: edge,
+                onDragStart: _dragWindow,
+                stationState: widget.stationState,
+                playbackState: widget.playbackState,
+              ),
+              builder: (context, progress, child) {
+                // The native window retains room for the summary/hover strip.
+                // Slide the body through that last extent too, so removing it
+                // at rest cannot erase a still-visible slice of the player.
+                final remaining = _visibleExtent(mode, edge) * progress;
+                final offset = switch (edge) {
+                  MiniEdge.top => Offset(0, -remaining),
+                  MiniEdge.left => Offset(-remaining, 0),
+                  MiniEdge.right => Offset(remaining, 0),
+                  null => Offset.zero,
+                };
+                return Transform.translate(offset: offset, child: child);
+              },
             ),
-          if (_tucked &&
-              edge == MiniEdge.top &&
-              mode == MiniEdgeHideMode.compact)
-            Align(
+          if (edge == MiniEdge.top && mode == MiniEdgeHideMode.compact)
+            _edgeHandle(Align(
               alignment: Alignment.bottomCenter,
               child: _MiniCompactSummary(
                 stationState: widget.stationState,
                 onTap: () => unawaited(_reveal()),
               ),
-            ),
+            )),
           if (_tucked && edge != null && mode == MiniEdgeHideMode.hidden)
             Align(
               alignment: tabAlignment,
@@ -442,11 +710,10 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
                 ),
               ),
             ),
-          if (_tucked &&
-              edge != null &&
+          if (edge != null &&
               (mode == MiniEdgeHideMode.tab ||
                   (mode == MiniEdgeHideMode.compact && edge != MiniEdge.top)))
-            Align(
+            _edgeTab(Align(
               alignment: tabAlignment,
               child: SizedBox(
                 width: edge == MiniEdge.top ? 44 : 16,
@@ -479,9 +746,9 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
                   ),
                 ),
               ),
-            ),
+            )),
         ],
-      ),
+      )),
     );
   }
 }
