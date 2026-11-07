@@ -3,6 +3,7 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
 
 #include <memory>
 
@@ -28,6 +29,17 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  void RegisterWindowPresentation();
+  HRESULT RevealWindow();
+
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      presentation_channel_;
+  std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> frame_result_;
+  uint64_t frame_serial_ = 0;
+  bool frame_callback_pending_ = false;
+  bool presentation_concealed_ = false;
+  BOOL saved_transitions_disabled_ = FALSE;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
