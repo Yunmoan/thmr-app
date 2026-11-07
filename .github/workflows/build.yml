@@ -163,7 +163,7 @@ jobs:
           --dart-define=THMR_CLIENT_VERSION=${{ needs.validate.outputs.version }}
           --dart-define=THMR_UPDATE_API_URL=${{ env.UPDATE_API_URL }}
           --dart-define=THMR_UPDATE_PUBLIC_KEY=${{ env.UPDATE_PUBLIC_KEY }}
-      - name: Verify and package the universal app
+      - name: Check the universal app identity before distribution signing
         env:
           CLIENT_VERSION: ${{ needs.validate.outputs.macos_version }}
           CLIENT_BUILD_NUMBER: ${{ needs.validate.outputs.build_number }}
@@ -172,10 +172,9 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print:CFBundleShortVersionString' "$app/Contents/Info.plist")" = "$CLIENT_VERSION"
           test "$(/usr/libexec/PlistBuddy -c 'Print:CFBundleVersion' "$app/Contents/Info.plist")" = "$CLIENT_BUILD_NUMBER"
           lipo "$app/Contents/MacOS/THMR" -verify_arch x86_64 arm64
-          codesign --verify --deep --strict "$app"
       - name: Install DMG packaging tools
         run: brew install create-dmg
-      - name: Sign and notarize macOS distribution when configured
+      - name: Sign macOS distribution and verify final ZIP and DMG startup
         env:
           CLIENT_VERSION: ${{ needs.validate.outputs.version }}
           CLIENT_BUILD_NUMBER: ${{ needs.validate.outputs.build_number }}

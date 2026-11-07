@@ -156,7 +156,11 @@ Android 版本码是 `Actions run number × 100 + run attempt`，完整重跑工
 | `APPLE_API_KEY_ID` | API Key ID |
 | `APPLE_API_ISSUER_ID` | Issuer ID |
 
-默认使用 `CODE_SIGN_IDENTITY = "-"` 的 ad-hoc 开发签名，不依赖 Apple 证书或开发团队配置。配置上述材料后再执行 Developer ID 重签与公证。直接分发的 Release 已关闭 App Sandbox，否则应用不能替换自身；后续如果改做 Mac App Store 渠道，应关闭此自更新器并恢复相应沙盒配置。
+未配置 Developer ID 时，打包前使用 ad-hoc 签名重新签署所有内嵌 Mach-O、框架及主应用，清除 Xcode 注入的调试权限。配置上述材料后改用 Developer ID 重签与公证。签名按内嵌代码到主应用的顺序执行，应用权限仅用于主应用；不保留需要 provisioning profile 授权的 `keychain-access-groups`（包括空数组）。当前客户端没有使用跨应用钥匙串共享。
+
+最终 ZIP 解压后、最终 DMG 挂载并复制应用后，CI 均验证所有 Mach-O 的 Intel / Apple Silicon 架构、双架构签名及权限声明，并在构建机的原生架构下启动应用，等待界面首帧及 3 秒健康回执。默认 Intel runner 因此实际执行 x86_64 启动；另一架构执行静态验证，仍需相应真实设备验收。ad-hoc 签名仍不等于 Apple 公证，首次打开可能需要在 macOS“隐私与安全性”中授权。
+
+直接分发的 Release 已关闭 App Sandbox，否则应用不能替换自身；后续如果改做 Mac App Store 渠道，应关闭此自更新器并恢复相应沙盒配置。
 
 ## 5. 发版链路
 

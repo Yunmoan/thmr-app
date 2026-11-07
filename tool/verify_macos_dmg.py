@@ -6,6 +6,8 @@ import subprocess
 import sys
 import tempfile
 
+from macos_app import verify_app
+
 
 def verify(image):
     subprocess.run(["hdiutil", "verify", image], check=True)
@@ -26,7 +28,11 @@ def verify(image):
                 assert info["CFBundleShortVersionString"] == version.split("-")[0]
             if build := os.environ.get("CLIENT_BUILD_NUMBER"):
                 assert info["CFBundleVersion"] == build
-            subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True)
+            # Exercise the installed copy, exactly as a user dragging to Applications.
+            with tempfile.TemporaryDirectory(prefix="thmr-installed-check-") as installed:
+                target = Path(installed) / "THMR.app"
+                subprocess.run(["ditto", str(app), str(target)], check=True)
+                verify_app(target, launch=True)
             print(f"Verified DMG: {info['CFBundleShortVersionString']}+{info['CFBundleVersion']}")
         finally:
             subprocess.run(["hdiutil", "detach", mount], check=True)

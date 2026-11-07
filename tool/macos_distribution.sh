@@ -21,19 +21,21 @@ security create-keychain -p "$password" "$keychain"
 security unlock-keychain -p "$password" "$keychain"
 security import "$RUNNER_TEMP/thmr-signing.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
-codesign --force --deep --options runtime --timestamp --sign "$MACOS_CODESIGN_IDENTITY" \
-  --keychain "$keychain" --entitlements macos/Runner/Release.entitlements "$app"
+python3 tool/macos_app.py sign "$app" --identity "$MACOS_CODESIGN_IDENTITY" --keychain "$keychain"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$RUNNER_TEMP/thmr-notarize.zip"
 xcrun notarytool submit "$RUNNER_TEMP/thmr-notarize.zip" --wait \
   --key "$RUNNER_TEMP/thmr-apple-api.p8" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID"
 xcrun stapler staple "$app"
-codesign --verify --deep --strict "$app"
+python3 tool/macos_app.py verify "$app"
 else
   echo 'Developer ID not configured: macOS artifacts use local signing and are not notarized.'
+  # Replace Xcode-injected entitlements and stale signatures on BOTH slices.
+  python3 tool/macos_app.py sign "$app"
 fi
 
 # Both distributions come from the same app, after signing and stapling.
 ditto -c -k --sequesterRsrc --keepParent "$app" thmr-app-macos-universal.zip
+python3 tool/verify_macos_zip.py thmr-app-macos-universal.zip
 bash tool/package_macos_dmg.sh "$app"
 if [ -n "${MACOS_CERTIFICATE_BASE64:-}" ]; then
   codesign --force --timestamp --sign "$MACOS_CODESIGN_IDENTITY" \
