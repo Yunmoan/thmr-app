@@ -1,7 +1,11 @@
 // Right column for wide layouts: previous track / stream state / queue list.
 // Mirrors web "过去与未来" (StatusPanel) + queue.
 
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../../core/models/models.dart';
 import '../../../core/theme/thmr_theme.dart';
@@ -137,12 +141,94 @@ class SideInfoColumn extends StatelessWidget {
   }
 }
 
-class _QueueList extends StatelessWidget {
+class _QueueList extends StatefulWidget {
   const _QueueList({required this.status});
 
   final StationStatus status;
 
-  List<QueueEntry> get queue => status.queue;
+  @override
+  State<_QueueList> createState() => _QueueListState();
+}
+
+class _QueueListState extends State<_QueueList> {
+  final _scrollController = ScrollController();
+  List<String> _coverUrls = const [];
+  int _cacheWidth = 0;
+  int _preloadGeneration = 0;
+  double? _cacheExtent;
+
+  List<QueueEntry> get queue => widget.status.queue;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _schedulePreload();
+  }
+
+  @override
+  void didUpdateWidget(covariant _QueueList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _schedulePreload();
+  }
+
+  void _schedulePreload() {
+    final cacheWidth = (40 * MediaQuery.devicePixelRatioOf(context)).round();
+    final urls = queue.isEmpty
+        ? <String>[]
+        : <String>{'', ...queue.map((entry) => entry.coverUrl)}.toList();
+    if (cacheWidth == _cacheWidth && listEquals(urls, _coverUrls)) return;
+    _cacheWidth = cacheWidth;
+    _coverUrls = urls;
+    final generation = ++_preloadGeneration;
+    if (urls.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || generation != _preloadGeneration) return;
+      unawaited(_preloadCovers(urls, cacheWidth, generation));
+    });
+  }
+
+  Future<void> _preloadCovers(
+      List<String> urls, int cacheWidth, int generation) async {
+    // Start at most two thumbnails between frames. Waiting for scheduler idle
+    // would starve this work while the playback spectrum ticker is running.
+    for (var start = 0; start < urls.length; start += 2) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || generation != _preloadGeneration) return;
+      // Give an active scroll priority over additional background decodes.
+      while (_scrollController.hasClients &&
+          _scrollController.position.isScrollingNotifier.value) {
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted || generation != _preloadGeneration) return;
+      }
+      if (_scrollController.hasClients) {
+        final viewport = _scrollController.position.viewportDimension;
+        final currentExtent = _cacheExtent ?? 250;
+        final targetExtent = viewport * 2;
+        if (currentExtent < targetExtent) {
+          // Grow the layout cache a few rows at a time after the first paint.
+          setState(() {
+            _cacheExtent = (currentExtent + viewport / 2)
+                .clamp(0, targetExtent)
+                .toDouble();
+          });
+        }
+      }
+      await Future.wait(urls.skip(start).take(2).map((url) {
+        return precacheImage(
+          TrackCover.providerFor(url, cacheWidth: cacheWidth),
+          context,
+          onError: (_, __) {},
+        ).timeout(const Duration(seconds: 10), onTimeout: () {});
+      }));
+    }
+  }
+
+  @override
+  void dispose() {
+    ++_preloadGeneration;
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -215,6 +301,10 @@ class _QueueList extends StatelessWidget {
               ).createShader(rect),
               blendMode: BlendMode.dstIn,
               child: ListView.separated(
+                controller: _scrollController,
+                scrollCacheExtent: _cacheExtent == null
+                    ? null
+                    : ScrollCacheExtent.pixels(_cacheExtent!),
                 padding: const EdgeInsets.fromLTRB(0, 8, 0, 24),
                 itemCount: queue.length,
                 separatorBuilder: (_, __) => Divider(
@@ -327,7 +417,7 @@ class _QueueList extends StatelessWidget {
           child: SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () => showQueueSheet(context, status: status),
+              onPressed: () => showQueueSheet(context, status: widget.status),
               icon: const Icon(Icons.unfold_more_rounded, size: 17),
               label: Text('查看全部 ${queue.length} 首'),
             ),

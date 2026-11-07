@@ -16,6 +16,18 @@ class TrackCover extends StatelessWidget {
   final double size;
   final double radius;
 
+  /// Use the same decoded thumbnail in visible covers and background preloads.
+  static ImageProvider<Object> providerFor(String url,
+      {required int cacheWidth}) {
+    return ResizeImage.resizeIfNeeded(
+      cacheWidth,
+      null,
+      url.isEmpty
+          ? const AssetImage('assets/brand/cover-fallback.png')
+          : NetworkImage(url),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).thmr;
@@ -26,20 +38,16 @@ class TrackCover extends StatelessWidget {
       child: SizedBox(
         width: size,
         height: size,
-        child: url.isEmpty
-            ? Image.asset('assets/brand/cover-fallback.png',
-                fit: BoxFit.cover, cacheWidth: cacheWidth)
-            : Image.network(
-                url,
-                fit: BoxFit.cover,
-                filterQuality: FilterQuality.low,
-                cacheWidth: cacheWidth,
-                gaplessPlayback: true,
-                errorBuilder: (_, __, ___) => Image.asset(
-                    'assets/brand/cover-fallback.png',
-                    fit: BoxFit.cover,
-                    cacheWidth: cacheWidth),
-              ),
+        child: Image(
+          image: providerFor(url, cacheWidth: cacheWidth),
+          fit: BoxFit.cover,
+          filterQuality: FilterQuality.low,
+          gaplessPlayback: true,
+          errorBuilder: (_, __, ___) => Image.asset(
+              'assets/brand/cover-fallback.png',
+              fit: BoxFit.cover,
+              cacheWidth: cacheWidth),
+        ),
       ),
     );
     return DecoratedBox(
