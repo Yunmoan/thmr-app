@@ -268,8 +268,10 @@ class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
     try {
       final api = ref.read(authProvider.notifier).api;
       final collections = await api.collections();
+      if (!mounted) return;
       setState(() => _collections = collections);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = '收藏夹加载失败');
     }
   }

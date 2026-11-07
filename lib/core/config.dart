@@ -1,12 +1,16 @@
 /// 运行配置:与 Web 端 dist/config.js 同值,`--dart-define` 可覆盖。
 class AppConfig {
   const AppConfig({
-    this.radioBaseUrl = 'https://radio.yunmoan.cn',
-    this.thmrBaseUrl = 'https://thmr.yunmoan.cn',
-    this.stationId = 'touhou',
+    this.radioBaseUrl = defaultRadioBaseUrl,
+    this.thmrBaseUrl = defaultThmrBaseUrl,
+    this.stationId = defaultStationId,
     this.streamToken = '',
     this.featuresVote = false,
   });
+
+  static const defaultRadioBaseUrl = 'https://radio.yunmoan.cn';
+  static const defaultThmrBaseUrl = 'https://thmr.yunmoan.cn';
+  static const defaultStationId = 'touhou';
 
   /// Radio 流媒体后端(状态 / 流 / 封面 / 反馈)
   final String radioBaseUrl;
@@ -31,30 +35,30 @@ class AppConfig {
     bool? featuresVote,
   }) =>
       AppConfig(
-        radioBaseUrl: String.fromEnvironment(
-          'THMR_RADIO_BASE_URL',
-          defaultValue: radioBaseUrl ?? this.radioBaseUrl,
-        ),
-        thmrBaseUrl: String.fromEnvironment(
-          'THMR_BASE_URL',
-          defaultValue: thmrBaseUrl ?? this.thmrBaseUrl,
-        ),
-        stationId: String.fromEnvironment(
-          'THMR_STATION_ID',
-          defaultValue: stationId ?? this.stationId,
-        ),
-        streamToken: String.fromEnvironment(
-          'THMR_STREAM_TOKEN',
-          defaultValue: streamToken ?? this.streamToken,
-        ),
-        featuresVote: bool.fromEnvironment(
-          'THMR_FEATURE_VOTE',
-          defaultValue: featuresVote ?? this.featuresVote,
-        ),
+        radioBaseUrl: radioBaseUrl ?? this.radioBaseUrl,
+        thmrBaseUrl: thmrBaseUrl ?? this.thmrBaseUrl,
+        stationId: stationId ?? this.stationId,
+        streamToken: streamToken ?? this.streamToken,
+        featuresVote: featuresVote ?? this.featuresVote,
       );
 }
 
-const appConfig = AppConfig();
+const appConfig = AppConfig(
+  radioBaseUrl: String.fromEnvironment(
+    'THMR_RADIO_BASE_URL',
+    defaultValue: AppConfig.defaultRadioBaseUrl,
+  ),
+  thmrBaseUrl: String.fromEnvironment(
+    'THMR_BASE_URL',
+    defaultValue: AppConfig.defaultThmrBaseUrl,
+  ),
+  stationId: String.fromEnvironment(
+    'THMR_STATION_ID',
+    defaultValue: AppConfig.defaultStationId,
+  ),
+  streamToken: String.fromEnvironment('THMR_STREAM_TOKEN'),
+  featuresVote: bool.fromEnvironment('THMR_FEATURE_VOTE'),
+);
 
 /// 分享落地页(Web 浏览器打开),用于「复制分享链接」。
 const shareWebOrigin = 'https://thmr.yunmoan.cn';

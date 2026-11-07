@@ -35,8 +35,7 @@ class AppUpdateService {
     try {
       final response = await _client.get<Object?>(apiUrl,
           options: Options(
-              headers: {'Accept': 'application/json', 'User-Agent': 'THMR-App'},
-              followRedirects: false));
+              headers: {'Accept': 'application/json', 'User-Agent': 'THMR-App'}));
       if (response.statusCode == 204) return null;
       return await verifyUpdateManifest(response.data, publicKey);
     } on DioException catch (error) {

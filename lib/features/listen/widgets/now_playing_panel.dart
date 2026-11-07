@@ -66,9 +66,20 @@ class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
         await api.removeItem(fs.collectionId!, fs.itemId!);
       } else {
         // 默认收藏夹 = collections 首个(position 最小)
-        final defaultCid = fs?.collections.isNotEmpty == true
-            ? fs!.collections.first.collectionId
-            : (await api.collections()).first.id;
+        final String defaultCid;
+        if (fs != null && fs.collections.isNotEmpty) {
+          defaultCid = fs.collections.first.collectionId;
+        } else {
+          final cols = await api.collections();
+          if (!mounted) return;
+          if (cols.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('还没有收藏夹,请先在「收藏夹」页新建')),
+            );
+            return;
+          }
+          defaultCid = cols.first.id;
+        }
         await api.addToCollection(defaultCid,
             stationId: appConfig.stationId, trackId: cur.trackId);
       }

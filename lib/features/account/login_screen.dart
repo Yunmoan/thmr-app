@@ -69,6 +69,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       _envReady = true;
     } catch (e) {
+      _envReady = true;
       if (mounted) setState(() => _diag = 'WebView 环境初始化失败:$e');
     }
     if (mounted) setState(() {});
@@ -146,7 +147,8 @@ class _LoginScreenState extends State<LoginScreen> {
             return;
           }
         } on ApiException catch (e) {
-          if (e.statusCode != 401) rethrow;
+          if (e.statusCode == 429 || e.statusCode >= 500) rethrow;
+          // 401/403:该候选 cookie 无效,继续验证其余 cookie
         }
       }
       // Not found yet: retry a few times (cookie may still be settling).
