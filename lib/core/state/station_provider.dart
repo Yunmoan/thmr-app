@@ -102,11 +102,12 @@ class StationPoller extends StateNotifier<StationUiState> {
       _lastTrackId = cur?.trackId;
       _lastStartedAtMs = cur?.startedAtMs;
       if (cur == null && mediaChanged) {
-        unawaited(smtcClearMetadata());
+        unawaited(clearSystemMediaMetadata());
         audioHandler.clearNowPlaying();
       } else if (cur != null && mediaChanged) {
         // Windows SMTC and mobile lock-screen metadata share the same track.
-        unawaited(smtcUpdateMetadata(
+        unawaited(updateSystemMediaMetadata(
+            trackId: '${cur.trackId}-${cur.startedAtMs}',
             title: cur.title,
             artist: cur.artist,
             artUri: cur.coverUrl,
@@ -120,7 +121,7 @@ class StationPoller extends StateNotifier<StationUiState> {
             artUri: cur.coverUrl,
             durationSec: cur.durationSec);
       } else if (cur != null) {
-        unawaited(smtcUpdateTimeline(
+        unawaited(updateSystemMediaTimeline(
             positionSec: cur.positionSec, durationSec: cur.durationSec));
       }
       if (cur != null) {

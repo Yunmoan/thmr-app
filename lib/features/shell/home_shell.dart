@@ -8,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/player/playback_controller.dart';
+import '../../core/player/audio_engine.dart';
 import '../../core/platform/desktop_window.dart';
 import '../../core/platform/linux_tray.dart';
 import '../../core/player/shared_radio_stream.dart';
@@ -197,6 +198,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
         _trayMonitor?.dispose();
         _trayMonitor = null;
         await ref.read(playbackProvider.notifier).stop();
+        await disposeSystemMediaControls();
         await sharedRadioStream.dispose();
         await trayManager.destroy();
         await _trayDirectory?.delete(recursive: true);

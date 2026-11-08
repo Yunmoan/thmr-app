@@ -10,6 +10,8 @@ add_executable(${BINARY_NAME}
   "main.cc"
   "my_application.cc"
   "linux_tray.cc"
+  "linux_media.cc"
+  "mpris_service.cc"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
 )
 
