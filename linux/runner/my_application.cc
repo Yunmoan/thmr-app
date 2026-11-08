@@ -1,6 +1,7 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <locale.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
@@ -23,6 +24,11 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
 
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
+  // libmpv's mpv_create() returns NULL when LC_NUMERIC is not "C" (e.g. a
+  // zh_CN locale), which makes media_kit crash on startup. Pin it here, after
+  // GTK has initialized and before the Flutter engine/Dart code starts.
+  setlocale(LC_NUMERIC, "C");
+
   MyApplication* self = MY_APPLICATION(application);
   GList* windows = gtk_application_get_windows(GTK_APPLICATION(application));
   if (windows != nullptr) {
