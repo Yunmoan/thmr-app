@@ -3,7 +3,6 @@ import 'dart:io' show Platform, exit;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Colors, Size;
-import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'windows_process_exit.dart';
@@ -36,11 +35,11 @@ Future<void> restoreDesktopWindow() async {
   await windowManager.focus();
 }
 
-/// Release Linux resources before asking Flutter to quit its GTK application.
-/// Destroying the GTK window inside a plugin method call can dispose the engine
-/// while it is still responding to that call.
+/// Stop Linux playback and background work before terminating the process.
+/// Both GTK window destruction and Flutter's application exit can race native
+/// plugin/engine threads during shutdown. Avoid that teardown after cleanup.
 Future<void> quitDesktopApplication(Future<void> Function() releaseResources,
-    {TargetPlatform? platform}) async {
+    {TargetPlatform? platform, void Function(int) exitProcess = exit}) async {
   final target = platform ?? defaultTargetPlatform;
   if (target == TargetPlatform.windows) terminateWindowsProcess();
   try {
@@ -48,12 +47,12 @@ Future<void> quitDesktopApplication(Future<void> Function() releaseResources,
   } catch (error) {
     debugPrint('Desktop resource cleanup failed: $error');
   }
+  if (target == TargetPlatform.linux) {
+    exitProcess(0);
+    return;
+  }
   try {
-    if (target == TargetPlatform.linux) {
-      await SystemNavigator.pop();
-    } else {
-      await windowManager.destroy();
-    }
+    await windowManager.destroy();
   } catch (error) {
     debugPrint('Desktop window shutdown failed: $error');
     exit(0);

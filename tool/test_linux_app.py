@@ -242,8 +242,9 @@ def exercise(bundle):
                     set_host(False)
                     wait_for(lambda: windows.visible(window), 'restore after tray host loss')
                     quit_from_tray()
-                    if app.wait(timeout=8) != 0:
-                        raise AssertionError('Tray exit failed')
+                    exit_code = app.wait(timeout=8)
+                    if exit_code != 0:
+                        raise AssertionError(f'Tray exit failed: process returned {exit_code}')
                     print('GTK integration passed: no-host fallback, tray hide, duplicate '
                           'restore, host-loss recovery, MPRIS and graceful exit')
                 except Exception:

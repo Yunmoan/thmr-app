@@ -133,7 +133,9 @@ jobs:
           env PATH=/nonexistent "$flutter_sdk/bin/cache/dart-sdk/bin/dart" \
             --packages=.dart_tool/package_config.json tool/test_linux_spectrum.dart \
             "$PWD/build/linux/x64/release/bundle/lib/libthmr_mp3.so"
-          python3 tool/test_linux_app.py build/linux/x64/release/bundle
+          for attempt in 1 2 3; do
+            python3 tool/test_linux_app.py build/linux/x64/release/bundle
+          done
       - name: Pack the complete bundle
         env:
           CLIENT_VERSION: ${{ needs.validate.outputs.version }}

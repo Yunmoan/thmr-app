@@ -31,39 +31,30 @@ void main() {
         ['isMinimized', 'restore', 'show', 'focus']);
   });
 
-  test('Linux releases resources before requesting GTK application exit',
+  test('Linux releases resources before terminating without GTK teardown',
       () async {
     final events = <String>[];
-    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      events.add(call.method);
-      return null;
-    });
-    addTearDown(() =>
-        messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    await quitDesktopApplication(
+        () async {
+          await Future<void>.delayed(Duration.zero);
+          events.add('cleanup');
+        },
+        platform: TargetPlatform.linux,
+        exitProcess: (code) {
+          events.add('exit $code');
+        });
 
-    await quitDesktopApplication(() async {
-      await Future<void>.delayed(Duration.zero);
-      events.add('cleanup');
-    }, platform: TargetPlatform.linux);
-
-    expect(events, ['cleanup', 'SystemNavigator.pop']);
+    expect(events, ['cleanup', 'exit 0']);
     expect(calls, isEmpty);
   });
 
-  test('Linux still requests exit when resource cleanup fails', () async {
-    final exits = <String>[];
-    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      exits.add(call.method);
-      return null;
-    });
-    addTearDown(() =>
-        messenger.setMockMethodCallHandler(SystemChannels.platform, null));
-
+  test('Linux still terminates when resource cleanup fails', () async {
+    final exits = <int>[];
     await quitDesktopApplication(() async {
       throw StateError('media cleanup failed');
-    }, platform: TargetPlatform.linux);
+    }, platform: TargetPlatform.linux, exitProcess: exits.add);
 
-    expect(exits, ['SystemNavigator.pop']);
+    expect(exits, [0]);
     expect(calls, isEmpty);
   });
 }
