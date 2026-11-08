@@ -7,6 +7,7 @@ import '../api/radio_api.dart';
 import '../config.dart';
 import '../models/models.dart';
 import 'settings_provider.dart';
+import 'radio_source_provider.dart';
 
 /// 电台运行时 UI 状态。
 class StationUiState {
@@ -105,7 +106,7 @@ class StationPoller extends StateNotifier<StationUiState> {
         unawaited(clearSystemMediaMetadata());
         audioHandler.clearNowPlaying();
       } else if (cur != null && mediaChanged) {
-        final artwork = absolutizeCover(cur.coverUrl, appConfig.radioBaseUrl);
+        final artwork = absolutizeCover(cur.coverUrl, _api.baseUrl);
         // Windows SMTC and mobile lock-screen metadata share the same track.
         unawaited(updateSystemMediaMetadata(
             trackId: '${cur.trackId}-${cur.startedAtMs}',
@@ -163,7 +164,7 @@ class StationPoller extends StateNotifier<StationUiState> {
 }
 
 final stationProvider = StateNotifierProvider<StationPoller, StationUiState>(
-  (ref) => StationPoller(RadioApi(), appConfig.stationId),
+  (ref) => StationPoller(ref.watch(radioApiProvider), appConfig.stationId),
 );
 
 /// 直播流地址:状态接口可用 + 用户码率偏好 → 完整 URL。
@@ -173,5 +174,8 @@ final streamUrlProvider = Provider<String?>((ref) {
   if (status == null) return null;
   final prefs = ref.watch(settingsProvider);
   final profile = st.selectedProfile(prefs.bitrateFor(appConfig.stationId));
-  return RadioApi().streamUrl(appConfig.stationId, profile.id);
+  if (!ref.watch(radioSourceProvider.select((source) => source.ready))) {
+    return null;
+  }
+  return ref.watch(radioApiProvider).streamUrl(appConfig.stationId, profile.id);
 });

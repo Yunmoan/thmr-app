@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/radio_api.dart';
 import '../../core/models/models.dart';
 import '../../core/state/station_provider.dart';
+import '../../core/state/radio_source_provider.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/delay_fade_in.dart';
 import '../../shared/widgets/thmr_panel.dart';
@@ -23,21 +24,39 @@ class ListenScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final station = ref.watch(stationProvider);
     final status = station.status;
+    final selecting = ref.watch(radioSourceProvider
+        .select((source) => source.testing && !source.tested));
 
     return SafeArea(
       bottom: false,
-      child: LayoutBuilder(builder: (context, c) {
-        final wide = c.maxWidth >= 980;
-        if (wide && status != null) {
-          return _WideLayout(status: status, error: station.error);
-        }
-        return _NarrowLayout(
-          status: status,
-          error: station.error,
-          initialLoading: station.initialLoading,
-          stationName: status?.station.name ?? '东方音乐电台 THMR',
-        );
-      }),
+      child: Column(children: [
+        if (selecting)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+            child: Row(children: [
+              const SizedBox(
+                  width: 15,
+                  height: 15,
+                  child: CircularProgressIndicator(strokeWidth: 2)),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: Text('正在比较两路播放源，完成后即可收听…',
+                      style: Theme.of(context).textTheme.bodySmall)),
+            ]),
+          ),
+        Expanded(child: LayoutBuilder(builder: (context, c) {
+          final wide = c.maxWidth >= 980;
+          if (wide && status != null) {
+            return _WideLayout(status: status, error: station.error);
+          }
+          return _NarrowLayout(
+            status: status,
+            error: station.error,
+            initialLoading: station.initialLoading,
+            stationName: status?.station.name ?? '东方音乐电台 THMR',
+          );
+        })),
+      ]),
     );
   }
 }

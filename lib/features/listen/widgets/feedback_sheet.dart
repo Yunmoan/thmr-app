@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/api/radio_api.dart';
+import '../../../core/state/radio_source_provider.dart';
 import '../../../core/config.dart';
 import '../../../core/models/models.dart';
 import '../../../core/theme/thmr_theme.dart';
@@ -31,8 +32,8 @@ Future<void> showFeedbackSheet(
     context: context,
     isScrollControlled: true,
     builder: (_) => Padding(
-      padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: _FeedbackForm(
         track: track,
         stationId: stationId?.trim().isNotEmpty == true
@@ -87,7 +88,7 @@ class _FeedbackFormState extends ConsumerState<_FeedbackForm> {
     }
     setState(() => _busy = true);
     try {
-      final radio = RadioApi();
+      final radio = ref.read(radioApiProvider);
       final result = await radio.feedback(
         stationId: widget.stationId,
         type: _type,

@@ -15,6 +15,8 @@ import '../../shared/widgets/thmr_panel.dart';
 import 'about_panel.dart';
 import 'login_screen.dart';
 import 'update_panel.dart';
+import 'radio_source_panel.dart';
+import '../diagnostics/diagnostics_screen.dart';
 
 /// 「我的」:账号(WebView 登录 M2 接入)+ 偏好设置 + 关于。
 class AccountScreen extends ConsumerWidget {
@@ -331,6 +333,34 @@ class AccountScreen extends ConsumerWidget {
               ),
             ),
           ],
+          const SizedBox(height: 18),
+          const SectionHeader(title: '播放与网络'),
+          const RadioSourcePanel(),
+          const SizedBox(height: 10),
+          ThmrPanel(
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => const DiagnosticsScreen(),
+            )),
+            child: Row(children: [
+              Icon(Icons.network_check_rounded,
+                  color: tokens.mutedInk, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text('网络诊断', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 4),
+                    Text('检查服务连接、CDN 节点与本机环境，导出 TXT 报告',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: tokens.mutedInk)),
+                  ])),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right_rounded, color: tokens.mutedInk),
+            ]),
+          ),
           if (supportsAppUpdates) ...[
             const SizedBox(height: 18),
             const SectionHeader(title: '应用更新'),

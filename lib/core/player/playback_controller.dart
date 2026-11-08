@@ -8,6 +8,7 @@ import 'package:media_kit/media_kit.dart' show Media, Player;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../state/station_provider.dart';
+import '../state/radio_source_provider.dart';
 import 'audio_engine.dart';
 import 'shared_radio_stream.dart';
 
@@ -196,6 +197,23 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     await _openRadio(url, play: autoplay);
   }
 
+  /// Switching a source preserves the live path, quality, token and pause state.
+  Future<void> changeRadioSource(String baseUrl) async {
+    final current = _currentUrl;
+    if (current == null) return;
+    final previous = Uri.parse(current);
+    final base = Uri.parse(baseUrl);
+    if (previous.origin == base.origin) return;
+    final next = retargetRadioUrl(current, baseUrl);
+    _currentUrl = next;
+    if (state.userPaused) return;
+    try {
+      await tune(next);
+    } catch (_) {
+      if (!_disposed) _onError('切换播放源失败，正在尝试重新连接');
+    }
+  }
+
   /// 主播放键:未在播 → 连流;连接中/在播 → 暂停。(主面板与迷你窗共用)
   Future<void> toggle(String? streamUrl) async {
     switch (state.phase) {
@@ -301,5 +319,9 @@ class PlaybackController extends StateNotifier<PlaybackState> {
 
 final playbackProvider =
     StateNotifierProvider<PlaybackController, PlaybackState>((ref) {
-  return PlaybackController(streamUrl: () => ref.read(streamUrlProvider));
+  final controller =
+      PlaybackController(streamUrl: () => ref.read(streamUrlProvider));
+  ref.listen(radioSourceProvider.select((source) => source.selected.baseUrl),
+      (_, next) => unawaited(controller.changeRadioSource(next)));
+  return controller;
 });
