@@ -11,7 +11,7 @@ import 'spectrum.dart';
 
 enum AndroidSpectrumStatus { starting, ready, unavailable }
 
-class AndroidSpectrum implements SpectrumSource {
+class AndroidSpectrum implements RetryableSpectrumSource {
   AndroidSpectrum._(this._streamUrl);
 
   static String? _currentStreamUrl() {
@@ -31,6 +31,12 @@ class AndroidSpectrum implements SpectrumSource {
   bool _fetching = false;
   Float32List? _last;
   AndroidSpectrumStatus status = AndroidSpectrumStatus.starting;
+
+  @override
+  bool get isUnavailable => status == AndroidSpectrumStatus.unavailable;
+  @override
+  String? get unavailableReason =>
+      isUnavailable ? '实时频谱暂不可用，请检查电台连接后重试。' : null;
 
   @override
   void start() {
@@ -64,6 +70,7 @@ class AndroidSpectrum implements SpectrumSource {
     }
   }
 
+  @override
   Future<bool> retry() async {
     if (_refs == 0) return false;
     final generation = _generation;

@@ -12,6 +12,8 @@ import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:media_kit/media_kit.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:smtc_windows/smtc_windows.dart';
+import '../platform/desktop_window.dart';
+import 'linux_media_controls.dart';
 
 /// The single player instance shared by the UI controller and the
 /// background handler.
@@ -25,21 +27,25 @@ final Player enginePlayer = Player(
 Future<void> Function()? _mediaPlay;
 Future<void> Function()? _mediaPause;
 Future<void> Function()? _mediaStop;
+Future<void> Function(double)? _mediaVolume;
 
 void registerMediaControls({
   required Future<void> Function() play,
   required Future<void> Function() pause,
   required Future<void> Function() stop,
+  Future<void> Function(double)? volume,
 }) {
   _mediaPlay = play;
   _mediaPause = pause;
   _mediaStop = stop;
+  _mediaVolume = volume;
 }
 
 void unregisterMediaControls() {
   _mediaPlay = null;
   _mediaPause = null;
   _mediaStop = null;
+  _mediaVolume = null;
 }
 
 Future<void> _playFromSystem() => (_mediaPlay ?? enginePlayer.play)();
@@ -176,6 +182,23 @@ class ThmrAudioHandler extends BaseAudioHandler {
 
 final ThmrAudioHandler audioHandler = ThmrAudioHandler();
 
+final _linuxMedia = LinuxMediaControls(
+  play: _playFromSystem,
+  pause: _pauseFromSystem,
+  stop: _stopFromSystem,
+  setVolume: (value) => (_mediaVolume ?? enginePlayer.setVolume)(value),
+  raise: restoreDesktopWindow,
+);
+StreamSubscription<double>? _linuxVolumeSubscription;
+
+Future<void> disposeSystemMediaControls() async {
+  if (!kIsWeb && Platform.isLinux) {
+    await _linuxVolumeSubscription?.cancel();
+    _linuxVolumeSubscription = null;
+    await _linuxMedia.dispose();
+  }
+}
+
 // ---------------- Windows SMTC ----------------
 
 SMTCWindows? _smtc;
@@ -235,13 +258,25 @@ Future<String?> extractAssetToFile(String asset, String name) async {
 int _metadataSerial = 0;
 Future<String?>? _fallbackArtwork;
 
-Future<void> smtcUpdateMetadata({
+Future<void> updateSystemMediaMetadata({
   required String title,
   required String artist,
   String? artUri,
   int positionSec = 0,
   int durationSec = 0,
+  String trackId = '',
 }) async {
+  if (!kIsWeb && Platform.isLinux) {
+    await _linuxMedia.update({
+      'track': trackId.isEmpty ? '$title/$artist' : trackId,
+      'title': title,
+      'artist': artist,
+      'artwork': artUri ?? '',
+      'duration': durationSec.clamp(0, 86400) * 1000000,
+      'position': positionSec.clamp(0, 86400) * 1000000,
+    });
+    return;
+  }
   if (kIsWeb || !Platform.isWindows) return;
   final serial = ++_metadataSerial;
   await _smtcInit();
@@ -274,17 +309,24 @@ Future<void> smtcUpdateMetadata({
     await _smtc!.setPlaybackStatus(enginePlayer.state.playing
         ? PlaybackStatus.playing
         : PlaybackStatus.paused);
-    await smtcUpdateTimeline(
+    await updateSystemMediaTimeline(
         positionSec: positionSec, durationSec: durationSec);
   } catch (error) {
     debugPrint('Windows media metadata update failed: $error');
   }
 }
 
-Future<void> smtcUpdateTimeline({
+Future<void> updateSystemMediaTimeline({
   required int positionSec,
   required int durationSec,
 }) async {
+  if (!kIsWeb && Platform.isLinux) {
+    await _linuxMedia.update({
+      'position': positionSec.clamp(0, 86400) * 1000000,
+      'duration': durationSec.clamp(0, 86400) * 1000000,
+    });
+    return;
+  }
   if (kIsWeb || !Platform.isWindows) return;
   await _smtcInit();
   if (!_smtcReady) return;
@@ -301,7 +343,18 @@ Future<void> smtcUpdateTimeline({
   }
 }
 
-Future<void> smtcClearMetadata() async {
+Future<void> clearSystemMediaMetadata() async {
+  if (!kIsWeb && Platform.isLinux) {
+    await _linuxMedia.update({
+      'track': '',
+      'title': '',
+      'artist': '',
+      'artwork': '',
+      'position': 0,
+      'duration': 0,
+    });
+    return;
+  }
   if (kIsWeb || !Platform.isWindows) return;
   ++_metadataSerial;
   await _smtcInit();
@@ -314,10 +367,20 @@ Future<void> smtcClearMetadata() async {
   }
 }
 
-Future<void> smtcUpdatePlayback({
+Future<void> updateSystemMediaPlayback({
   required bool playing,
   bool stopped = false,
 }) async {
+  if (!kIsWeb && Platform.isLinux) {
+    await _linuxMedia.update({
+      'status': playing
+          ? 'Playing'
+          : stopped
+              ? 'Stopped'
+              : 'Paused',
+    });
+    return;
+  }
   if (kIsWeb || !Platform.isWindows) return;
   await _smtcInit();
   if (!_smtcReady) return;
@@ -356,5 +419,11 @@ Future<void> initBackgroundAudio() async {
     });
   } else if (Platform.isWindows) {
     await _smtcInit();
+  } else if (Platform.isLinux) {
+    await _linuxMedia.start();
+    await _linuxMedia.update({'volume': enginePlayer.state.volume / 100});
+    _linuxVolumeSubscription ??= enginePlayer.stream.volume.listen((value) {
+      unawaited(_linuxMedia.update({'volume': value / 100}));
+    });
   }
 }

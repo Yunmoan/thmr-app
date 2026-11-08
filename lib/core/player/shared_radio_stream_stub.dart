@@ -5,6 +5,7 @@ class SharedRadioStream {
       throw UnsupportedError('Local radio relay is unavailable');
 
   void stop() {}
+  Future<void> dispose() async {}
 }
 
 final sharedRadioStream = SharedRadioStream();

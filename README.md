@@ -29,7 +29,7 @@ API 插件单独交付为 OPENAPI-Next-Core 的 Next ZIP 包，也兼容 legacy 
 
 安装包构建完成后会逐个平台上传到同一个 GitHub Release 草稿，仓库所有者可先下载；全部平台完成后自动发布（普通构建为预发布，`v*` 稳定标签为正式发布）。你下载原包上传到镜像后，修改 Next 插件 `apis/updater/index.js` 顶部 `THMR_DOWNLOAD_URLS` 的四个地址，再把 Release 的签名清单放到插件的 `data/`。支持 `thmr-update.json` 和 `thmr-release.json`，后者优先；legacy 使用项目根目录的 `data/updates/`。`/updater/thmr/status` 可检查已验签的版本和故障类型。镜像地址可以单独调整，版本、文件大小与哈希仍经过验签。
 
-CI 自动获取最新 Flutter stable 和 Node.js LTS；同一次构建的四个平台共用解析后的 Flutter SDK。GitHub Actions 跟随最新稳定主版本，Dependabot 每周检查后续主版本升级。Windows / Linux 使用 `*-latest`；macOS 因 arm64 容量不足暂用当前稳定版 Intel 运行器，仓库 Variable `THMR_MACOS_RUNNER` 可覆盖为 `macos-latest`。Java 自动选取当前 Gradle 支持范围内的最新稳定版。
+CI 自动获取最新 Flutter stable 和 Node.js LTS；同一次构建的四个平台共用解析后的 Flutter SDK。GitHub Actions 跟随最新稳定主版本，Dependabot 每周检查后续主版本升级。Windows 使用 `windows-latest`，Linux 固定 `ubuntu-24.04` 作为兼容基线；macOS 因 arm64 容量不足暂用当前稳定版 Intel 运行器，仓库 Variable `THMR_MACOS_RUNNER` 可覆盖为 `macos-latest`。Java 自动选取当前 Gradle 支持范围内的最新稳定版。
 
 ## 构建与发布
 
@@ -50,11 +50,11 @@ Linux Debian/Ubuntu 构建依赖：
 
 ```bash
 sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev \
-  liblzma-dev libstdc++-12-dev libsecret-1-dev libjsoncpp-dev \
+  liblzma-dev g++ libsecret-1-dev libjsoncpp-dev \
   libayatana-appindicator3-dev libmpv-dev mpv
 ```
 
-分发时保留整个 `bundle/`，运行系统仍需 libmpv、GTK、libsecret、jsoncpp 和 Ayatana AppIndicator 等运行库。Linux 内置 WebView 登录暂不支持，可使用网页版；macOS/Linux 暂用原生标题栏。Windows 托盘和迷你播放器保持原有行为。
+分发时保留整个 `bundle/`，使用 `./thmr` 启动，可运行 `./install-desktop.sh` 添加当前用户的应用菜单入口。运行系统仍需 libmpv、GTK、libsecret、jsoncpp 和 Ayatana AppIndicator 等运行库；频谱使用内置 minimp3，无需安装 FFmpeg 命令。Linux 已接入托盘、关闭行为设置、MPRIS 系统媒体控制和本应用实时频谱，托盘不可用时回退任务栏最小化。Linux 登录保留网页版入口，本轮不适配客户端登录和迷你播放器；macOS/Linux 使用原生标题栏。完整安装、测试和兼容边界见 [Linux 使用说明](docs/LINUX.md)。
 
 桌面端（Windows / macOS / Linux）每个登录会话只运行一个实例。重复启动会退出新进程并唤起已有窗口；Windows 支持从托盘隐藏或最小化状态恢复，并保留当前的主窗口 / 迷你播放器模式。退出或崩溃后可正常重新启动。
 
@@ -100,7 +100,7 @@ lib/
 ## 已实现(对齐 FLUTTER.md 里程碑)
 
 - **M1 播放器**:状态双定时器轮询(10s + `expectedEndMs` 精准换曲刷新)、media_kit 直连 MP3 流、直播状态机(idle/connecting/online/buffering/reconnecting,重连策略与 Web 端一致)、码率切换(按 station 持久化、播放中热切换)、听众数 / LIVE 徽标
-- **系统媒体控制**:Windows SMTC 与 Android/iOS `audio_service` 同步曲目信息、播放状态和进度；系统播放/暂停键共用直播流状态机，不提供直播流 seek。
+- **系统媒体控制**:Windows SMTC、Linux MPRIS 与 Android/iOS `audio_service` 同步曲目信息、播放状态和进度；系统播放/暂停键共用直播流状态机，不提供直播流 seek。
 - **M5 反馈**:曲目反馈表单(10 类枚举、联系方式必填、`autoSkipped` 提示)
 - **M4 部分**:切歌投票(阈值来自 `/api/meta`,公开接口可看票数)
 - **M2 账号**:Bearer 会话存取、`/auth/me` 引导、昵称修改与内置 WebView 登录（Linux 除外）
@@ -110,8 +110,9 @@ lib/
 
 | 项 | 说明 |
 | --- | --- |
-| Linux 登录 | 当前 WebView 插件不支持 Linux，需替换登录方案或提供系统浏览器回调接口 |
-| macOS/Linux 桌面扩展 | 托盘、迷你窗口和频谱原生实现待接入；Windows 已支持 |
+| Linux 登录 | 保留网页版入口，本轮不适配；当前后端没有可用于桌面浏览器登录的凭据交付契约 |
+| macOS 桌面扩展 | 托盘、迷你窗口和频谱原生实现待接入 |
+| Linux 迷你播放器 | 本轮明确不适配 |
 | 评论 / 广场 | 等后端 `/api/social/*` 接口落地后再对接(FLUTTER.md 第十章) |
 
 ## 平台注意

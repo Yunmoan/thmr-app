@@ -9,10 +9,8 @@ import '../../../core/api/radio_api.dart';
 import '../../../core/config.dart';
 import '../../../core/models/models.dart';
 import '../../../core/player/playback_controller.dart';
-import '../../../core/player/spectrum_android.dart'
-    show AndroidSpectrum, AndroidSpectrumStatus;
 import '../../../core/player/spectrum.dart'
-    show SpectrumSource, getPlatformSpectrum;
+    show SpectrumSource, RetryableSpectrumSource, getPlatformSpectrum;
 import '../../../core/state/app_providers.dart';
 import '../../../core/state/auth_provider.dart';
 import '../../../core/state/station_provider.dart';
@@ -597,13 +595,13 @@ class _AudioStripState extends State<AudioStrip>
 
   Future<void> _retrySpectrum() async {
     final source = _cap;
-    if (source is! AndroidSpectrum) return;
+    if (source is! RetryableSpectrumSource) return;
     final ready = await source.retry();
     if (!mounted) return;
     setState(() {});
     if (!ready) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('实时频谱暂不可用，请检查电台连接后重试。'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(source.unavailableReason ?? '实时频谱暂不可用，请重试。'),
       ));
     }
   }
@@ -665,10 +663,9 @@ class _AudioStripState extends State<AudioStrip>
         final old = _values;
         _values = List.generate(count, (i) => i < old.length ? old[i] : 0.08);
       }
-      final android = _cap is AndroidSpectrum ? _cap : null;
-      final needsAction = widget.playing &&
-          android != null &&
-          android.status == AndroidSpectrumStatus.unavailable;
+      final retryable = _cap is RetryableSpectrumSource ? _cap : null;
+      final needsAction =
+          widget.playing && retryable != null && retryable.isUnavailable;
       return RepaintBoundary(
         child: Stack(
           alignment: Alignment.center,

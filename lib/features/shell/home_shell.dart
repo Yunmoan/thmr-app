@@ -1,7 +1,6 @@
 import 'dart:async' show unawaited;
 import 'dart:io' show Directory, File, Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:tray_manager/tray_manager.dart';
@@ -9,7 +8,11 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/player/playback_controller.dart';
-import '../../core/platform/windows_process_exit.dart';
+import '../../core/player/audio_engine.dart';
+import '../../core/platform/desktop_window.dart';
+import '../../core/platform/linux_tray.dart';
+import '../../core/player/shared_radio_stream.dart';
+import '../../core/player/spectrum_linux.dart';
 import '../../core/state/settings_provider.dart';
 import '../../core/state/station_provider.dart';
 import '../../shared/widgets/player_dock_bar.dart';
@@ -33,7 +36,11 @@ class _HomeShellState extends ConsumerState<HomeShell>
   int _index = 0;
   bool _autoTried = false;
   bool _closing = false;
-  bool get _isWindows => !kIsWeb && Platform.isWindows;
+  bool _closeDialogOpen = false;
+  bool _hiddenToTray = false;
+  bool _trayReady = false;
+  LinuxTrayMonitor? _trayMonitor;
+  Directory? _trayDirectory;
 
   static const _destinations = [
     (icon: Icons.radio_outlined, selected: Icons.radio, label: '收听'),
@@ -80,10 +87,15 @@ class _HomeShellState extends ConsumerState<HomeShell>
   @override
   void initState() {
     super.initState();
-    if (_isWindows) {
+    if (hasDesktopWindowControls) {
       windowManager.addListener(this);
       trayManager.addListener(this);
-      _setupTray();
+      unawaited(_setupTray());
+      if (Platform.isLinux) {
+        _trayMonitor = LinuxTrayMonitor()
+          ..addListener(_trayAvailabilityChanged);
+        unawaited(_trayMonitor!.start());
+      }
       // 关窗 → 隐藏到托盘(后台继续放送);退出走托盘菜单
       windowManager.setPreventClose(true).catchError((_) {});
     }
@@ -91,23 +103,70 @@ class _HomeShellState extends ConsumerState<HomeShell>
 
   Future<void> _setupTray() async {
     try {
-      // tray_manager (Windows) requires an .ico file on disk.
-      final data = await rootBundle.load('assets/icons/thmr_tray.ico');
-      final trayFile = File('${Directory.systemTemp.path}/thmr_tray.ico');
+      final icon = Platform.isWindows ? 'thmr_tray.ico' : 'icon-512.png';
+      final data = await rootBundle.load('assets/icons/$icon');
+      final directory = await Directory.systemTemp.createTemp('thmr-tray-');
+      if (!mounted || _closing) {
+        await directory.delete(recursive: true);
+        return;
+      }
+      _trayDirectory = directory;
+      final trayFile = File('${directory.path}/$icon');
       await trayFile.writeAsBytes(data.buffer.asUint8List(), flush: true);
       await trayManager.setIcon(trayFile.path);
-      await trayManager.setToolTip('东方音乐电台 THMR');
+      if (Platform.isWindows) {
+        await trayManager.setToolTip('东方音乐电台 THMR');
+      }
       await trayManager.setContextMenu(Menu(items: [
         MenuItem(
             label: '显示主窗口',
             onClick: (_) async {
-              await windowManager.show();
-              await windowManager.focus();
+              _hiddenToTray = false;
+              await restoreDesktopWindow();
             }),
         MenuItem.separator(),
         MenuItem(label: '退出', onClick: (_) => _reallyExit()),
       ]));
-    } catch (_) {}
+      _trayReady = true;
+      if (Platform.isLinux) _trayAvailabilityChanged();
+    } catch (_) {
+      _trayMonitor?.dispose();
+      _trayMonitor = null;
+      if (mounted) {
+        ref.read(desktopTrayAvailableProvider.notifier).state = false;
+      }
+    }
+  }
+
+  void _trayAvailabilityChanged() {
+    if (!mounted || _closing) return;
+    final available = _trayReady && (_trayMonitor?.value ?? false);
+    ref.read(desktopTrayAvailableProvider.notifier).state = available;
+    if (!available && _hiddenToTray) {
+      _hiddenToTray = false;
+      unawaited(_minimizeToTaskbar());
+    }
+  }
+
+  Future<void> _minimizeToTaskbar() async {
+    await restoreDesktopWindow();
+    await windowManager.minimize();
+  }
+
+  Future<void> _hideOrMinimize() async {
+    await _trayMonitor?.refresh();
+    if (!mounted || _closing) return;
+    if (ref.read(desktopTrayAvailableProvider)) {
+      _hiddenToTray = true;
+      await windowManager.hide();
+      // Cover a panel-host loss while hide() was in flight.
+      if (!ref.read(desktopTrayAvailableProvider)) {
+        _hiddenToTray = false;
+        await _minimizeToTaskbar();
+      }
+    } else {
+      await _minimizeToTaskbar();
+    }
   }
 
   /// 真正退出(托盘菜单 / 关闭询问选「退出程序」时)。
@@ -118,7 +177,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
       unawaited(_rememberExitChoiceAndQuit());
       return;
     }
-    terminateWindowsProcess();
+    unawaited(_quit());
   }
 
   Future<void> _rememberExitChoiceAndQuit() async {
@@ -132,31 +191,45 @@ class _HomeShellState extends ConsumerState<HomeShell>
     } catch (_) {
       // Exiting takes priority if preferences cannot be written.
     } finally {
-      terminateWindowsProcess();
+      await _quit();
     }
   }
 
+  Future<void> _quit() => quitDesktopApplication(() async {
+        _trayMonitor?.dispose();
+        _trayMonitor = null;
+        await ref.read(playbackProvider.notifier).stop();
+        if (Platform.isLinux) await LinuxSpectrum.instance.dispose();
+        await disposeSystemMediaControls();
+        await sharedRadioStream.dispose();
+        await trayManager.destroy();
+        await _trayDirectory?.delete(recursive: true);
+      });
+
   @override
   void onWindowClose() async {
-    if (_closing) return;
+    if (_closing || _closeDialogOpen) return;
     // 关闭按钮:按用户偏好询问 / 直接退出 / 隐藏到托盘
     final action = ref.read(settingsProvider).closeAction;
     if (action == CloseAction.tray) {
-      await windowManager.hide();
+      await _hideOrMinimize();
       return;
     }
     if (action == CloseAction.exit) {
       _reallyExit();
       return;
     }
+    _closeDialogOpen = true;
     final picked = await _askCloseAction();
+    _closeDialogOpen = false;
+    if (!mounted || _closing) return;
     if (picked == null) return; // 取消 → 什么都不做
     final (choice, remember) = picked;
     if (choice == CloseAction.tray) {
       if (remember) {
         await ref.read(settingsProvider.notifier).setCloseAction(choice);
       }
-      await windowManager.hide();
+      await _hideOrMinimize();
     } else {
       _reallyExit(rememberChoice: remember);
     }
@@ -165,6 +238,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
   /// 关闭询问:返回 (选择, 是否记住);null = 取消。
   Future<(CloseAction, bool)?> _askCloseAction() {
     var remember = false;
+    final trayAvailable = ref.read(desktopTrayAvailableProvider);
     return showDialog<(CloseAction, bool)>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -174,7 +248,9 @@ class _HomeShellState extends ConsumerState<HomeShell>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('最小化到托盘将保持后台放送,随时从托盘恢复。'),
+              Text(trayAvailable
+                  ? '最小化到托盘将保持后台放送,随时从托盘恢复。'
+                  : '当前桌面托盘不可用，将最小化到任务栏并继续放送。'),
               const SizedBox(height: 10),
               SizedBox(
                 height: 40,
@@ -203,7 +279,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
               onPressed: () =>
                   Navigator.of(dialogContext).pop((CloseAction.tray, remember)),
               icon: const Icon(Icons.call_received_rounded, size: 16),
-              label: const Text('最小化到托盘'),
+              label: Text(trayAvailable ? '最小化到托盘' : '最小化到任务栏'),
             ),
             const SizedBox(width: 8),
             FilledButton.icon(
@@ -223,9 +299,14 @@ class _HomeShellState extends ConsumerState<HomeShell>
   }
 
   @override
+  void onWindowFocus() {
+    _hiddenToTray = false;
+  }
+
+  @override
   void onTrayIconMouseDown() {
-    windowManager.show();
-    windowManager.focus();
+    _hiddenToTray = false;
+    unawaited(restoreDesktopWindow());
   }
 
   @override
@@ -235,7 +316,8 @@ class _HomeShellState extends ConsumerState<HomeShell>
 
   @override
   void dispose() {
-    if (_isWindows) {
+    _trayMonitor?.dispose();
+    if (hasDesktopWindowControls) {
       windowManager.removeListener(this);
       trayManager.removeListener(this);
     }

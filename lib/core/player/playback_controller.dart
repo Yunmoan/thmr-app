@@ -71,6 +71,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       play: playFromSystem,
       pause: pause,
       stop: stop,
+      volume: setVolume,
     );
     // 启动时恢复上次音量(shared_preferences,与设置项同一套方案)
     _loadVolume();
@@ -97,7 +98,9 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   int _volumeRevision = 0;
   bool _disposed = false;
   bool get _useLocalRelay =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.linux);
 
   Future<void> _openRadio(String url, {required bool play}) async {
     var playbackUrl = url;
@@ -115,7 +118,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   void _onPlaying(bool playing) {
     if (_disposed) return;
     // Windows SMTC:同步系统媒体面板状态
-    unawaited(smtcUpdatePlayback(
+    unawaited(updateSystemMediaPlayback(
         playing: playing, stopped: !playing && _currentUrl == null));
     if (playing) {
       _stallTimer?.cancel();
@@ -253,7 +256,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     );
     if (_useLocalRelay) sharedRadioStream.stop();
     await _player.stop();
-    unawaited(smtcUpdatePlayback(playing: false, stopped: true));
+    unawaited(updateSystemMediaPlayback(playing: false, stopped: true));
   }
 
   Future<void> setVolume(double value) async {

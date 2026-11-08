@@ -10,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'app.dart';
 import 'core/platform/window_presentation.dart';
+import 'core/platform/desktop_window.dart';
 import 'core/player/audio_engine.dart';
 import 'core/state/settings_provider.dart';
 import 'core/theme/thmr_colors.dart';
@@ -30,21 +31,32 @@ Future<void> main(List<String> args) async {
 
   if (updateLaunch) FlutterError.onError = updateErrorHandler;
   // 桌面 / 移动全平台播放后端(just_audio 桌面实现受限,统一 media_kit)
-  MediaKit.ensureInitialized();
+  try {
+    MediaKit.ensureInitialized();
+  } catch (error, stack) {
+    if (kIsWeb || !Platform.isLinux) rethrow;
+    debugPrint('Linux audio initialization failed: $error\n$stack');
+    runApp(const MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: SelectableText(
+              '无法初始化音频播放。\n\n'
+              '请使用 bundle 目录中的 thmr 启动器检查运行依赖。\n'
+              'Ubuntu/Debian 可安装 libmpv2；完整说明见 README-Linux.md。',
+            ),
+          ),
+        ),
+      ),
+    ));
+    return; // Never acknowledge an update whose playback engine cannot start.
+  }
 
   final container = ProviderContainer();
   await container.read(settingsProvider.notifier).ready;
 
-  if (isWindows) {
-    await windowManager.ensureInitialized();
-    const options = WindowOptions(
-      titleBarStyle: TitleBarStyle.hidden,
-      size: Size(1180, 780),
-      minimumSize: Size(430, 660),
-      backgroundColor: Colors.transparent,
-    );
-    await windowManager.waitUntilReadyToShow(options);
-  }
+  await initializeDesktopWindow();
 
   runApp(UncontrolledProviderScope(
     container: container,

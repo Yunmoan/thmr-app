@@ -104,6 +104,31 @@ install(CODE "
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib")
 
+# Spectrum decoding is bundled and does not require a system ffmpeg executable.
+add_library(thmr_mp3 SHARED "${CMAKE_CURRENT_SOURCE_DIR}/../native/mp3_decoder.cc")
+target_compile_features(thmr_mp3 PRIVATE cxx_std_14)
+target_include_directories(thmr_mp3 SYSTEM PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/../native/vendor/minimp3")
+set_target_properties(thmr_mp3 PROPERTIES CXX_VISIBILITY_PRESET hidden)
+install(TARGETS thmr_mp3 LIBRARY DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+  COMPONENT Runtime)
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../native/vendor/minimp3/LICENSE"
+  DESTINATION "${INSTALL_BUNDLE_DATA_DIR}/licenses/minimp3" COMPONENT Runtime)
+
+add_executable(thmr_runtime_check
+  "${CMAKE_CURRENT_SOURCE_DIR}/../native/check_linux_runtime.cc")
+target_link_libraries(thmr_runtime_check PRIVATE ${CMAKE_DL_LIBS})
+install(TARGETS thmr_runtime_check RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/../tool/linux/launch.sh"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}" RENAME thmr COMPONENT Runtime)
+install(PROGRAMS
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tool/linux/install-desktop.sh"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tool/linux/uninstall-desktop.sh"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../docs/LINUX.md"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}" RENAME README-Linux.md COMPONENT Runtime)
+
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 
