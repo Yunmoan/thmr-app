@@ -12,6 +12,7 @@ import '../../core/player/audio_engine.dart';
 import '../../core/platform/desktop_window.dart';
 import '../../core/platform/linux_tray.dart';
 import '../../core/player/shared_radio_stream.dart';
+import '../../core/player/spectrum_linux.dart';
 import '../../core/state/settings_provider.dart';
 import '../../core/state/station_provider.dart';
 import '../../shared/widgets/player_dock_bar.dart';
@@ -198,6 +199,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
         _trayMonitor?.dispose();
         _trayMonitor = null;
         await ref.read(playbackProvider.notifier).stop();
+        if (Platform.isLinux) await LinuxSpectrum.instance.dispose();
         await disposeSystemMediaControls();
         await sharedRadioStream.dispose();
         await trayManager.destroy();

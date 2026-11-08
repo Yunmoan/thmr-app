@@ -98,7 +98,9 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   int _volumeRevision = 0;
   bool _disposed = false;
   bool get _useLocalRelay =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.linux);
 
   Future<void> _openRadio(String url, {required bool play}) async {
     var playbackUrl = url;
