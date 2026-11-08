@@ -52,6 +52,34 @@ RadioSource? fastestRadioSource(List<SourceMeasurement> measurements) {
   return usable.isEmpty ? null : usable.first.source;
 }
 
+/// Automatic mode only hops away from [current] when the faster source wins
+/// by a meaningful margin. Probe timings differ by tens of milliseconds run
+/// to run; switching the API host, covers and live stream for that noise
+/// costs a reconnect and gains nothing.
+RadioSource chooseRadioSource(
+  List<SourceMeasurement> measurements,
+  RadioSource current, {
+  double minImprovement = 0.1,
+}) {
+  final fastest = fastestRadioSource(measurements);
+  if (fastest == null || fastest.id == current.id) return current;
+  SourceMeasurement? currentMeasurement;
+  SourceMeasurement? fastestMeasurement;
+  for (final result in measurements) {
+    if (!result.usable) continue;
+    if (result.source.id == current.id) currentMeasurement = result;
+    if (result.source.id == fastest.id) fastestMeasurement = result;
+  }
+  if (currentMeasurement == null || fastestMeasurement == null) {
+    return currentMeasurement == null ? fastest : current;
+  }
+  final elapsed = currentMeasurement.probe.elapsed.inMicroseconds;
+  if (elapsed <= 0) return fastest;
+  final improvement =
+      1 - fastestMeasurement.probe.elapsed.inMicroseconds / elapsed;
+  return improvement >= minImprovement ? fastest : current;
+}
+
 class RadioSourceTester {
   RadioSourceTester({NetworkProbe? probe}) : _probe = probe ?? NetworkProbe();
   final NetworkProbe _probe;

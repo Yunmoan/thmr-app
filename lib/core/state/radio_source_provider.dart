@@ -97,7 +97,7 @@ class RadioSourceController extends StateNotifier<RadioSourceState> {
       state = RadioSourceState(
         preference: state.preference,
         selected: state.preference == RadioSourcePreference.automatic
-            ? fastest ?? state.selected
+            ? chooseRadioSource(results, state.selected)
             : state.selected,
         tested: true,
         measurements: results,

@@ -71,6 +71,36 @@ void main() {
         RadioSourcePreference.source2);
   });
 
+  test('automatic selection keeps the current source on noise-level margins',
+      () async {
+    final controller = RadioSourceController(
+        testerFactory: () => _Tester(
+            Future.value([measurement(0, 1200), measurement(1, 1150)])));
+    addTearDown(controller.dispose);
+    await controller.ensureSelected();
+    // 源 2 measured ~4% faster; not enough to justify reconnecting everything.
+    expect(controller.state.selected.id, RadioSourcePreference.source1);
+    expect(controller.state.tested, isTrue);
+  });
+
+  test('chooseRadioSource respects the improvement threshold per current', () {
+    expect(
+        chooseRadioSource([measurement(0, 120), measurement(1, 65)],
+                radioSources[0])
+            .id,
+        RadioSourcePreference.source2);
+    expect(
+        chooseRadioSource([measurement(0, 600), measurement(1, 640)],
+                radioSources[1])
+            .id,
+        RadioSourcePreference.source2);
+    expect(
+        chooseRadioSource([measurement(0, 640), measurement(1, 600)],
+                radioSources[1])
+            .id,
+        RadioSourcePreference.source2);
+  });
+
   test('a speed test leaves a manually selected source unchanged', () async {
     final controller = RadioSourceController(
         preference: RadioSourcePreference.source1,

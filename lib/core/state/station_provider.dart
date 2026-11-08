@@ -168,14 +168,14 @@ final stationProvider = StateNotifierProvider<StationPoller, StationUiState>(
 );
 
 /// 直播流地址:状态接口可用 + 用户码率偏好 → 完整 URL。
+/// 自动测速未完成时也返回当前(暂定)来源的地址,手动播放无需等待测速;
+/// 自动连播在 home_shell 另行等待测速完成,避免连上后再重连。
 final streamUrlProvider = Provider<String?>((ref) {
   final st = ref.watch(stationProvider);
   final status = st.status;
   if (status == null) return null;
   final prefs = ref.watch(settingsProvider);
   final profile = st.selectedProfile(prefs.bitrateFor(appConfig.stationId));
-  if (!ref.watch(radioSourceProvider.select((source) => source.ready))) {
-    return null;
-  }
+  // radioApiProvider follows the selected source, so this rebuilds on switch.
   return ref.watch(radioApiProvider).streamUrl(appConfig.stationId, profile.id);
 });
