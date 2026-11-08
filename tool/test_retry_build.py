@@ -32,6 +32,12 @@ class RetryBuildTests(unittest.TestCase):
     def test_network_failure_stops_after_three_attempts(self):
         self.assertEqual(self.scenario('HTTP 503: Service Unavailable'), (7, 3, 2))
 
+    def test_gradle_wrapper_http_error_is_retried(self):
+        self.assertEqual(self.scenario(
+            'java.io.IOException: Server returned HTTP response code: 504 '
+            'for URL: https://github.com/gradle/gradle-distributions/file.zip', 2),
+            (0, 2, 1))
+
     def test_compiler_failure_is_not_retried(self):
         self.assertEqual(self.scenario('error: unresolved reference: widget'),
                          (7, 1, 0))

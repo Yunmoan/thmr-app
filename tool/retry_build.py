@@ -8,7 +8,7 @@ import time
 
 
 TRANSIENT_FAILURE = re.compile(
-    r'(?:HTTP(?: response:)?|status code)[: ]+(?:408|429|5\d\d)\b'
+    r'(?:HTTP(?: response(?: code)?)?|status code)[: ]+(?:408|429|5\d\d)\b'
     r'|(?:connection|read|connect) (?:reset|timed out)'
     r'|temporary failure in name resolution'
     r'|remote host terminated the handshake',
