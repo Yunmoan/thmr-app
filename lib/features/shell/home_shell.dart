@@ -15,6 +15,7 @@ import '../../core/player/shared_radio_stream.dart';
 import '../../core/player/spectrum_linux.dart';
 import '../../core/state/settings_provider.dart';
 import '../../core/state/station_provider.dart';
+import '../../core/state/radio_source_provider.dart';
 import '../../shared/widgets/player_dock_bar.dart';
 import '../account/account_screen.dart';
 import '../../core/theme/thmr_theme.dart';
@@ -87,6 +88,11 @@ class _HomeShellState extends ConsumerState<HomeShell>
   @override
   void initState() {
     super.initState();
+    Future.microtask(() {
+      if (mounted) {
+        unawaited(ref.read(radioSourceProvider.notifier).ensureSelected());
+      }
+    });
     if (hasDesktopWindowControls) {
       windowManager.addListener(this);
       trayManager.addListener(this);
@@ -331,16 +337,19 @@ class _HomeShellState extends ConsumerState<HomeShell>
     final settings = ref.watch(settingsProvider);
     final stationReady =
         ref.watch(stationProvider.select((s) => s.status != null));
+    final sourceReady =
+        ref.watch(radioSourceProvider.select((source) => source.ready));
     final (pbPhase, pbPaused) =
         ref.watch(playbackProvider.select((s) => (s.phase, s.userPaused)));
     if (!_autoTried &&
         settings.autoPlay &&
         stationReady &&
+        sourceReady &&
         pbPhase == PlaybackPhase.idle &&
         !pbPaused) {
-      _autoTried = true;
       final url = ref.read(streamUrlProvider);
       if (url != null) {
+        _autoTried = true;
         Future.microtask(() => ref.read(playbackProvider.notifier).tune(url));
       }
     }
