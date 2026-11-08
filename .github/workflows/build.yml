@@ -133,7 +133,9 @@ jobs:
           env PATH=/nonexistent "$flutter_sdk/bin/cache/dart-sdk/bin/dart" \
             --packages=.dart_tool/package_config.json tool/test_linux_spectrum.dart \
             "$PWD/build/linux/x64/release/bundle/lib/libthmr_mp3.so"
-          python3 tool/test_linux_app.py build/linux/x64/release/bundle
+          for attempt in 1 2 3; do
+            python3 tool/test_linux_app.py build/linux/x64/release/bundle
+          done
       - name: Pack the complete bundle
         env:
           CLIENT_VERSION: ${{ needs.validate.outputs.version }}
@@ -269,10 +271,14 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with:
-          # Gradle 9.3.x supports Java through 25; select its latest compatible GA.
-          java-version: '>=17 <26'
+          # Use the runner's cached LTS JDK instead of downloading the newest GA.
+          java-version: '21'
           distribution: temurin
-          check-latest: true
+          cache: gradle
+          cache-dependency-path: |
+            android/*.gradle.kts
+            android/gradle.properties
+            android/gradle/wrapper/gradle-wrapper.properties
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ needs.validate.outputs.flutter_version }}
@@ -302,7 +308,7 @@ jobs:
                   output.write(f'THMR_ANDROID_KEYSTORE_PATH={target}\n')
           PY
       - run: >-
-          flutter build apk --release
+          python3 tool/retry_build.py -- flutter build apk --release
           --build-name=${{ needs.validate.outputs.version }}
           --build-number=${{ needs.validate.outputs.build_number }}
           --dart-define=THMR_CLIENT_VERSION=${{ needs.validate.outputs.version }}

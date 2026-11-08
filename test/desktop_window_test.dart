@@ -30,4 +30,31 @@ void main() {
     expect(calls.map((call) => call.method),
         ['isMinimized', 'restore', 'show', 'focus']);
   });
+
+  test('Linux releases resources before terminating without GTK teardown',
+      () async {
+    final events = <String>[];
+    await quitDesktopApplication(
+        () async {
+          await Future<void>.delayed(Duration.zero);
+          events.add('cleanup');
+        },
+        platform: TargetPlatform.linux,
+        exitProcess: (code) {
+          events.add('exit $code');
+        });
+
+    expect(events, ['cleanup', 'exit 0']);
+    expect(calls, isEmpty);
+  });
+
+  test('Linux still terminates when resource cleanup fails', () async {
+    final exits = <int>[];
+    await quitDesktopApplication(() async {
+      throw StateError('media cleanup failed');
+    }, platform: TargetPlatform.linux, exitProcess: exits.add);
+
+    expect(exits, [0]);
+    expect(calls, isEmpty);
+  });
 }
