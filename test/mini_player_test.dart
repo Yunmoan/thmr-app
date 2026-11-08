@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:thmr_app/core/models/models.dart';
 import 'package:thmr_app/core/player/playback_controller.dart';
+import 'package:thmr_app/core/platform/window_presentation.dart';
 import 'package:thmr_app/core/state/station_provider.dart';
 import 'package:thmr_app/core/state/settings_provider.dart';
 import 'package:thmr_app/core/theme/thmr_theme.dart';
@@ -31,6 +32,17 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     const windowChannel = MethodChannel('window_manager');
+    const presentationChannel = MethodChannel('thmr/window_presentation');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      presentationChannel,
+      (call) async => null,
+    );
+    await WindowPresentation().startupReady();
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(presentationChannel, null);
+      presentationChannel.setMethodCallHandler(null);
+    });
     const screenChannel =
         MethodChannel('dev.leanflutter.plugins/screen_retriever');
     final positions = <Offset>[];
@@ -84,6 +96,20 @@ void main() {
     await advance(420);
     expect(positions.last, const Offset(-328, 100));
     expect(hides, 0);
+    expect(find.text('暂无播放'), findsNothing);
+
+    // A second launch must also expose a mini player tucked off screen, even
+    // when its HWND was already visible and receives no new "show" event.
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+      presentationChannel.name,
+      presentationChannel.codec.encodeMethodCall(const MethodCall('activate')),
+      (_) {},
+    );
+    await advance(220);
+    expect(positions.last, const Offset(0, 100));
+    expect(find.text('暂无播放'), findsOneWidget);
+    listener.onWindowMoved();
+    await advance(420);
     expect(find.text('暂无播放'), findsNothing);
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);

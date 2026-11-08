@@ -56,6 +56,8 @@ sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev \
 
 分发时保留整个 `bundle/`，运行系统仍需 libmpv、GTK、libsecret、jsoncpp 和 Ayatana AppIndicator 等运行库。Linux 内置 WebView 登录暂不支持，可使用网页版；macOS/Linux 暂用原生标题栏。Windows 托盘和迷你播放器保持原有行为。
 
+桌面端（Windows / macOS / Linux）每个登录会话只运行一个实例。重复启动会退出新进程并唤起已有窗口；Windows 支持从托盘隐藏或最小化状态恢复，并保留当前的主窗口 / 迷你播放器模式。退出或崩溃后可正常重新启动。
+
 ## 设计语言:「幻想乡放送局」
 
 与 Web 端(`thmr/src/styles/tokens.css`)同一套令牌,源出博丽神社的红白配色:

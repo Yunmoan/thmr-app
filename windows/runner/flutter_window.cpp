@@ -17,6 +17,16 @@ FlutterWindow::FlutterWindow(const flutter::DartProject& project)
 
 FlutterWindow::~FlutterWindow() {}
 
+void FlutterWindow::RequestActivation() {
+  activation_pending_ = true;
+  // Preserve first-frame preparation and any in-progress mini-mode transition.
+  if (!startup_ready_ || presentation_concealed_ || !GetHandle()) return;
+  activation_pending_ = false;
+  ShowWindow(GetHandle(), IsIconic(GetHandle()) ? SW_RESTORE : SW_SHOW);
+  SetForegroundWindow(GetHandle());
+  presentation_channel_->InvokeMethod("activate", nullptr);
+}
+
 bool FlutterWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {
     return false;
@@ -100,7 +110,11 @@ void FlutterWindow::RegisterWindowPresentation() {
       [this](const flutter::MethodCall<flutter::EncodableValue>& call,
              std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
         const auto& method = call.method_name();
-        if (method == "conceal") {
+        if (method == "startupReady") {
+          startup_ready_ = true;
+          if (activation_pending_) RequestActivation();
+          result->Success();
+        } else if (method == "conceal") {
           if (presentation_concealed_) {
             result->Error("presentation_busy", "Window is already concealed");
             return;
@@ -194,5 +208,6 @@ HRESULT FlutterWindow::RevealWindow() {
   }
   DwmSetWindowAttribute(GetHandle(), DWMWA_TRANSITIONS_FORCEDISABLED,
                         &saved_transitions_disabled_, sizeof(BOOL));
+  if (activation_pending_ && SUCCEEDED(hr)) RequestActivation();
   return hr;
 }

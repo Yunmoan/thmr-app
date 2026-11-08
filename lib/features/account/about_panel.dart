@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/thmr_theme.dart';
@@ -68,48 +69,7 @@ class AboutPanel extends StatelessWidget {
           const SizedBox(height: 18),
           Divider(color: tokens.panelBorder, height: 1),
           const SizedBox(height: 16),
-          Text('项目与社区',
-              style: theme.textTheme.labelLarge
-                  ?.copyWith(color: tokens.ink, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 10),
-          LayoutBuilder(builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 660 ? 3 : 1;
-            final cardWidth =
-                (constraints.maxWidth - (columns - 1) * 8) / columns;
-            return Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                SizedBox(
-                  width: cardWidth,
-                  child: const _AboutLink(
-                    icon: Icons.person_outline_rounded,
-                    label: '作者',
-                    name: '云默安',
-                    url: 'https://github.com/Yunmoan',
-                  ),
-                ),
-                SizedBox(
-                  width: cardWidth,
-                  child: const _AboutLink(
-                    icon: Icons.favorite_border_rounded,
-                    label: '特别鸣谢',
-                    name: 'AoralsFout',
-                    url: 'https://github.com/AoralsFout',
-                  ),
-                ),
-                SizedBox(
-                  width: cardWidth,
-                  child: const _AboutLink(
-                    icon: Icons.forum_outlined,
-                    label: 'THMR 官方交流群',
-                    name: '1094578162',
-                    url: 'https://qm.qq.com/q/pKXxsx4m52',
-                  ),
-                ),
-              ],
-            );
-          }),
+          const _ProjectCommunity(),
           const SizedBox(height: 18),
           Divider(color: tokens.panelBorder, height: 1),
           const SizedBox(height: 14),
@@ -134,6 +94,126 @@ class AboutPanel extends StatelessWidget {
   }
 }
 
+// Snapshot of https://api.github.com/repos/Yunmoan/thmr-app/contributors
+// verified on 2026-11-08. The author is credited separately above the list.
+const _contributors = ['AoralsFout', 'lbw14514'];
+
+class _ProjectCommunity extends StatelessWidget {
+  const _ProjectCommunity();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.thmr;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('项目与社区',
+            style: theme.textTheme.titleMedium
+                ?.copyWith(color: tokens.ink, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        Text('认识创作者，与同好一起参与 THMR。',
+            style: theme.textTheme.bodySmall?.copyWith(color: tokens.mutedInk)),
+        const SizedBox(height: 16),
+        _LinkGrid(children: [
+          const _AboutLink(
+            icon: Icon(Icons.person_outline_rounded),
+            label: '作者 · @Yunmoan',
+            name: '云默安',
+            url: 'https://github.com/Yunmoan',
+          ),
+          const _AboutLink(
+            icon: Icon(Icons.forum_outlined),
+            label: 'THMR 官方交流群',
+            name: '1094578162',
+            url: 'https://qm.qq.com/q/pKXxsx4m52',
+          ),
+          _AboutLink(
+            icon: SvgPicture.asset(
+              'assets/icons/github.svg',
+              width: 22,
+              height: 22,
+              colorFilter: ColorFilter.mode(tokens.ink, BlendMode.srcIn),
+            ),
+            label: '项目源码',
+            name: 'GitHub',
+            url: 'https://github.com/Yunmoan/thmr-app',
+          ),
+        ]),
+        const SizedBox(height: 20),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text('贡献者',
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(color: tokens.ink, fontWeight: FontWeight.w700)),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: tokens.accentSoft,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                child: Text('${_contributors.length} 位',
+                    style: theme.textTheme.labelSmall
+                        ?.copyWith(color: tokens.ink)),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text('感谢每一份让 THMR 变得更好的贡献。',
+            style: theme.textTheme.bodySmall?.copyWith(color: tokens.mutedInk)),
+        const SizedBox(height: 12),
+        _LinkGrid(children: [
+          for (final login in _contributors)
+            _AboutLink(
+              icon: const Icon(Icons.favorite_border_rounded),
+              label: 'GitHub',
+              name: login,
+              url: 'https://github.com/$login',
+            ),
+        ]),
+      ],
+    );
+  }
+}
+
+/// Reflow before either a narrow viewport or large text crowds the link cards.
+class _LinkGrid extends StatelessWidget {
+  const _LinkGrid({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final minWidth = MediaQuery.textScalerOf(context).scale(240);
+      final columns = ((constraints.maxWidth + 12) / (minWidth + 12))
+          .floor()
+          .clamp(1, children.length);
+      final width = (constraints.maxWidth - (columns - 1) * 12) / columns;
+      return Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          for (final child in children) SizedBox(width: width, child: child),
+        ],
+      );
+    });
+  }
+}
+
+Future<void> _openExternalUrl(String url) async {
+  try {
+    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  } catch (_) {
+    // External URL handlers are optional on some platforms.
+  }
+}
+
 class _AboutLink extends StatelessWidget {
   const _AboutLink({
     required this.icon,
@@ -142,18 +222,10 @@ class _AboutLink extends StatelessWidget {
     required this.url,
   });
 
-  final IconData icon;
+  final Widget icon;
   final String label;
   final String name;
   final String url;
-
-  Future<void> _open() async {
-    try {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    } catch (_) {
-      // External URL handlers are optional on some platforms.
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -164,38 +236,41 @@ class _AboutLink extends StatelessWidget {
       child: Material(
         color: tokens.panelSoft,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: BorderRadius.circular(10),
           side: BorderSide(color: tokens.panelBorder),
         ),
         child: InkWell(
-          onTap: _open,
-          borderRadius: BorderRadius.circular(9),
+          onTap: () => _openExternalUrl(url),
+          borderRadius: BorderRadius.circular(10),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+            padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                Icon(icon, size: 19, color: tokens.ink),
-                const SizedBox(width: 9),
+                ExcludeSemantics(
+                  child: IconTheme(
+                    data: IconThemeData(size: 22, color: tokens.ink),
+                    child: icon,
+                  ),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.labelSmall
                               ?.copyWith(color: tokens.mutedInk)),
                       Text(name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
+                          style: theme.textTheme.titleSmall?.copyWith(
                               color: tokens.ink, fontWeight: FontWeight.w700)),
                     ],
                   ),
                 ),
                 const SizedBox(width: 4),
-                Icon(Icons.open_in_new_rounded,
-                    size: 15, color: tokens.mutedInk),
+                ExcludeSemantics(
+                  child: Icon(Icons.open_in_new_rounded,
+                      size: 16, color: tokens.mutedInk),
+                ),
               ],
             ),
           ),

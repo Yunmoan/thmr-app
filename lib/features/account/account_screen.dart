@@ -321,11 +321,15 @@ class AccountScreen extends ConsumerWidget {
               ),
             ),
           ],
+          if (supportsAppUpdates) ...[
+            const SizedBox(height: 18),
+            const SectionHeader(title: '应用更新'),
+            const UpdatePanel(),
+          ],
           const SizedBox(height: 18),
           const SectionHeader(title: '关于'),
           AboutPanel(
               version: ref.watch(clientVersionProvider).valueOrNull?.label),
-          const UpdatePanel(),
           const SizedBox(height: 30),
         ],
       ),

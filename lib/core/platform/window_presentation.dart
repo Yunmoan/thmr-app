@@ -6,6 +6,15 @@ import 'package:flutter/widgets.dart';
 class WindowPresentation {
   static const _channel = MethodChannel('thmr/window_presentation');
 
+  static final activationRequests = ValueNotifier<int>(0);
+
+  Future<void> startupReady() {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'activate') activationRequests.value++;
+    });
+    return _channel.invokeMethod<void>('startupReady');
+  }
+
   Future<void> conceal() => _channel.invokeMethod<void>('conceal');
 
   Future<void> setMaximized(bool maximized) =>
