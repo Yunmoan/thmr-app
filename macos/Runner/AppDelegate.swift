@@ -43,8 +43,8 @@ class AppDelegate: FlutterAppDelegate {
     NSApp.activate(ignoringOtherApps: true)
   }
 
-  func applicationShouldHandleReopen(_ sender: NSApplication,
-                                     hasVisibleWindows flag: Bool) -> Bool {
+  override func applicationShouldHandleReopen(_ sender: NSApplication,
+                                              hasVisibleWindows flag: Bool) -> Bool {
     Self.showMainWindow()
     return false
   }
