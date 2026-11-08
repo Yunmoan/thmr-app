@@ -360,11 +360,13 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
       vsync: this,
       duration: const Duration(milliseconds: 160),
     )..addListener(_onPositionTick);
+    WindowPresentation.activationRequests.addListener(_onActivationRequested);
     if (!kIsWeb && Platform.isWindows) windowManager.addListener(this);
   }
 
   @override
   void dispose() {
+    WindowPresentation.activationRequests.removeListener(_onActivationRequested);
     _hideTimer?.cancel();
     _moveTimer?.cancel();
     _moveSerial++;
@@ -391,6 +393,8 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
   void onWindowEvent(String eventName) {
     if (eventName == 'show' && _tucked) unawaited(_reveal());
   }
+
+  void _onActivationRequested() => unawaited(_reveal());
 
   Future<void> _snapAfterMove(int serial) async {
     if (!mounted || _transitioning || _settingPosition || _dragging) return;

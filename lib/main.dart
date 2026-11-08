@@ -9,6 +9,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'app.dart';
+import 'core/platform/window_presentation.dart';
 import 'core/player/audio_engine.dart';
 import 'core/state/settings_provider.dart';
 import 'core/theme/thmr_colors.dart';
@@ -98,4 +99,5 @@ Future<void> _showMainWindow(
   await binding.waitUntilFirstFrameRasterized;
   await windowManager.show();
   await windowManager.focus();
+  await WindowPresentation().startupReady();
 }

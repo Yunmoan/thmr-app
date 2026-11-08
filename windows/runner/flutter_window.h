@@ -16,6 +16,8 @@ class FlutterWindow : public Win32Window {
   explicit FlutterWindow(const flutter::DartProject& project);
   virtual ~FlutterWindow();
 
+  void RequestActivation();
+
  protected:
   // Win32Window:
   bool OnCreate() override;
@@ -39,6 +41,8 @@ class FlutterWindow : public Win32Window {
   uint64_t frame_serial_ = 0;
   bool frame_callback_pending_ = false;
   bool presentation_concealed_ = false;
+  bool startup_ready_ = false;
+  bool activation_pending_ = false;
   BOOL saved_transitions_disabled_ = FALSE;
 };
 
