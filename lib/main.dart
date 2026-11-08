@@ -31,7 +31,27 @@ Future<void> main(List<String> args) async {
 
   if (updateLaunch) FlutterError.onError = updateErrorHandler;
   // 桌面 / 移动全平台播放后端(just_audio 桌面实现受限,统一 media_kit)
-  MediaKit.ensureInitialized();
+  try {
+    MediaKit.ensureInitialized();
+  } catch (error, stack) {
+    if (kIsWeb || !Platform.isLinux) rethrow;
+    debugPrint('Linux audio initialization failed: $error\n$stack');
+    runApp(const MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: SelectableText(
+              '无法初始化音频播放。\n\n'
+              '请使用 bundle 目录中的 thmr 启动器检查运行依赖。\n'
+              'Ubuntu/Debian 可安装 libmpv2；完整说明见 README-Linux.md。',
+            ),
+          ),
+        ),
+      ),
+    ));
+    return; // Never acknowledge an update whose playback engine cannot start.
+  }
 
   final container = ProviderContainer();
   await container.read(settingsProvider.notifier).ready;

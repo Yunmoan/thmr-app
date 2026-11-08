@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | Windows x64 | 关闭旧进程、替换完整目录、重启；新版启动失败自动恢复旧目录 | 完整便携包；受保护目录安装时需确认 Windows 管理员授权；不要只更新 exe |
 | macOS Intel / Apple Silicon | 校验 `.app` 签名和 Bundle ID、替换应用、重启；失败恢复 | 直接分发的非沙盒版本；目录可写；公开分发应配置 Developer ID 与 Apple 公证 |
-| Linux x64 | 替换完整 `bundle`、重启；失败恢复 | 当前用户可写的独立便携目录；系统提供 libmpv/GTK 等运行库 |
+| Linux x64 | 替换完整 `bundle`、重启；失败恢复 | 安装目录与父目录可写；保留启动器、内置 MP3 解码器和完整运行文件；系统提供 libmpv/GTK 等运行库 |
 | Android | 后台下载并校验 APK，核对包名、版本码和签名后打开系统安装器 | 首次允许 THMR 安装应用；**系统要求用户确认安装**；每次发布保持相同签名密钥 |
 | iOS | 不启用此自更新器 | 通过 App Store / TestFlight 分发与更新 |
 
@@ -257,3 +257,5 @@ node tool/update_release.cjs inspect --file thmr-release.json --public-key <Base
 更新验证不通过时继续运行旧版，修复发布配置后重试。
 
 平台资料：[Android 安装确认](https://developer.android.com/reference/android/content/pm/PackageInstaller.SessionParams#setRequireUserAction(int))、[Flutter macOS 发布](https://docs.flutter.dev/deployment/macos)。
+
+Linux 的菜单入口指向固定安装路径中的 `thmr` 启动器；更新包保留同名启动器并整体替换目录，因此无需重新安装菜单入口。手动移动目录后才需要重新执行 `install-desktop.sh`。具体运行依赖及检查方式见 [Linux 使用说明](LINUX.md)。

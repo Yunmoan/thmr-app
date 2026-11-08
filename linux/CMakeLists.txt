@@ -115,6 +115,20 @@ install(TARGETS thmr_mp3 LIBRARY DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../native/vendor/minimp3/LICENSE"
   DESTINATION "${INSTALL_BUNDLE_DATA_DIR}/licenses/minimp3" COMPONENT Runtime)
 
+add_executable(thmr_runtime_check
+  "${CMAKE_CURRENT_SOURCE_DIR}/../native/check_linux_runtime.cc")
+target_link_libraries(thmr_runtime_check PRIVATE ${CMAKE_DL_LIBS})
+install(TARGETS thmr_runtime_check RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/../tool/linux/launch.sh"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}" RENAME thmr COMPONENT Runtime)
+install(PROGRAMS
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tool/linux/install-desktop.sh"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tool/linux/uninstall-desktop.sh"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../docs/LINUX.md"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}" RENAME README-Linux.md COMPONENT Runtime)
+
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 
