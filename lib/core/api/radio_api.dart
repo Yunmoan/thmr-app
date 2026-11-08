@@ -40,12 +40,17 @@ class RadioApi {
   Object? _resolveCovers(Object? value) {
     if (value is List) return value.map(_resolveCovers).toList();
     if (value is Map) {
-      return value.map((key, item) => MapEntry(
-            key,
-            key == 'coverUrl' && item is String
-                ? absolutizeCover(item, baseUrl)
-                : _resolveCovers(item),
-          ));
+      // Must rebuild as Map<String, dynamic>: Map.map() would widen nested
+      // maps to Map<dynamic, Object?>, breaking the strict casts in models.
+      final resolved = <String, dynamic>{};
+      for (final entry in value.entries) {
+        final key = entry.key as String;
+        final item = entry.value;
+        resolved[key] = key == 'coverUrl' && item is String
+            ? absolutizeCover(item, baseUrl)
+            : _resolveCovers(item);
+      }
+      return resolved;
     }
     return value;
   }
