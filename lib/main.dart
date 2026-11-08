@@ -10,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'app.dart';
 import 'core/platform/window_presentation.dart';
+import 'core/platform/desktop_window.dart';
 import 'core/player/audio_engine.dart';
 import 'core/state/settings_provider.dart';
 import 'core/theme/thmr_colors.dart';
@@ -35,16 +36,7 @@ Future<void> main(List<String> args) async {
   final container = ProviderContainer();
   await container.read(settingsProvider.notifier).ready;
 
-  if (isWindows) {
-    await windowManager.ensureInitialized();
-    const options = WindowOptions(
-      titleBarStyle: TitleBarStyle.hidden,
-      size: Size(1180, 780),
-      minimumSize: Size(430, 660),
-      backgroundColor: Colors.transparent,
-    );
-    await windowManager.waitUntilReadyToShow(options);
-  }
+  await initializeDesktopWindow();
 
   runApp(UncontrolledProviderScope(
     container: container,

@@ -9,7 +9,8 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/player/playback_controller.dart';
-import '../../core/platform/windows_process_exit.dart';
+import '../../core/platform/desktop_window.dart';
+import '../../core/player/shared_radio_stream.dart';
 import '../../core/state/settings_provider.dart';
 import '../../core/state/station_provider.dart';
 import '../../shared/widgets/player_dock_bar.dart';
@@ -101,8 +102,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
         MenuItem(
             label: '显示主窗口',
             onClick: (_) async {
-              await windowManager.show();
-              await windowManager.focus();
+              await restoreDesktopWindow();
             }),
         MenuItem.separator(),
         MenuItem(label: '退出', onClick: (_) => _reallyExit()),
@@ -118,7 +118,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
       unawaited(_rememberExitChoiceAndQuit());
       return;
     }
-    terminateWindowsProcess();
+    unawaited(_quit());
   }
 
   Future<void> _rememberExitChoiceAndQuit() async {
@@ -132,9 +132,15 @@ class _HomeShellState extends ConsumerState<HomeShell>
     } catch (_) {
       // Exiting takes priority if preferences cannot be written.
     } finally {
-      terminateWindowsProcess();
+      await _quit();
     }
   }
+
+  Future<void> _quit() => quitDesktopApplication(() async {
+        await ref.read(playbackProvider.notifier).stop();
+        await sharedRadioStream.dispose();
+        await trayManager.destroy();
+      });
 
   @override
   void onWindowClose() async {
@@ -224,8 +230,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
 
   @override
   void onTrayIconMouseDown() {
-    windowManager.show();
-    windowManager.focus();
+    unawaited(restoreDesktopWindow());
   }
 
   @override
