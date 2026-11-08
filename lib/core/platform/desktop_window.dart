@@ -3,6 +3,7 @@ import 'dart:io' show Platform, exit;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Colors, Size;
+import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'windows_process_exit.dart';
@@ -35,18 +36,24 @@ Future<void> restoreDesktopWindow() async {
   await windowManager.focus();
 }
 
-/// Keep Windows' workaround for DLL shutdown hangs. Linux releases resources
-/// before letting GTK close the window and terminate its application normally.
-Future<void> quitDesktopApplication(
-    Future<void> Function() releaseResources) async {
-  if (Platform.isWindows) terminateWindowsProcess();
+/// Release Linux resources before asking Flutter to quit its GTK application.
+/// Destroying the GTK window inside a plugin method call can dispose the engine
+/// while it is still responding to that call.
+Future<void> quitDesktopApplication(Future<void> Function() releaseResources,
+    {TargetPlatform? platform}) async {
+  final target = platform ?? defaultTargetPlatform;
+  if (target == TargetPlatform.windows) terminateWindowsProcess();
   try {
     await releaseResources().timeout(const Duration(seconds: 3));
   } catch (error) {
     debugPrint('Desktop resource cleanup failed: $error');
   }
   try {
-    await windowManager.destroy();
+    if (target == TargetPlatform.linux) {
+      await SystemNavigator.pop();
+    } else {
+      await windowManager.destroy();
+    }
   } catch (error) {
     debugPrint('Desktop window shutdown failed: $error');
     exit(0);
