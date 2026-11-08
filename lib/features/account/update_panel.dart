@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/theme/thmr_theme.dart';
 import '../../core/update/app_update.dart';
+import '../../shared/widgets/thmr_panel.dart';
 
 bool get supportsAppUpdates =>
     !kIsWeb && defaultTargetPlatform != TargetPlatform.iOS;
@@ -157,8 +159,14 @@ class UpdatePanel extends ConsumerWidget {
     if (!supportsAppUpdates) return const SizedBox.shrink();
     final state = ref.watch(appUpdateProvider);
     final controller = ref.read(appUpdateProvider.notifier);
+    final theme = Theme.of(context);
+    final tokens = theme.thmr;
+    final titleStyle = theme.textTheme.bodyMedium
+        ?.copyWith(fontWeight: FontWeight.w600, color: tokens.ink);
+    final captionStyle =
+        theme.textTheme.labelSmall?.copyWith(color: tokens.mutedInk);
     final message = switch (state.status) {
-      UpdateStatus.idle => '从自有更新 API 检查客户端正式版本',
+      UpdateStatus.idle => '检查并获取最新正式版本',
       UpdateStatus.checking => '正在检查更新…',
       UpdateStatus.available => '发现新版本 v${state.release!.identity}',
       UpdateStatus.current => '当前已是最新版本',
@@ -170,60 +178,91 @@ class UpdatePanel extends ConsumerWidget {
       UpdateStatus.ready => '更新已就绪，可立即安装',
       UpdateStatus.installing => '正在准备安装更新…',
     };
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SwitchListTile.adaptive(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('自动检查更新'),
-          subtitle: const Text('启动或返回应用时检查，每 24 小时最多检查一次'),
-          value: state.autoCheck,
-          onChanged: (value) => controller.setAutoCheck(value),
-        ),
-        SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('自动下载更新'),
-            subtitle: const Text('发现新版本后在后台下载并校验，安装前会提示'),
-            value: state.autoDownload,
-            onChanged: (value) => controller.setAutoDownload(value)),
-        if (state.status == UpdateStatus.downloading) ...[
-          LinearProgressIndicator(value: state.progress),
-          const SizedBox(height: 8)
-        ],
-        Text(message, style: Theme.of(context).textTheme.bodySmall),
-        if (state.error != null && state.status != UpdateStatus.failed)
-          Text(state.error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error)),
-        if (state.installNotice != null) Text(state.installNotice!),
-        if (state.lastChecked != null) ...[
-          const SizedBox(height: 4),
-          Text('上次成功检查：${_formatTime(state.lastChecked!.toLocal())}',
-              style: Theme.of(context).textTheme.labelSmall),
-        ],
-        const SizedBox(height: 10),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          OutlinedButton.icon(
-            onPressed: state.busy
-                ? null
-                : () async {
-                    await controller.check(manual: true);
-                    if (!context.mounted) return;
-                    final result = ref.read(appUpdateProvider);
-                    if (result.release != null) {
-                      await showAppUpdate(context, result.release!);
-                    }
-                  },
-            icon: const Icon(Icons.system_update_alt_rounded, size: 18),
-            label:
-                Text(state.status == UpdateStatus.checking ? '检查中…' : '检查更新'),
-          ),
-          if (state.release != null)
-            TextButton(
-              onPressed: () => showAppUpdate(context, state.release!),
-              child: const Text('查看更新'),
+    return ThmrPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.update_rounded, size: 20, color: tokens.mutedInk),
+            const SizedBox(width: 12),
+            Expanded(
+                child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('自动检查更新', style: titleStyle),
+                Text('启动或返回应用时检查，每 24 小时最多检查一次', style: captionStyle),
+              ],
+            )),
+            Switch(
+              value: state.autoCheck,
+              onChanged: (value) => controller.setAutoCheck(value),
             ),
-        ]),
-      ],
+          ]),
+          const Divider(height: 22),
+          Row(children: [
+            Icon(Icons.download_outlined, size: 20, color: tokens.mutedInk),
+            const SizedBox(width: 12),
+            Expanded(
+                child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('自动下载更新', style: titleStyle),
+                Text('发现新版本后在后台下载并校验，安装前会提示', style: captionStyle),
+              ],
+            )),
+            Switch(
+                value: state.autoDownload,
+                onChanged: (value) => controller.setAutoDownload(value)),
+          ]),
+          const Divider(height: 22),
+          if (state.status == UpdateStatus.downloading) ...[
+            LinearProgressIndicator(value: state.progress),
+            const SizedBox(height: 8)
+          ],
+          Text(message,
+              style: theme.textTheme.bodySmall?.copyWith(
+                  color: state.status == UpdateStatus.failed
+                      ? theme.colorScheme.error
+                      : tokens.ink)),
+          if (state.error != null && state.status != UpdateStatus.failed)
+            Text(state.error!,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.error)),
+          if (state.installNotice != null)
+            Text(state.installNotice!,
+                style: theme.textTheme.bodySmall?.copyWith(color: tokens.ink)),
+          if (state.lastChecked != null) ...[
+            const SizedBox(height: 4),
+            Text('上次成功检查：${_formatTime(state.lastChecked!.toLocal())}',
+                style: captionStyle),
+          ],
+          const SizedBox(height: 10),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            OutlinedButton.icon(
+              onPressed: state.busy
+                  ? null
+                  : () async {
+                      await controller.check(manual: true);
+                      if (!context.mounted) return;
+                      final result = ref.read(appUpdateProvider);
+                      if (result.release != null) {
+                        await showAppUpdate(context, result.release!);
+                      }
+                    },
+              icon: const Icon(Icons.system_update_alt_rounded, size: 18),
+              label:
+                  Text(state.status == UpdateStatus.checking ? '检查中…' : '检查更新'),
+            ),
+            if (state.release != null)
+              TextButton(
+                onPressed: () => showAppUpdate(context, state.release!),
+                child: const Text('查看更新'),
+              ),
+          ]),
+          const SizedBox(height: 4),
+        ],
+      ),
     );
   }
 }
