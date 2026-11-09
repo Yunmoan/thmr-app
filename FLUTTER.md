@@ -130,6 +130,7 @@ GET {radioBaseUrl}/radio/{stationId}/{profileId}.m3u    # 文本播放列表(内
 - **不要暴露 seek / 上一曲**:直播流没有这些能力,通知栏只放「播放 / 暂停」。
 - 控制中心(iOS 锁屏 / Android 通知)的播放暂停需与 4.4 状态机联动。
 - 桌面端:关窗最小化到托盘时保持播放。
+- macOS 系统媒体控制:原生 `MPNowPlayingInfoCenter` + `MPRemoteCommandCenter`(`macos/Runner/MediaControls.swift`,通道 `thmr/macos_media`),与 Windows SMTC / Linux MPRIS 共用 `audio_engine` 的同一套更新入口;媒体键经 togglePlayPauseCommand 按当前状态映射为 play/pause。
 
 ---
 
