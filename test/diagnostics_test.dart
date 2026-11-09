@@ -77,7 +77,7 @@ void main() {
     await controller.run();
     expect(controller.state.running, isFalse);
     expect(controller.state.environment['客户端版本'], '0.1.5+1');
-    expect(controller.state.services, hasLength(6));
+    expect(controller.state.services, hasLength(7));
     expect(controller.state.services['account']?.error, isNotNull);
     expect(controller.state.services['source1']?.successful, isTrue);
     expect(controller.state.ipError, isNotNull);

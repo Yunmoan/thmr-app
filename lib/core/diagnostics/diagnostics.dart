@@ -20,6 +20,8 @@ const diagnosticTargets = [
   DiagnosticTarget('source1', 'THMR 流媒体服务 · 源 1', 'https://radio.yunmoan.cn'),
   DiagnosticTarget('website', 'THMR 网站在线服务', 'https://thmr.yunmoan.cn'),
   DiagnosticTarget('account', 'Natayark ID 账户服务', 'https://account.naids.com'),
+  DiagnosticTarget(
+      'staticassets', 'Natayark 静态资源服务', 'https://staticassets.naids.com'),
 ];
 
 class IpLocation {

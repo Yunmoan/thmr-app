@@ -263,6 +263,7 @@ class _ServiceCard extends StatelessWidget {
             : Theme.of(context).colorScheme.error;
     return ThmrPanel(
         frost: false,
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Icon(
@@ -272,37 +273,80 @@ class _ServiceCard extends StatelessWidget {
                         ? Icons.check_circle_outline_rounded
                         : Icons.info_outline_rounded,
                 color: color,
-                size: 21),
+                size: 20),
             const SizedBox(width: 8),
             Expanded(
                 child: Text(target.name,
                     style: Theme.of(context).textTheme.titleSmall)),
           ]),
-          const SizedBox(height: 7),
+          const SizedBox(height: 5),
           Text(target.url,
               style: Theme.of(context)
                   .textTheme
                   .bodySmall
                   ?.copyWith(color: tokens.mutedInk)),
-          const SizedBox(height: 9),
-          Text(value?.statusLabel ?? (running ? '检测中…' : '未完成'),
-              style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          // Status and latency share one row; the metric stays muted.
+          Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Expanded(
+                    child: Text(
+                        value?.statusLabel ?? (running ? '检测中…' : '未完成'),
+                        style: TextStyle(
+                            color: color, fontWeight: FontWeight.w600))),
+                if (value != null && value.reachable)
+                  Text('${value.elapsed.inMilliseconds} ms',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: tokens.mutedInk)),
+              ]),
           if (value != null) ...[
-            const Divider(height: 20),
+            const Divider(height: 16),
             if (value.uri.toString() != target.url)
-              _Detail('检测地址', publicUrl(value.uri)),
-            _Detail('响应耗时', '${value.elapsed.inMilliseconds} ms'),
-            _Detail('实际连接 IP', value.remoteAddress ?? '未获取'),
-            if (value.remotePort != null)
-              _Detail('连接端口', '${value.remotePort}'),
-            _Detail(
-                'DNS 地址',
-                value.dnsAddresses.isEmpty
+              _Meta('检测地址', publicUrl(value.uri)),
+            _Meta(
+                '对端',
+                value.remoteAddress == null
                     ? '未获取'
-                    : value.dnsAddresses.join('\n')),
-            for (final entry in value.headers.entries)
-              _Detail(entry.key, entry.value),
+                    : [
+                        value.remoteAddress!,
+                        if (value.remotePort != null) ':${value.remotePort}',
+                      ].join()),
+            if (value.dnsAddresses.isNotEmpty)
+              _Meta('DNS', value.dnsAddresses.join(' / ')),
+            if (value.headers.isNotEmpty)
+              _Meta('响应头',
+                  value.headers.entries.map((e) => '${e.key}: ${e.value}').join('\n')),
           ],
+        ]));
+  }
+}
+
+/// Compact key-value row for service cards (denser than [_Detail]).
+class _Meta extends StatelessWidget {
+  const _Meta(this.label, this.value);
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).thmr;
+    return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SizedBox(
+              width: 64,
+              child: Text(label,
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelSmall
+                      ?.copyWith(color: tokens.mutedInk))),
+          const SizedBox(width: 10),
+          Expanded(
+              child: Text(value, style: Theme.of(context).textTheme.bodySmall)),
         ]));
   }
 }

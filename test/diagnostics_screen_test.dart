@@ -116,7 +116,7 @@ void main() {
         ));
         await tester.pumpAndSettle();
         expect(find.text('网络诊断'), findsOneWidget);
-        expect(find.text('6 / 6 个服务已连通'), findsOneWidget);
+        expect(find.text('7 / 7 个服务已连通'), findsOneWidget);
         expect(find.text('192.0.2.42'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.tap(find.text('导出 TXT'));
@@ -150,7 +150,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.byTooltip('重新诊断'));
         await tester.pumpAndSettle();
-        expect(container.read(diagnosticsProvider).services, hasLength(6));
+        expect(container.read(diagnosticsProvider).services, hasLength(7));
       });
     }
   }
