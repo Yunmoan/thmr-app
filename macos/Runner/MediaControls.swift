@@ -21,6 +21,7 @@ final class MediaControls: NSObject {
   private var fallbackArtwork: NSImage?
 
   func attach(messenger: FlutterBinaryMessenger) {
+    // The engine's messenger (FlutterViewController no longer conforms).
     let channel = FlutterMethodChannel(
       name: "thmr/macos_media", binaryMessenger: messenger)
     channel.setMethodCallHandler { [weak self] call, result in
