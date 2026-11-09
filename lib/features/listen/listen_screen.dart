@@ -40,7 +40,7 @@ class ListenScreen extends ConsumerWidget {
                   child: CircularProgressIndicator(strokeWidth: 2)),
               const SizedBox(width: 10),
               Expanded(
-                  child: Text('正在比较两路播放源，完成后即可收听…',
+                  child: Text('正在比较最优播放源，完成后即可收听…',
                       style: Theme.of(context).textTheme.bodySmall)),
             ]),
           ),

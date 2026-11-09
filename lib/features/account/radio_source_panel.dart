@@ -32,7 +32,7 @@ class RadioSourcePanel extends ConsumerWidget {
           ),
         ]),
         const SizedBox(height: 4),
-        Text('自动比较两路播放源，优先使用更快的可用来源。选择会在下次启动时保留。',
+        Text('自动比较最优播放源，优先使用更快的可用来源。',
             style: Theme.of(context)
                 .textTheme
                 .bodySmall
@@ -56,7 +56,7 @@ class RadioSourcePanel extends ConsumerWidget {
             source.ready
                 ? '当前使用：${source.selected.label} · ${Uri.parse(source.selected.baseUrl).host}'
                 : source.testing
-                    ? '正在读取少量音频数据，比较两路连接…'
+                    ? '正在读取少量音频数据，比较最优连接…'
                     : '首次连接前自动测速',
             style: Theme.of(context).textTheme.bodySmall),
         if (source.measurements.isNotEmpty) ...[

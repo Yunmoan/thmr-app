@@ -30,7 +30,7 @@ Future<void> main(List<String> args) async {
         File(args.isEmpty ? 'build/diagnostics-smoke.txt' : args.first);
     await output.parent.create(recursive: true);
     await output.writeAsString(snapshot.toText(playback: {
-      '自动选择': fastest?.label ?? '两路均未通过测速',
+      '自动选择': fastest?.label ?? '所有播放源均未通过测速',
       for (final source in sources)
         '${source.source.label}测速':
             '${source.probe.elapsed.inMilliseconds} ms, ${source.probe.bytesRead} bytes, audio=${source.probe.audio}, usable=${source.usable}',
