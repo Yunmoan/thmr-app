@@ -611,12 +611,20 @@ Color _accentDot(AccentTheme t) => switch (t) {
       AccentTheme.reimu => const Color(0xFFC65A69),
       AccentTheme.marisa => const Color(0xFFD9A43C),
       AccentTheme.cirno => const Color(0xFF4E9FD4),
+      AccentTheme.tenshi => const Color(0xFF5C6BB0),
+      AccentTheme.sanae => const Color(0xFF4E9E62),
+      AccentTheme.koishi => const Color(0xFF8E6FA8),
+      AccentTheme.remilia => const Color(0xFFAE3548),
     };
 
 String _accentLabel(AccentTheme t) => switch (t) {
       AccentTheme.reimu => '灵梦 · 绯红',
       AccentTheme.marisa => '魔理沙 · 星尘',
       AccentTheme.cirno => '琪露诺 · 冰蓝',
+      AccentTheme.tenshi => '天子 · 绀蓝',
+      AccentTheme.sanae => '早苗 · 青风',
+      AccentTheme.koishi => '恋恋 · 紫瞳',
+      AccentTheme.remilia => '蕾米莉亚 · 猩红',
     };
 
 /// Nickname editor dialog shared by settings & first-login gate.
