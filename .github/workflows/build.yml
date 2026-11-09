@@ -159,8 +159,12 @@ jobs:
 
   macos:
     needs: [validate, prepare_release]
-    # The arm64 pool currently fails to acquire runners. Intel still builds both architectures.
-    runs-on: ${{ vars.THMR_MACOS_RUNNER || 'macos-26-intel' }}
+    # Plain macos-* labels are Apple Silicon (macos-26 = arm64); the -intel
+    # suffix is the Intel fallback. The earlier "cannot acquire a runner"
+    # episodes came from the retired macos-14 label, not a capacity shortage.
+    # Universal output is unchanged: ARCHS_STANDARD still builds both slices.
+    runs-on: macos-26
+    timeout-minutes: 60
     permissions:
       contents: write
     steps:
