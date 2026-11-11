@@ -110,22 +110,23 @@ class SectionHeader extends StatelessWidget {
   }
 }
 
-/// LIVE 徽标:红点呼吸 + LIVE 字样。
+/// 电台放送状态徽标。
 class LiveBadge extends StatelessWidget {
-  const LiveBadge({super.key, this.active = true});
+  const LiveBadge({super.key, this.active = true, this.switching = false});
 
   final bool active;
+  final bool switching;
 
   @override
   Widget build(BuildContext context) {
-    final color = active
+    final color = active && !switching
         ? Theme.of(context).colorScheme.primary
         : Theme.of(context).thmr.mutedInk;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Row(
@@ -138,7 +139,7 @@ class LiveBadge extends StatelessWidget {
           ),
           const SizedBox(width: 5),
           Text(
-            active ? '放送中' : '待机',
+            switching ? '切换中' : (active ? '放送中' : '待机'),
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: color,
                   fontWeight: FontWeight.w700,

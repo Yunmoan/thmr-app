@@ -6,8 +6,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/config.dart';
 import '../../core/network/network_probe.dart';
+import '../../core/state/channel_provider.dart';
 import '../../core/state/diagnostics_provider.dart';
 import '../../core/state/radio_source_provider.dart';
 import '../../core/state/settings_provider.dart';
@@ -54,14 +54,14 @@ class _DiagnosticsScreenState extends ConsumerState<DiagnosticsScreen> {
     setState(() => _saving = true);
     try {
       final source = ref.read(radioSourceProvider);
-      final profile =
-          ref.read(settingsProvider).bitrateFor(appConfig.stationId);
+      final stationId = ref.read(activeStationIdProvider);
+      final profile = ref.read(settingsProvider).bitrateFor(stationId);
       final screen = MediaQuery.of(context);
       final text = snapshot.toText(playback: {
         '选择模式': source.preference.label,
         '当前播放源':
             '${source.selected.label} · ${publicUrl(Uri.parse(source.selected.baseUrl))}',
-        '电台': appConfig.stationId,
+        '电台': stationId,
         '音质偏好': profile.isEmpty ? '电台默认' : profile,
         if (source.testedAt != null)
           '最近测速': source.testedAt!.toLocal().toIso8601String(),

@@ -158,6 +158,31 @@ class StationPublic {
       );
 }
 
+class RadioChannel {
+  const RadioChannel({required this.id, required this.name});
+
+  final String id;
+  final String name;
+
+  static final _idPattern = RegExp(r'^[A-Za-z0-9_-]{1,64}$');
+
+  static bool isValidId(String id) => _idPattern.hasMatch(id);
+
+  static List<RadioChannel> enabledFromJson(Object? data) {
+    if (data is! List) throw const FormatException('Invalid channel list');
+    final channels = <String, RadioChannel>{};
+    for (final entry in data) {
+      if (entry is! Map || entry['enabled'] == false) continue;
+      final id = (entry['categorize'] ?? entry['id'] ?? '').toString().trim();
+      if (!isValidId(id)) continue;
+      final name = (entry['name'] ?? '').toString().trim();
+      channels.putIfAbsent(
+          id, () => RadioChannel(id: id, name: name.isEmpty ? id : name));
+    }
+    return List.unmodifiable(channels.values);
+  }
+}
+
 class StationInfo {
   final String id;
   final String name;
@@ -454,7 +479,7 @@ class VoteStatus {
   final String stationId;
   final bool active;
   final int listeners;
-  final TrackRef? current;
+  final CurrentTrack? current;
   final VoteRound? round;
   final bool myVote;
   final String? reason;
@@ -473,11 +498,19 @@ class VoteStatus {
         stationId: (j['stationId'] ?? '') as String,
         active: j['active'] == true,
         listeners: (j['listeners'] as num?)?.toInt() ?? 0,
-        current: j['current'] == null ? null : TrackRef.fromJson(j['current']),
+        current:
+            j['current'] == null ? null : CurrentTrack.fromJson(j['current']),
         round: j['round'] == null ? null : VoteRound.fromJson(j['round']),
         myVote: j['myVote'] == true,
         reason: j['reason'] as String?,
       );
+
+  bool matchesTrack(String id, CurrentTrack? track) =>
+      active &&
+      stationId == id &&
+      track != null &&
+      current?.trackId == track.trackId &&
+      current?.startedAtMs == track.startedAtMs;
 }
 
 /// `GET /api/meta` — 启动时拉取,投票阈值 / 上限以它为准。

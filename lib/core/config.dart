@@ -5,7 +5,7 @@ class AppConfig {
     this.thmrBaseUrl = defaultThmrBaseUrl,
     this.stationId = defaultStationId,
     this.streamToken = '',
-    this.featuresVote = false,
+    this.featuresVote = true,
   });
 
   static const defaultRadioBaseUrl = 'https://radio.yunmoan.cn';
@@ -18,13 +18,13 @@ class AppConfig {
   /// THMR 账号后端(登录 / 收藏 / 投票)
   final String thmrBaseUrl;
 
-  /// 频道 ID(Web 端 window.RADIO_PUBLIC_CONFIG.stationId)
+  /// 默认频道 ID(Web 端 window.RADIO_PUBLIC_CONFIG.stationId)
   final String stationId;
 
   /// streamAuth 启用时的访问密钥(与 Web 端 dist/config.js token 同值)
   final String streamToken;
 
-  /// 功能开关:投票切歌(Web 端 features.vote,当前隐藏禁用)
+  /// 本地投票开关，开启时仍需 Web 端 features.vote 允许。
   final bool featuresVote;
 
   AppConfig copyWith({
@@ -57,7 +57,7 @@ const appConfig = AppConfig(
     defaultValue: AppConfig.defaultStationId,
   ),
   streamToken: String.fromEnvironment('THMR_STREAM_TOKEN'),
-  featuresVote: bool.fromEnvironment('THMR_FEATURE_VOTE'),
+  featuresVote: bool.fromEnvironment('THMR_FEATURE_VOTE', defaultValue: true),
 );
 
 /// 分享落地页(Web 浏览器打开),用于「复制分享链接」。

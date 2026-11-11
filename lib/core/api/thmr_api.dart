@@ -7,9 +7,9 @@ import 'radio_api.dart';
 /// THMR 账号后端(FLUTTER.md 7.2)。
 /// App 采用 Bearer 方案:WebView 提取一次 thmr_session,之后全部走 header。
 class ThmrApi {
-  ThmrApi() : _dio = Dio() {
+  ThmrApi({String? baseUrl}) : _dio = Dio() {
     _dio.options
-      ..baseUrl = appConfig.thmrBaseUrl
+      ..baseUrl = baseUrl ?? appConfig.thmrBaseUrl
       ..connectTimeout = const Duration(seconds: 8)
       ..receiveTimeout = const Duration(seconds: 15)
       ..validateStatus = (s) => s != null && s < 500;
@@ -47,6 +47,41 @@ class ThmrApi {
   Future<ThmrMeta> meta() async {
     final j = await _getJson('/api/meta');
     return ThmrMeta.fromJson(j);
+  }
+
+  Future<List<RadioChannel>> channels() async {
+    final response = await _dio.get<Object?>('/api/channels');
+    if (response.statusCode != 200) _throwApiError(response);
+    return RadioChannel.enabledFromJson(response.data);
+  }
+
+  /// 读取部署端的静态开关，与网页共用 config.js。
+  Future<bool> voteEnabled() async {
+    final response = await _dio.get<String>(
+      '/config.js',
+      options: Options(
+        responseType: ResponseType.plain,
+        headers: {'Cache-Control': 'no-cache'},
+      ),
+    );
+    if (response.statusCode != 200) _throwApiError(response);
+    final source = (response.data ?? '').replaceAllMapped(
+      RegExp(
+          r'''("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|//[^\r\n]*|/\*[\s\S]*?\*/'''),
+      (match) => switch (match[1]) {
+        '"features"' || "'features'" => 'features',
+        '"vote"' || "'vote'" => 'vote',
+        null => ' ',
+        _ => '""',
+      },
+    );
+    final config =
+        RegExp(r'\bwindow\.RADIO_PUBLIC_CONFIG\s*=\s*\{').firstMatch(source);
+    if (config == null) return false;
+    final features = RegExp(r'(?:^|,)\s*features\s*:\s*\{([^{}]*)\}')
+        .firstMatch(source.substring(config.end))?[1];
+    return features != null &&
+        RegExp(r'(?:^|,)\s*vote\s*:\s*true\s*(?:,|$)').hasMatch(features);
   }
 
   /// 他人分享(公开)。410 = 分享已过期。
@@ -187,10 +222,12 @@ class ThmrApi {
         .toList();
   }
 
-  Future<void> castVote(String stationId) async {
+  /// 返回是否已请求电台切换下一首。
+  Future<bool> castVote(String stationId) async {
     final r =
         await _dio.post<Object?>('/api/vote', data: {'stationId': stationId});
     if (r.statusCode != 200) _throwApiError(r);
+    return (r.data as Map)['skipTriggered'] == true;
   }
 
   Future<void> cancelVote(String stationId) async {

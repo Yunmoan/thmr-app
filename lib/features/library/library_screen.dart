@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/radio_api.dart';
 import '../../core/api/network_failure.dart';
-import '../../core/config.dart';
 import '../../core/models/models.dart';
 import '../../core/state/auth_provider.dart';
+import '../../core/state/channel_provider.dart';
 import '../../core/theme/thmr_colors.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/thmr_panel.dart';
@@ -34,6 +34,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   List<LibraryTrack>? _results;
   Object? _error;
   bool _loading = false;
+  int _searchRevision = 0;
 
   @override
   void dispose() {
@@ -44,6 +45,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   Future<void> _search() async {
     final auth = ref.read(authProvider);
     if (!auth.signedIn) return;
+    final stationId = ref.read(activeStationIdProvider);
+    final revision = ++_searchRevision;
     setState(() {
       _loading = true;
       _error = null;
@@ -51,26 +54,36 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     try {
       final api = ref.read(authProvider.notifier).api;
       final tracks = await api.searchTracks(
-        stationId: appConfig.stationId,
+        stationId: stationId,
         q: _controller.text.trim(),
         sort: _sort,
         pageSize: 100,
       );
-      if (!mounted) return;
+      if (!mounted || revision != _searchRevision) return;
       setState(() => _results = tracks);
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e);
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || revision != _searchRevision) return;
       setState(() => _error = e);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && revision == _searchRevision) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final stationId = ref.watch(activeStationIdProvider);
+    ref.listen(activeStationIdProvider, (_, __) {
+      if (_results == null && _error == null && !_loading) return;
+      _searchRevision++;
+      setState(() {
+        _results = null;
+        _error = null;
+        _loading = false;
+      });
+      _search();
+    });
     final auth = ref.watch(authProvider);
     final tokens = Theme.of(context).thmr;
 
@@ -122,7 +135,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               )
             else
               Expanded(
-                child: _buildBody(context, tokens),
+                child: _buildBody(context, tokens, stationId),
               ),
           ],
         ),
@@ -130,7 +143,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  Widget _buildBody(BuildContext context, ThmrTokens tokens) {
+  Widget _buildBody(BuildContext context, ThmrTokens tokens, String stationId) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -173,15 +186,17 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     return ListView.separated(
       itemCount: results.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, i) => _LibraryTile(track: results[i]),
+      itemBuilder: (context, i) =>
+          _LibraryTile(track: results[i], stationId: stationId),
     );
   }
 }
 
 class _LibraryTile extends ConsumerWidget {
-  const _LibraryTile({required this.track});
+  const _LibraryTile({required this.track, required this.stationId});
 
   final LibraryTrack track;
+  final String stationId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -237,16 +252,17 @@ class _LibraryTile extends ConsumerWidget {
   void _showAddDialog(BuildContext context, WidgetRef ref) {
     showModalBottomSheet<void>(
       context: context,
-      builder: (_) => _AddToCollectionSheet(track: track),
+      builder: (_) => _AddToCollectionSheet(track: track, stationId: stationId),
     );
   }
 }
 
 /// 添加到收藏夹(选夹)。
 class _AddToCollectionSheet extends ConsumerStatefulWidget {
-  const _AddToCollectionSheet({required this.track});
+  const _AddToCollectionSheet({required this.track, required this.stationId});
 
   final LibraryTrack track;
+  final String stationId;
 
   @override
   ConsumerState<_AddToCollectionSheet> createState() =>
@@ -281,7 +297,7 @@ class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
     try {
       final api = ref.read(authProvider.notifier).api;
       await api.addToCollection(c.id,
-          stationId: appConfig.stationId, trackId: widget.track.trackId);
+          stationId: widget.stationId, trackId: widget.track.trackId);
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context)

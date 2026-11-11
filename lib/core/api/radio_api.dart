@@ -61,6 +61,27 @@ class RadioApi {
     return StationStatus.fromJson(j);
   }
 
+  /// 全站客户端数，按 Radio 后端返回的所有频道汇总。
+  Future<int> siteListeners() async {
+    final response = await _dio.get<Object?>('/api/stations');
+    if (response.statusCode != 200) _throwApiError(response);
+    final stations = response.data;
+    if (stations is! List) throw const FormatException('Invalid station list');
+
+    var total = 0;
+    for (final station in stations) {
+      final count = switch (station is Map ? station['listeners'] : null) {
+        num value => value,
+        String value => num.tryParse(value),
+        _ => null,
+      };
+      if (count != null && count.isFinite && count >= 0) {
+        total += count.toInt();
+      }
+    }
+    return total;
+  }
+
   Future<List<QueueEntry>> playlist(String stationId) async {
     final r = await _dio.get<Object?>('/api/stations/$stationId/playlist',
         queryParameters: _tokenQuery.isEmpty ? null : _tokenQuery);

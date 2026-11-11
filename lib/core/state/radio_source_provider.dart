@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/radio_api.dart';
 import '../network/radio_sources.dart';
+import 'channel_provider.dart';
 import 'settings_provider.dart';
 
 export '../network/radio_sources.dart';
@@ -37,7 +38,9 @@ class RadioSourceController extends StateNotifier<RadioSourceState> {
   RadioSourceController({
     RadioSourcePreference preference = RadioSourcePreference.automatic,
     SourceTesterFactory? testerFactory,
+    String Function()? stationId,
   })  : _testerFactory = testerFactory ?? RadioSourceTester.new,
+        _stationId = stationId,
         super(RadioSourceState(
           preference: preference,
           selected:
@@ -45,6 +48,7 @@ class RadioSourceController extends StateNotifier<RadioSourceState> {
         ));
 
   final SourceTesterFactory _testerFactory;
+  final String Function()? _stationId;
   RadioSourceTester? _tester;
   Future<void>? _inFlight;
   int _generation = 0;
@@ -91,7 +95,7 @@ class RadioSourceController extends StateNotifier<RadioSourceState> {
       testedAt: state.testedAt,
     );
     try {
-      final results = await tester.measure();
+      final results = await tester.measure(stationId: _stationId?.call());
       if (!mounted || generation != _generation) return;
       final fastest = fastestRadioSource(results);
       state = RadioSourceState(
@@ -135,6 +139,7 @@ final radioSourceProvider =
     StateNotifierProvider<RadioSourceController, RadioSourceState>((ref) {
   final controller = RadioSourceController(
     preference: ref.read(settingsProvider).radioSource,
+    stationId: () => ref.read(activeStationIdProvider),
   );
   ref.listen(settingsProvider.select((settings) => settings.radioSource),
       (_, next) => controller.setPreference(next));

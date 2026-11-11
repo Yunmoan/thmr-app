@@ -321,6 +321,7 @@ Future<void> updateSystemMediaMetadata({
         thumbnail: thumb,
       ));
     } catch (_) {
+      if (serial != _metadataSerial) return;
       if (thumb == fallback) rethrow;
       await _smtc!.updateMetadata(MusicMetadata(
         title: title,
@@ -329,6 +330,7 @@ Future<void> updateSystemMediaMetadata({
         thumbnail: fallback,
       ));
     }
+    if (serial != _metadataSerial) return;
     await _smtc!.setPlaybackStatus(enginePlayer.state.playing
         ? PlaybackStatus.playing
         : PlaybackStatus.paused);
@@ -397,10 +399,12 @@ Future<void> clearSystemMediaMetadata() async {
     return;
   }
   if (kIsWeb || !Platform.isWindows) return;
+  final serial = ++_metadataSerial;
   await _smtcInit();
-  if (!_smtcReady) return;
+  if (!_smtcReady || serial != _metadataSerial) return;
   try {
     await _smtc!.clearMetadata();
+    if (serial != _metadataSerial) return;
     await _smtc!.setPlaybackStatus(PlaybackStatus.stopped);
   } catch (error) {
     debugPrint('Windows media clear failed: $error');

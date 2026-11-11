@@ -4,7 +4,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/config.dart';
 import '../../core/player/playback_controller.dart';
 import '../../core/state/settings_provider.dart';
 import '../../core/state/station_provider.dart';
@@ -199,14 +198,16 @@ class _DockBitrate extends ConsumerWidget {
     final accent = Theme.of(context).colorScheme.primary;
     final station = ref.watch(stationProvider);
     final settings = ref.watch(settingsProvider);
-    final profiles = station.status?.station.enabledBitrates ?? const [];
+    final info = station.status?.station;
+    final profiles = info?.enabledBitrates ?? const [];
     if (profiles.length < 2) return const SizedBox.shrink();
-    final selected =
-        station.selectedProfile(settings.bitrateFor(appConfig.stationId));
+    final stationId = info!.id;
+    final selected = station.selectedProfile(settings.bitrateFor(stationId));
 
     return PopupMenuButton<String>(
       position: PopupMenuPosition.over,
-      onSelected: (id) => _switchTo(ref, id),
+      onSelected: (id) =>
+          ref.read(settingsProvider.notifier).setBitrate(stationId, id),
       itemBuilder: (menuContext) => [
         for (final p in profiles)
           PopupMenuItem(
@@ -242,21 +243,5 @@ class _DockBitrate extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _switchTo(WidgetRef ref, String profileId) async {
-    await ref
-        .read(settingsProvider.notifier)
-        .setBitrate(appConfig.stationId, profileId);
-    // 正在播放 → 立即切到新流继续放送
-    final pb = ref.read(playbackProvider);
-    if (pb.phase == PlaybackPhase.online ||
-        pb.phase == PlaybackPhase.buffering ||
-        pb.phase == PlaybackPhase.connecting) {
-      final url = ref.read(streamUrlProvider);
-      if (url != null) {
-        await ref.read(playbackProvider.notifier).tune(url);
-      }
-    }
   }
 }

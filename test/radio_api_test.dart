@@ -72,6 +72,12 @@ const _playlistJson = {
   ],
 };
 
+const _stationListJson = [
+  {'id': 'main', 'enabled': false, 'listeners': 0},
+  {'id': 'touhou', 'enabled': true, 'listeners': 14, 'uniqueIps': 9},
+  {'id': 'touhou-curated', 'enabled': true, 'listeners': 3, 'uniqueIps': 2},
+];
+
 void main() {
   late HttpServer server;
 
@@ -80,9 +86,11 @@ void main() {
     server.listen((request) async {
       final response = request.response;
       response.headers.contentType = ContentType.json;
-      final json = request.uri.path.endsWith('/playlist')
-          ? _playlistJson
-          : _statusJson;
+      final json = switch (request.uri.path) {
+        '/api/stations' => _stationListJson,
+        '/api/stations/touhou/playlist' => _playlistJson,
+        _ => _statusJson,
+      };
       response.write(jsonEncode(json));
       await response.close();
     });
@@ -117,5 +125,10 @@ void main() {
     expect(queue.single.trackId, 't-queue');
     expect(queue.single.coverUrl,
         'http://127.0.0.1:${server.port}/covers/queue.jpg');
+  });
+
+  test('site listener total sums all Radio stations', () async {
+    final api = RadioApi(baseUrl: 'http://127.0.0.1:${server.port}');
+    expect(await api.siteListeners(), 17);
   });
 }

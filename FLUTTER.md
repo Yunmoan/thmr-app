@@ -41,10 +41,12 @@
 | 配置项 | 生产值 | 说明 |
 | --- | --- | --- |
 | `radioBaseUrl` | `https://radio.yunmoan.cn` | Radio 后端(流 / 状态 / 封面 / 反馈) |
-| `thmrBaseUrl` | `https://api.yunmoan.cn` | 账号后端(登录 / 收藏 / 投票) |
-| `stationId` | `main` | 频道 ID |
+| `thmrBaseUrl` | `https://thmr.yunmoan.cn` | 账号后端与部署配置地址 |
+| `stationId` | `touhou` | 默认频道 ID |
 | `streamToken` | 与 Web 端 `dist/config.js` 的 `token` 同值 | 仅当电台 `streamAuth.enabled=true` 时必填;追加在流地址与反馈接口上 |
-| `features.vote` | Web 端当前为 `false`(隐藏) | App 建议同样做成开关,并可在运行时按 `GET /api/meta` 调整 |
+| `features.vote` | 读取部署端 `/config.js` | 将 `features.vote` 设为 `false` 后，客户端在下一次检查时隐藏投票卡。收听页每 30 秒检查一次，投票或撤回前也会重新检查。构建时可用 `--dart-define=THMR_FEATURE_VOTE=false` 固定关闭。 |
+
+收听页从 `GET /api/channels` 读取可选频道，并保存最近选择。已有选择在列表中下线时回到默认频道。换台会更新直播流、曲目和队列，曲库、收藏、反馈与投票请求也随当前频道切换。码率偏好按频道保存。
 
 建议:配置以 JSON 资产内置 + `--dart-define` 覆盖;`streamToken` 属于发布物敏感项,更新随版本走。
 
@@ -52,7 +54,7 @@
 
 ## 三、通用约定(必读)
 
-1. **全部 JSON**(`export` 接口除外);错误响应统一为 `{"error": "<message>"}`。
+1. API 返回 JSON（`export` 接口除外），错误响应为 `{"error": "<message>"}`。`/config.js` 是静态配置文件。
 2. **ID 一律是字符串**:`trackId`、`collectionId`、`itemId`、`userId` 在 Dart 中用 `String` 接,不要用 int。
 3. **时间戳两套**:
    - `*Ms` 后缀(`startedAtMs` / `expectedEndMs` / `submittedAtMs` / `plannedStartMs`):毫秒 epoch,`int`。
@@ -95,6 +97,8 @@ GET {radioBaseUrl}/radio/{stationId}/{profileId}.m3u    # 文本播放列表(内
 2. **精准换曲刷新**:每次拿到状态后,若 `current.expectedEndMs` 存在,则定时在 `expectedEndMs - now + 800ms` 再拉一次,换曲几乎零延迟。
 
 `current.trackId` 变化时:刷新 UI、更新媒体通知(见第五章)、重置投票轮次展示。
+
+收听页每 30 秒从当前 Radio 源的 `GET /api/stations` 读取各频道听众数并求和。获取全站总数后，右侧每 4.2 秒翻页一次，交替显示本频道与全站的在线客户端数。
 
 ### 4.4 播放状态机
 
@@ -219,7 +223,8 @@ App ── 保存到安全存储,后续全部请求带 Authorization: Bearer <to
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/health` | 公开。探活 `{ok, version, database: "up"\|"down", uptimeSec}` |
-| GET | `/api/meta` | 公开。`{version, auth.natayarkConfigured, radio.publicBaseUrl, radio.defaultStationId, vote.threshold, collections.maxPerUser, collections.maxItemsPerCollection}` —— 启动时拉取,投票阈值/上限以它为准 |
+| GET | `/api/channels` | 公开。`[{categorize, name, enabled}]`。频道 ID 取 `categorize`，`enabled: false` 的频道不出现在切换菜单中。 |
+| GET | `/api/meta` | 公开。`{version, auth.natayarkConfigured, radio.publicBaseUrl, radio.defaultStationId, vote.threshold, collections.maxPerUser, collections.maxItemsPerCollection}` |
 | GET | `/api/auth/me` | `{user: {id, naidsId, username, nickname, email, realnameVerified, createdAt, needsNickname}}` |
 | PATCH | `/api/auth/profile` | body `{nickname}` → `{ok, nickname}`;400:少于 2 字符 / 违规词 |
 | POST | `/api/auth/logout` | `{ok: true}` |
@@ -378,8 +383,9 @@ class VoteStatus {
 
 ```
 App 启动
- ├─ 读配置 → 拉 Radio /api/stations/{sid}/status(失败进入重连态)
- ├─ 拉 {thmrBaseUrl}/api/meta(拿 vote.threshold、上限,判定登录后可用功能)
+ ├─ 读已保存的频道 → 拉 Radio /api/stations/{sid}/status(失败进入重连态)
+ ├─ 拉 {thmrBaseUrl}/api/channels 校验频道选择
+ ├─ 读取 {thmrBaseUrl}/config.js 的投票开关
  ├─ 有本地 token → GET /api/auth/me(401 则清 token)
  └─ 不自动播放(iOS/Android 首次需用户手势;桌面端可按策略自动起播)
 ```

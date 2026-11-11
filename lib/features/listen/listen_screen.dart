@@ -6,24 +6,43 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/radio_api.dart';
 import '../../core/models/models.dart';
+import '../../core/state/app_providers.dart';
+import '../../core/state/channel_provider.dart';
 import '../../core/state/station_provider.dart';
 import '../../core/state/radio_source_provider.dart';
 import '../../core/theme/thmr_theme.dart';
-import '../../shared/widgets/delay_fade_in.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import 'widgets/bitrate_row.dart';
+import 'widgets/channel_switcher.dart';
+import 'widgets/listener_stat.dart';
 import 'widgets/now_playing_panel.dart';
 import 'widgets/queue_strip.dart';
 import 'widgets/side_info_column.dart';
+import 'widgets/vote_panel.dart';
 
 /// 收听页(首页)。
-class ListenScreen extends ConsumerWidget {
+class ListenScreen extends ConsumerStatefulWidget {
   const ListenScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ListenScreen> createState() => _ListenScreenState();
+}
+
+class _ListenScreenState extends ConsumerState<ListenScreen> {
+  StationInfo? _lastStation;
+
+  @override
+  Widget build(BuildContext context) {
     final station = ref.watch(stationProvider);
-    final status = station.status;
+    final channel = ref.watch(activeStationIdProvider);
+    final info = station.status?.station;
+    final switching = info == null &&
+        station.initialLoading &&
+        _lastStation != null &&
+        _lastStation?.id != channel;
+    if (info != null) _lastStation = info;
+    // Keep the heading in place until the new channel supplies its metadata.
+    final heading = info ?? (station.initialLoading ? _lastStation : null);
     final selecting = ref.watch(radioSourceProvider
         .select((source) => source.testing && !source.tested));
 
@@ -46,15 +65,12 @@ class ListenScreen extends ConsumerWidget {
           ),
         Expanded(child: LayoutBuilder(builder: (context, c) {
           final wide = c.maxWidth >= 980;
-          if (wide && status != null) {
-            return _WideLayout(status: status, error: station.error);
+          if (wide) {
+            return _WideLayout(
+                station: station, heading: heading, switching: switching);
           }
           return _NarrowLayout(
-            status: status,
-            error: station.error,
-            initialLoading: station.initialLoading,
-            stationName: status?.station.name ?? '东方音乐电台 THMR',
-          );
+              station: station, heading: heading, switching: switching);
         })),
       ]),
     );
@@ -64,66 +80,68 @@ class ListenScreen extends ConsumerWidget {
 // ---------------- wide (>= 980px): hero + two columns ----------------
 
 class _WideLayout extends ConsumerWidget {
-  const _WideLayout({required this.status, this.error});
+  const _WideLayout({
+    required this.station,
+    required this.heading,
+    required this.switching,
+  });
 
-  final StationStatus status;
-  final Object? error;
+  final StationUiState station;
+  final StationInfo? heading;
+  final bool switching;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final status = station.status;
+    final error = station.error;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          DelayFadeIn(child: _Hero(status: status)),
+          _Hero(status: status, heading: heading, switching: switching),
           if (error != null)
             _ErrorCard(
-              error: error!,
+              error: error,
               onRetry: () => ref.read(stationProvider.notifier).refresh(),
             ),
           const SizedBox(height: 16),
           Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 5,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.only(bottom: 24),
-                    child: Column(
+            child: _ChannelTransition(
+              child: status == null
+                  ? _ChannelPlaceholder(
+                      loading: station.initialLoading, switching: switching)
+                  : Row(
+                      key: ValueKey(status.station.id),
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        DelayFadeIn(
-                          delay: const Duration(milliseconds: 70),
-                          child: NowPlayingPanel(
-                            status: status,
-                            inlineBitrate: false,
+                        Expanded(
+                          flex: 5,
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                NowPlayingPanel(
+                                  status: status,
+                                  inlineBitrate: false,
+                                ),
+                                const SizedBox(height: 12),
+                                _DesktopControls(status: status),
+                              ],
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        const ThmrPanel(
-                          padding: EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
-                          child: BitrateRow(),
+                        const SizedBox(width: 16),
+                        SizedBox(
+                          width: 330,
+                          child: SideInfoColumn(
+                            status: status,
+                            updatedAt: station.updatedAt,
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                SizedBox(
-                  width: 330,
-                  child: DelayFadeIn(
-                    delay: const Duration(milliseconds: 110),
-                    child: SideInfoColumn(
-                      status: status,
-                      updatedAt:
-                          ref.watch(stationProvider.select((s) => s.updatedAt)),
-                    ),
-                  ),
-                ),
-              ],
             ),
           ),
         ],
@@ -132,17 +150,62 @@ class _WideLayout extends ConsumerWidget {
   }
 }
 
-/// Hero banner, mirrors web home hero section.
-class _Hero extends StatelessWidget {
-  const _Hero({required this.status});
+bool _showVote(WidgetRef ref) => ref
+    .watch(voteEnabledProvider.select((value) => value.asData?.value == true));
+
+class _DesktopControls extends ConsumerWidget {
+  const _DesktopControls({required this.status});
 
   final StationStatus status;
 
   @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final showVote = _showVote(ref);
+    final showBitrate = status.station.enabledBitrates.isNotEmpty;
+    const quality = ThmrPanel(
+      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        widthFactor: 1,
+        heightFactor: 1,
+        child: BitrateRow(),
+      ),
+    );
+
+    if (!showVote) return showBitrate ? quality : const SizedBox.shrink();
+    final vote = VotePanel(status: status);
+    if (!showBitrate) return vote;
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Expanded(child: quality),
+          const SizedBox(width: 8),
+          Expanded(child: vote),
+        ],
+      ),
+    );
+  }
+}
+
+/// Hero banner, mirrors web home hero section.
+class _Hero extends StatelessWidget {
+  const _Hero({
+    required this.status,
+    required this.heading,
+    required this.switching,
+  });
+
+  final StationStatus? status;
+  final StationInfo? heading;
+  final bool switching;
+
+  @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).thmr;
-    final accent = Theme.of(context).colorScheme.primary;
-    final info = status.station;
+    final info = status?.station;
+    final title = heading?.public?.title ?? heading?.name ?? '东方音乐电台 THMR';
+    final description = heading?.public?.description ?? '';
 
     return ThmrPanel(
       padding: const EdgeInsets.fromLTRB(22, 18, 22, 18),
@@ -153,19 +216,22 @@ class _Hero extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  info.public?.title ?? info.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context)
-                      .textTheme
-                      .headlineMedium
-                      ?.copyWith(fontWeight: FontWeight.w900, height: 1.15),
+                _ChannelTransition(
+                  child: Text(
+                    title,
+                    key: ValueKey(title),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineMedium
+                        ?.copyWith(fontWeight: FontWeight.w900, height: 1.15),
+                  ),
                 ),
-                if ((info.public?.description ?? '').isNotEmpty) ...[
+                if (description.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Text(
-                    info.public!.description,
+                    description,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context)
@@ -180,69 +246,17 @@ class _Hero extends StatelessWidget {
                   runSpacing: 6,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    LiveBadge(active: info.enabled),
-                    _Pill(label: '频道 ${info.id}'),
+                    LiveBadge(
+                        active: info?.enabled ?? false, switching: switching),
+                    ChannelSwitcher(station: info),
                   ],
                 ),
               ],
             ),
           ),
           const SizedBox(width: 24),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '实时在线听众',
-                style: Theme.of(context)
-                    .textTheme
-                    .labelSmall
-                    ?.copyWith(color: tokens.mutedInk),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${status.listeners}',
-                style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  color: accent,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-              Text(
-                '客户端',
-                style: Theme.of(context)
-                    .textTheme
-                    .labelSmall
-                    ?.copyWith(color: tokens.mutedInk),
-              ),
-            ],
-          ),
+          ListenerStat(listeners: status?.listeners),
         ],
-      ),
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).thmr;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: tokens.panelSoft,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: tokens.panelBorder),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context)
-            .textTheme
-            .labelSmall
-            ?.copyWith(color: tokens.mutedInk, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -252,68 +266,92 @@ class _Pill extends StatelessWidget {
 
 class _NarrowLayout extends ConsumerWidget {
   const _NarrowLayout({
-    required this.status,
-    required this.initialLoading,
-    required this.stationName,
-    this.error,
+    required this.station,
+    required this.heading,
+    required this.switching,
   });
 
-  final StationStatus? status;
-  final bool initialLoading;
-  final String stationName;
-  final Object? error;
+  final StationUiState station;
+  final StationInfo? heading;
+  final bool switching;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final st = status;
-    final content = RefreshIndicator(
+    final st = station.status;
+    final error = station.error;
+    final showVote = st != null && _showVote(ref);
+    return RefreshIndicator(
       color: Theme.of(context).colorScheme.primary,
-      onRefresh: () => ref.read(stationProvider.notifier).refresh(),
+      onRefresh: () async {
+        ref.invalidate(channelCatalogProvider);
+        await ref.read(stationProvider.notifier).refresh();
+      },
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
-          if (st != null || error == null)
-            _TopBar(stationName: stationName, status: status),
+          _TopBar(
+            stationName: heading?.name ?? '东方音乐电台 THMR',
+            status: st,
+            switching: switching,
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ChannelSwitcher(station: st?.station),
+          ),
           if (error != null)
             _ErrorCard(
-              error: error!,
-              topSpacing: st == null ? 0 : 14,
+              error: error,
               onRetry: () => ref.read(stationProvider.notifier).refresh(),
             ),
-          if (st != null) ...[
-            const SizedBox(height: 14),
-            NowPlayingPanel(status: st),
-            const SizedBox(height: 18),
-            SectionHeader(
-              title: '接下来',
-              trailing: Text(
-                '队列 ${st.queue.length} 首',
-                style: Theme.of(context)
-                    .textTheme
-                    .labelMedium
-                    ?.copyWith(color: Theme.of(context).thmr.mutedInk),
-              ),
-            ),
-            QueueStrip(status: st),
-            const SizedBox(height: 24),
-          ] else if (!initialLoading && error == null)
-            const SizedBox(
-              height: 320,
-              child: Center(child: CircularProgressIndicator()),
-            ),
+          const SizedBox(height: 14),
+          _ChannelTransition(
+            child: st == null
+                ? _ChannelPlaceholder(
+                    loading: station.initialLoading, switching: switching)
+                : Column(
+                    key: ValueKey(st.station.id),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      NowPlayingPanel(status: st),
+                      if (showVote) ...[
+                        const SizedBox(height: 12),
+                        VotePanel(status: st),
+                      ],
+                      const SizedBox(height: 18),
+                      SectionHeader(
+                        title: '接下来',
+                        trailing: Text(
+                          '队列 ${st.queue.length} 首',
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelMedium
+                              ?.copyWith(
+                                  color: Theme.of(context).thmr.mutedInk),
+                        ),
+                      ),
+                      QueueStrip(status: st),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+          ),
         ],
       ),
     );
-    return content;
   }
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.stationName, required this.status});
+  const _TopBar({
+    required this.stationName,
+    required this.status,
+    required this.switching,
+  });
 
   final String stationName;
   final StationStatus? status;
+  final bool switching;
 
   @override
   Widget build(BuildContext context) {
@@ -329,14 +367,17 @@ class _TopBar extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                stationName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w800, height: 1.2),
+              _ChannelTransition(
+                child: Text(
+                  stationName,
+                  key: ValueKey(stationName),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w800, height: 1.2),
+                ),
               ),
               Text(
                 'Touhou Music Radio',
@@ -352,18 +393,96 @@ class _TopBar extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            LiveBadge(active: status?.station.enabled ?? false),
+            LiveBadge(
+                active: status?.station.enabled ?? false, switching: switching),
             const SizedBox(height: 5),
-            Text(
-              '${status?.listeners ?? '-'} 人在听',
-              style: Theme.of(context)
-                  .textTheme
-                  .labelSmall
-                  ?.copyWith(color: tokens.mutedInk),
-            ),
+            ListenerStat(listeners: status?.listeners, compact: true),
           ],
         ),
       ],
+    );
+  }
+}
+
+class _ChannelTransition extends StatelessWidget {
+  const _ChannelTransition({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) return child;
+
+    Widget layer(Widget transition, {required bool outgoing}) {
+      return TickerMode(
+        key: transition.key,
+        enabled: !outgoing,
+        child: IgnorePointer(
+          ignoring: outgoing,
+          child: ExcludeFocus(
+            excluding: outgoing,
+            child: ExcludeSemantics(excluding: outgoing, child: transition),
+          ),
+        ),
+      );
+    }
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 230),
+      reverseDuration: const Duration(milliseconds: 180),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      layoutBuilder: (current, previous) => Stack(
+        alignment: AlignmentDirectional.topStart,
+        children: [
+          for (final outgoing in previous) layer(outgoing, outgoing: true),
+          if (current != null) layer(current, outgoing: false),
+        ],
+      ),
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SlideTransition(
+          position: Tween(begin: const Offset(0, 0.01), end: Offset.zero)
+              .animate(animation),
+          child: child,
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _ChannelPlaceholder extends StatelessWidget {
+  const _ChannelPlaceholder({required this.loading, required this.switching});
+
+  final bool loading;
+  final bool switching;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!loading) return const SizedBox.shrink();
+    return Align(
+      alignment: AlignmentDirectional.topStart,
+      heightFactor: 1,
+      child: ThmrPanel(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox.square(
+                dimension: 14,
+                child: CircularProgressIndicator(strokeWidth: 2)),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Semantics(
+                liveRegion: true,
+                child: Text(switching ? '正在切换频道…' : '正在加载频道…',
+                    style: Theme.of(context).textTheme.bodySmall),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -372,12 +491,10 @@ class _ErrorCard extends StatelessWidget {
   const _ErrorCard({
     required this.error,
     required this.onRetry,
-    this.topSpacing = 14,
   });
 
   final Object error;
   final VoidCallback onRetry;
-  final double topSpacing;
 
   String get _friendly {
     if (error is ApiException) {
@@ -398,7 +515,7 @@ class _ErrorCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).thmr;
     return Padding(
-      padding: EdgeInsets.only(top: topSpacing),
+      padding: const EdgeInsets.only(top: 14),
       child: ThmrPanel(
         child: Row(
           children: [

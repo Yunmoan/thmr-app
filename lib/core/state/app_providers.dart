@@ -7,6 +7,7 @@ import '../api/thmr_api.dart';
 import '../config.dart';
 import '../models/models.dart';
 import 'auth_provider.dart';
+import 'channel_provider.dart';
 import 'collection_cache.dart';
 import 'station_provider.dart';
 
@@ -19,22 +20,17 @@ final metaProvider = FutureProvider<ThmrMeta>((ref) async {
 /// 当前曲收藏状态(9.1)— 跟随 trackGeneration 在换曲后自动重查。
 final favoritesStatusProvider =
     FutureProvider.autoDispose<FavoritesStatus>((ref) async {
-  // 依赖换曲计数:换曲 → invalidate
-  ref.watch(stationProvider.select((s) => s.trackGeneration));
-  final auth = ref.watch(authProvider);
-  if (!auth.signedIn) {
-    return const FavoritesStatus(
-        favorited: false, itemId: null, collectionId: null, collections: []);
-  }
-  final st = ref.watch(stationProvider).status;
-  final cur = st?.current;
-  if (cur == null) {
+  final stationId = ref.watch(activeStationIdProvider);
+  final trackId =
+      ref.watch(stationProvider.select((s) => s.status?.current?.trackId));
+  final userId = ref.watch(authProvider.select((s) => s.user?.id));
+  if (trackId == null || userId == null) {
     return const FavoritesStatus(
         favorited: false, itemId: null, collectionId: null, collections: []);
   }
   return ref.read(authProvider.notifier).api.favoritesStatus(
-        stationId: appConfig.stationId,
-        trackId: cur.trackId,
+        stationId: stationId,
+        trackId: trackId,
       );
 });
 
@@ -102,9 +98,33 @@ Future<void> _warmCollectionDetails(
   }
 }
 
-/// 投票状态(公开接口;登录后带 myVote)。
-final voteStatusProvider = FutureProvider.autoDispose<VoteStatus>((ref) async {
-  ref.watch(stationProvider.select((s) => s.trackGeneration));
-  final auth = ref.watch(authProvider.notifier);
-  return auth.api.voteStatus(appConfig.stationId);
+final voteEnabledProvider = FutureProvider.autoDispose<bool>((ref) {
+  if (!appConfig.featuresVote) return false;
+  final api = ref.watch(publicThmrApiProvider);
+  return _pollVote(ref, const Duration(seconds: 30), api.voteEnabled);
 });
+
+/// 换台、换曲或切换登录身份时立即刷新，其余时间轮询票数。
+final voteStatusProvider = FutureProvider.autoDispose<VoteStatus>((ref) {
+  final stationId = ref.watch(activeStationIdProvider);
+  ref.watch(stationProvider.select((s) => s.trackGeneration));
+  ref.watch(authProvider.select((s) => s.user?.id));
+  final api = ref.watch(authProvider.notifier).api;
+  return _pollVote(
+      ref, const Duration(seconds: 8), () => api.voteStatus(stationId));
+});
+
+Future<T> _pollVote<T>(
+    Ref ref, Duration interval, Future<T> Function() load) async {
+  Timer? timer;
+  var disposed = false;
+  ref.onDispose(() {
+    disposed = true;
+    timer?.cancel();
+  });
+  try {
+    return await load();
+  } finally {
+    if (!disposed) timer = Timer(interval, ref.invalidateSelf);
+  }
+}

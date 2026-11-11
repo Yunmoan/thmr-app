@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart' show Media, Player;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../state/channel_provider.dart';
 import '../state/station_provider.dart';
 import '../state/radio_source_provider.dart';
 import 'audio_engine.dart';
@@ -60,11 +61,11 @@ class PlaybackState {
 /// 断线恢复对齐 Web 端:error → 1s 重连;buffering 持续 >5s → 3s 后重连;
 /// 连续失败 5 次退回 idle。用户手动暂停期间不自动恢复。
 class PlaybackController extends StateNotifier<PlaybackState> {
-  PlaybackController({String? Function()? streamUrl})
+  PlaybackController({String? Function()? streamUrl, Player? player})
       : _streamUrl = streamUrl,
+        _player = player ?? enginePlayer,
         super(const PlaybackState()) {
     // 全局共享播放引擎(audio_service / SMTC 共用同一实例)
-    _player = enginePlayer;
     _playingSubscription = _player.stream.playing.listen(_onPlaying);
     _bufferingSubscription = _player.stream.buffering.listen(_onBuffering);
     _errorSubscription = _player.stream.error.listen(_onError);
@@ -86,7 +87,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     });
   }
 
-  late final Player _player;
+  final Player _player;
   final String? Function()? _streamUrl;
   late final StreamSubscription<bool> _playingSubscription;
   late final StreamSubscription<bool> _bufferingSubscription;
@@ -95,6 +96,8 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   Timer? _reconnectTimer;
   Timer? _listenTimer;
   String? _currentUrl;
+  bool _resumeAfterChannelChange = false;
+  int _openRevision = 0;
   int _consecutiveFailures = 0;
   int _volumeRevision = 0;
   bool _disposed = false;
@@ -104,6 +107,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
           defaultTargetPlatform == TargetPlatform.linux);
 
   Future<void> _openRadio(String url, {required bool play}) async {
+    final revision = ++_openRevision;
     var playbackUrl = url;
     if (_useLocalRelay) {
       try {
@@ -113,11 +117,14 @@ class PlaybackController extends StateNotifier<PlaybackState> {
         sharedRadioStream.stop();
       }
     }
+    if (_disposed || revision != _openRevision) return;
     await _player.open(Media(playbackUrl), play: play);
   }
 
   void _onPlaying(bool playing) {
-    if (_disposed) return;
+    if (_disposed || (playing && (_currentUrl == null || state.userPaused))) {
+      return;
+    }
     // Windows SMTC:同步系统媒体面板状态
     unawaited(updateSystemMediaPlayback(
         playing: playing, stopped: !playing && _currentUrl == null));
@@ -133,7 +140,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   }
 
   void _onBuffering(bool buffering) {
-    if (_disposed) return;
+    if (_disposed || _currentUrl == null || state.userPaused) return;
     if (!buffering) {
       _stallTimer?.cancel();
       if (state.phase == PlaybackPhase.buffering && _player.state.playing) {
@@ -185,6 +192,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
 
   /// 连接直播流(换码率 = 换地址重连,FLUTTER.md 4.2)。
   Future<void> tune(String url, {bool autoplay = true}) async {
+    _resumeAfterChannelChange = false;
     _currentUrl = url;
     _reconnectTimer?.cancel();
     _stallTimer?.cancel();
@@ -197,6 +205,41 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     await _openRadio(url, play: autoplay);
   }
 
+  /// Stop the previous channel while waiting for the new stream profiles.
+  Future<void> switchStation() async {
+    final hadStream = _currentUrl != null;
+    _resumeAfterChannelChange = !state.userPaused &&
+        (_resumeAfterChannelChange ||
+            (hadStream && state.phase != PlaybackPhase.idle));
+    _currentUrl = null;
+    _openRevision++;
+    _reconnectTimer?.cancel();
+    _stallTimer?.cancel();
+    state = state.copyWith(
+      phase: _resumeAfterChannelChange
+          ? PlaybackPhase.connecting
+          : PlaybackPhase.idle,
+      clearError: true,
+    );
+    if (hadStream) {
+      if (_useLocalRelay) sharedRadioStream.stop();
+      await _player.stop();
+    }
+  }
+
+  /// Apply the channel's current stream profile without starting idle playback.
+  Future<void> updateStreamUrl(String url) async {
+    if (url == _currentUrl) return;
+    if (_resumeAfterChannelChange ||
+        (_currentUrl != null &&
+            !state.userPaused &&
+            state.phase != PlaybackPhase.idle)) {
+      await _retune(url, '切换直播流失败，正在尝试重新连接');
+    } else if (_currentUrl != null) {
+      _currentUrl = url;
+    }
+  }
+
   /// Switching a source preserves the live path, quality, token and pause state.
   Future<void> changeRadioSource(String baseUrl) async {
     final current = _currentUrl;
@@ -207,10 +250,14 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     final next = retargetRadioUrl(current, baseUrl);
     _currentUrl = next;
     if (state.userPaused) return;
+    await _retune(next, '切换播放源失败，正在尝试重新连接');
+  }
+
+  Future<void> _retune(String url, String failureMessage) async {
     try {
-      await tune(next);
+      await tune(url);
     } catch (_) {
-      if (!_disposed) _onError('切换播放源失败，正在尝试重新连接');
+      if (!_disposed && _currentUrl == url) _onError(failureMessage);
     }
   }
 
@@ -228,6 +275,8 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   }
 
   Future<void> pause() async {
+    _resumeAfterChannelChange = false;
+    _openRevision++;
     state = state.copyWith(userPaused: true, phase: PlaybackPhase.idle);
     _reconnectTimer?.cancel();
     _stallTimer?.cancel();
@@ -264,6 +313,8 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   }
 
   Future<void> stop() async {
+    _resumeAfterChannelChange = false;
+    _openRevision++;
     _currentUrl = null;
     _reconnectTimer?.cancel();
     _stallTimer?.cancel();
@@ -321,7 +372,15 @@ final playbackProvider =
     StateNotifierProvider<PlaybackController, PlaybackState>((ref) {
   final controller =
       PlaybackController(streamUrl: () => ref.read(streamUrlProvider));
+  ref.listen(activeStationIdProvider, (_, __) {
+    audioHandler.clearNowPlaying();
+    unawaited(clearSystemMediaMetadata());
+    unawaited(controller.switchStation());
+  });
   ref.listen(radioSourceProvider.select((source) => source.selected.baseUrl),
       (_, next) => unawaited(controller.changeRadioSource(next)));
+  ref.listen(streamUrlProvider, (_, next) {
+    if (next != null) unawaited(controller.updateStreamUrl(next));
+  });
   return controller;
 });

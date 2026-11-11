@@ -168,3 +168,5 @@ class AuthController extends StateNotifier<AuthState> {
 
 final authProvider =
     StateNotifierProvider<AuthController, AuthState>((ref) => AuthController());
+
+final publicThmrApiProvider = Provider<ThmrApi>((ref) => ThmrApi());

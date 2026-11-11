@@ -56,6 +56,7 @@ final miniPlayerSizeProvider =
 class AppSettings {
   final ThemeMode themeMode;
   final Map<String, String> bitrateByStation;
+  final String? selectedStationId;
   final bool autoPlay;
   final AccentTheme accentTheme;
   final MiniEdgeHideMode miniEdgeHideMode;
@@ -68,6 +69,7 @@ class AppSettings {
   const AppSettings({
     this.themeMode = ThemeMode.system,
     this.bitrateByStation = const {},
+    this.selectedStationId,
     this.autoPlay = false,
     this.accentTheme = AccentTheme.reimu,
     this.miniEdgeHideMode = MiniEdgeHideMode.compact,
@@ -81,6 +83,7 @@ class AppSettings {
   AppSettings copyWith({
     ThemeMode? themeMode,
     Map<String, String>? bitrateByStation,
+    String? selectedStationId,
     bool? autoPlay,
     AccentTheme? accentTheme,
     MiniEdgeHideMode? miniEdgeHideMode,
@@ -91,6 +94,7 @@ class AppSettings {
       AppSettings(
         themeMode: themeMode ?? this.themeMode,
         bitrateByStation: bitrateByStation ?? this.bitrateByStation,
+        selectedStationId: selectedStationId ?? this.selectedStationId,
         autoPlay: autoPlay ?? this.autoPlay,
         accentTheme: accentTheme ?? this.accentTheme,
         miniEdgeHideMode: miniEdgeHideMode ?? this.miniEdgeHideMode,
@@ -126,6 +130,7 @@ class SettingsController extends StateNotifier<AppSettings> {
     );
     state = AppSettings(
       autoPlay: autoPlay,
+      selectedStationId: prefs.getString('selectedStationId'),
       radioSource: RadioSourcePreference.values.firstWhere(
         (source) => source.name == prefs.getString('radioSource'),
         orElse: () => RadioSourcePreference.automatic,
@@ -204,6 +209,14 @@ class SettingsController extends StateNotifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('bitrateByStation',
         next.entries.map((e) => '${e.key}=${e.value}').toList());
+  }
+
+  Future<void> selectStation(String stationId) async {
+    if (state.selectedStationId == stationId) return;
+    _revision++;
+    state = state.copyWith(selectedStationId: stationId);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('selectedStationId', stationId);
   }
 }
 
