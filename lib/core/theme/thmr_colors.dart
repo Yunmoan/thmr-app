@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// Character themes. Each carries its own accent, paper gradient,
 /// background illustration and dark variants.
-enum AccentTheme { reimu, marisa, cirno, tenshi, sanae, koishi, remilia }
+enum AccentTheme { reimu, marisa, cirno, tenshi, sanae, koishi, remilia, satori }
 
 /// Static brand constants (default Reimu crimson kept for compatibility).
 class ThmrColors {
@@ -413,6 +413,57 @@ class ThmrTokens extends ThemeExtension<ThmrTokens> {
     illustration: 'assets/brand/remilia_background_alt.png',
   );
 
+  /// Satori — 藕荷(淡粉紫,发色与裙装的藕荷色,与恋恋的藤紫区分)。
+  static const ThmrTokens satoriLight = ThmrTokens(
+    accent: Color(0xFFA86492),
+    onAccent: Color(0xFFFFF7FA),
+    pageBg: Color(0xFFFAF1F5),
+    ink: Color(0xFF221822),
+    mutedInk: Color(0xFF6F5A6B),
+    supportInk: Color(0xFF655E6C),
+    panelBg: Color(0xEBFCFAFD),
+    panelBorder: Color(0x2940283A),
+    panelSoft: Color(0x12A86492),
+    accentSoft: Color(0x21A86492),
+    fieldBg: Color(0xE6FFFFFF),
+    secondaryButtonBg: Color(0x14221822),
+    pageGradient: LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [Color(0xD0FAF1F5), Color(0x92F2E3EC), Color(0x9CE7D7E2)],
+      stops: [0.0, 0.54, 1.0],
+    ),
+    shadow: Color(0x1A40283A),
+    solidPanel: Color(0xFFFCFAFD),
+    codeInk: Color(0xFF322430),
+    illustration: 'assets/brand/satori_background_alt.png',
+  );
+
+  static const ThmrTokens satoriDark = ThmrTokens(
+    accent: Color(0xFFA86492),
+    onAccent: Color(0xFFFFF7FA),
+    pageBg: Color(0xFF140C11),
+    ink: Color(0xFFF6EDF3),
+    mutedInk: Color(0xFFD5C3D1),
+    supportInk: Color(0xFFC1B5C1),
+    panelBg: Color(0xE6191118),
+    panelBorder: Color(0x21F2DFEA),
+    panelSoft: Color(0x12F2DFEA),
+    accentSoft: Color(0x38A86492),
+    fieldBg: Color(0x14F3E7EF),
+    secondaryButtonBg: Color(0x17F2DFEA),
+    pageGradient: LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [Color(0xD8191118), Color(0xA8140C11), Color(0xB40F090D)],
+      stops: [0.0, 0.54, 1.0],
+    ),
+    shadow: Color(0x52000000),
+    solidPanel: Color(0xFF191118),
+    codeInk: Color(0xFFF1DCE9),
+    illustration: 'assets/brand/satori_background_alt.png',
+  );
+
   static ThmrTokens resolve(AccentTheme theme, Brightness brightness) {
     switch (theme) {
       case AccentTheme.tenshi:
@@ -429,6 +480,8 @@ class ThmrTokens extends ThemeExtension<ThmrTokens> {
         return brightness == Brightness.dark ? cirnoDark : cirnoLight;
       case AccentTheme.reimu:
         return brightness == Brightness.dark ? reimuDark : reimuLight;
+      case AccentTheme.satori:
+        return brightness == Brightness.dark ? satoriDark : satoriLight;
     }
   }
 
