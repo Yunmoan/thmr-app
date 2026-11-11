@@ -22,9 +22,14 @@ Future<void> checkTone(
     request.response.headers.contentType = ContentType('audio', 'mpeg');
     try {
       // Deliberately split MP3 frames across irregular network chunks.
-      for (var offset = 0; offset < audio.length; offset += 257) {
-        request.response.add(audio.sublist(
-            offset, offset + 257 < audio.length ? offset + 257 : audio.length));
+      // Repeat the two-second fixture to cover the adaptation hold and glide.
+      final repeated = Uint8List(audio.length * 5);
+      for (var i = 0; i < 5; i++) {
+        repeated.setRange(i * audio.length, (i + 1) * audio.length, audio);
+      }
+      for (var offset = 0; offset < repeated.length; offset += 257) {
+        request.response.add(repeated.sublist(offset,
+            offset + 257 < repeated.length ? offset + 257 : repeated.length));
         await request.response.flush();
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
@@ -35,6 +40,7 @@ Future<void> checkTone(
   final events = ReceivePort();
   final done = Completer<void>();
   final frame = Completer<List<Object>>();
+  final adapted = Completer<double>();
   SendPort? commands;
   Isolate? worker;
   StreamSubscription<List<int>>? playSubscription;
@@ -45,6 +51,8 @@ Future<void> checkTone(
       if (!done.isCompleted) done.complete();
     } else if (message is List && message.first == 'frame') {
       if (!frame.isCompleted) frame.complete([message[1], message[2]]);
+      final upper = message[3] as double;
+      if (upper < 4500 && !adapted.isCompleted) adapted.complete(upper);
     } else if (message is List && !frame.isCompleted) {
       frame.completeError(StateError(message.toString()));
     }
@@ -70,11 +78,13 @@ Future<void> checkTone(
       throw StateError('Expected $hz Hz, decoded $frequency Hz');
     }
     if (magnitudes[peak] < 0.01) throw StateError('No decoded audio energy');
+    final upper = await adapted.future.timeout(const Duration(seconds: 8));
+    if (upper < 4000) throw StateError('Bandwidth floor was lost: $upper');
     if (requests != 1) throw StateError('Extra upstream requests: $requests');
     commands!.send('stop');
     await done.future.timeout(const Duration(seconds: 3));
     stdout.writeln(
-        '$fixture: $frequency Hz, $rate Hz PCM, one upstream connection');
+        '$fixture: $frequency Hz, $rate Hz PCM, adaptive upper ${upper.round()} Hz, one upstream connection');
   } finally {
     commands?.send('stop');
     worker?.kill(priority: Isolate.immediate);

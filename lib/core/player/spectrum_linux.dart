@@ -4,8 +4,8 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'shared_radio_stream.dart';
-import 'spectrum.dart';
 import 'spectrum_fft.dart';
+import 'spectrum.dart';
 import 'spectrum_linux_worker.dart';
 
 /// Bundled minimp3 decodes only the app's tokenized loopback radio stream.
@@ -22,6 +22,7 @@ class LinuxSpectrum implements RetryableSpectrumSource {
   final Set<Future<void>> _stopping = {};
   Timer? _watch, _startup;
   int _refs = 0, _generation = 0, _sampleRate = 44100;
+  double? _upperHz;
   Uri? _uri;
   Float32List? _magnitudes;
   DateTime? _lastFrame;
@@ -57,6 +58,7 @@ class LinuxSpectrum implements RetryableSpectrumSource {
     final ready = _ready = Completer<bool>();
     _reason = null;
     _magnitudes = null;
+    _upperHz = null;
     _lastFrame = null;
     _uri = _streamUri();
     _startup?.cancel();
@@ -75,10 +77,11 @@ class LinuxSpectrum implements RetryableSpectrumSource {
       if (!ready.isCompleted) ready.complete(false);
     }
 
-    _worker = _SpectrumWorker(uri, _library, (frame, rate) {
+    _worker = _SpectrumWorker(uri, _library, (frame, rate, upperHz) {
       if (generation != _generation || _refs == 0) return;
       _magnitudes = frame;
       _sampleRate = rate;
+      _upperHz = upperHz;
       _lastFrame = DateTime.now();
       _reason = null;
       _startup?.cancel();
@@ -107,7 +110,7 @@ class LinuxSpectrum implements RetryableSpectrumSource {
         DateTime.now().difference(last) > const Duration(seconds: 1)) {
       return null;
     }
-    return logarithmicSpectrumBands(frame, bands, _sampleRate);
+    return logarithmicSpectrumBands(frame, bands, _sampleRate, maxHz: _upperHz);
   }
 
   @override
@@ -131,8 +134,11 @@ class LinuxSpectrum implements RetryableSpectrumSource {
 /// Keep the command handshake alive when stop races isolate startup. Closing
 /// the event port immediately could otherwise leave a decoder isolate running.
 class _SpectrumWorker {
-  _SpectrumWorker(Uri uri, String library,
-      void Function(Float32List, int) frame, void Function(String) failure) {
+  _SpectrumWorker(
+      Uri uri,
+      String library,
+      void Function(Float32List, int, double) frame,
+      void Function(String) failure) {
     _events.listen((message) {
       if (message is SendPort) {
         _commands = message;
@@ -142,7 +148,8 @@ class _SpectrumWorker {
         _finish();
       } else if (!_stopped && message is List && message.isNotEmpty) {
         if (message[0] == 'frame') {
-          frame(message[1] as Float32List, message[2] as int);
+          frame(message[1] as Float32List, message[2] as int,
+              message[3] as double);
         } else {
           failure(
               message[0] == 'error' ? message[1] as String : '实时频谱暂不可用，请重试。');

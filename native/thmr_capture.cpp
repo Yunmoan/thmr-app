@@ -2,8 +2,7 @@
 //
 // Captures the system output mix via WASAPI loopback (default render device),
 // keeps a mono ring buffer, and on poll() runs a 1024-point radix-2 FFT over
-// the newest window, aggregating magnitudes into log-spaced bands normalized
-// to [0, 1] on a dB scale.
+// the newest window. Dart maps the PCM-normalized magnitudes to adaptive bands.
 //
 // Threading: ALL COM / WASAPI objects are created, used and released on the
 // dedicated capture thread (MTA). thmr_start only signals and waits for the
@@ -13,14 +12,17 @@
 // Exported ABI (x64, cdecl):
 //   int  thmr_start(void)                  0 ok / -1 fail
 //   void thmr_stop(void)
-//   int  thmr_poll(float* out, int bands)  1 ok / 0 silence / -1 not running
+//   int  thmr_poll_fft(float* out, int bins)
+//        sample rate on fresh FFT / 0 no fresh samples / -1 not running
 
 #include <windows.h>
 #include <mmdeviceapi.h>
 #include <audioclient.h>
 
 #include <atomic>
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <mutex>
 #include <thread>
@@ -40,6 +42,7 @@ std::thread g_thread;
 std::mutex g_mu;
 std::vector<float> g_ring(kRing, 0.0f);
 size_t g_wpos = 0;  // next write slot
+uint64_t g_written = 0, g_polled = 0;  // protected by g_mu
 
 void push_samples(const float* src, size_t n) {
   std::lock_guard<std::mutex> lk(g_mu);
@@ -47,6 +50,7 @@ void push_samples(const float* src, size_t n) {
     g_ring[g_wpos] = src[i];
     g_wpos = (g_wpos + 1) % kRing;
   }
+  g_written += n;
 }
 
 // Full capture session lives on this thread.
@@ -180,9 +184,6 @@ void fft_inplace(float* re, float* im, int n) {
   }
 }
 
-// Per-band sliding peak (auto gain control); reset on each capture start.
-float g_peak[128];
-
 }  // namespace
 
 extern "C" {
@@ -191,7 +192,12 @@ __declspec(dllexport) int thmr_start(void) {
   bool expected = false;
   if (!g_run.compare_exchange_strong(expected, true)) return 0;  // already on
   g_init.store(-2);
-  std::fill(g_peak, g_peak + 128, 0.0f);
+  {
+    std::lock_guard<std::mutex> lk(g_mu);
+    std::fill(g_ring.begin(), g_ring.end(), 0.0f);
+    g_wpos = 0;
+    g_written = g_polled = 0;
+  }
 
   std::thread t(capture_main);
   g_thread = std::move(t);
@@ -213,69 +219,35 @@ __declspec(dllexport) void thmr_stop(void) {
   std::fill(g_ring.begin(), g_ring.end(), 0.0f);
 }
 
-__declspec(dllexport) int thmr_poll(float* out, int bands) {
-  if (!g_run.load() || g_init.load() != 0 || !out || bands <= 0 ||
-      bands > 128) return -1;
-  // Per-band sliding peak (auto gain control) so bass-heavy bands stop
-  // pinning at full scale; values breathe within each band's own range.
+__declspec(dllexport) int thmr_poll_fft(float* out, int bins) {
+  if (!g_run.load() || g_init.load() != 0 || !out ||
+      bins != static_cast<int>(kFft / 2 + 1)) return -1;
 
   static float re[kFft];
   static float im[kFft];
   {
     std::lock_guard<std::mutex> lk(g_mu);
+    if (g_written < kFft || g_written == g_polled) return 0;
+    g_polled = g_written;
     for (size_t i = 0; i < kFft; ++i) {
       const size_t idx = (g_wpos + kRing - kFft + i) % kRing;
-      re[i] = g_ring[idx];
+      re[i] = std::isfinite(g_ring[idx]) ? g_ring[idx] : 0.0f;
       im[i] = 0.0f;
     }
   }
 
-  float energy = 0.0f;
-  for (size_t i = 0; i < kFft; ++i) energy += re[i] * re[i];
-  if (energy < 1e-10f) return 0;  // digital silence
-
-  // Hamming window
+  // Hann window, matching the Linux and Android PCM normalization.
   for (size_t i = 0; i < kFft; ++i) {
     re[i] *=
-        0.54f - 0.46f * std::cos(2.0f * kPi * static_cast<float>(i) / (kFft - 1));
+        0.5f - 0.5f * std::cos(2.0f * kPi * static_cast<float>(i) / (kFft - 1));
   }
   fft_inplace(re, im, static_cast<int>(kFft));
 
-  // Aggregate into log-spaced bands between 40 Hz and Nyquist.
-  const double fmin = 40.0;
-  const double fmax = static_cast<double>(g_sr.load()) * 0.5;
-  const double ratio = fmax / fmin;
-  const int half = static_cast<int>(kFft / 2);
-  int prevBin = 1;
-  for (int b = 0; b < bands; ++b) {
-    const int binHi = std::min(
-        half,
-        std::max(prevBin + 1,
-                 static_cast<int>(1.0 * prevBin * std::pow(ratio, 1.0 / bands) +
-                                  0.5)));
-    float mag = 0.0f;
-    int count = 0;
-    for (int k = prevBin; k < binHi && k < half; ++k) {
-      const float m = std::sqrt(re[k] * re[k] + im[k] * im[k]);
-      if (m > mag) mag = m;  // peak within band keeps the spectrum lively
-      ++count;
-    }
-    prevBin = binHi;
-    float v = 0.0f;
-    if (count > 0) {
-      const float db = 20.0f * std::log10(mag + 1e-7f);
-      // AGC: track each band's decaying peak, map a 34 dB window below it.
-      float& peak = g_peak[b];
-      if (peak < -90.0f) peak = db;           // first frame
-      peak = std::max(db, peak - 1.1f);       // glide down ~1.1 s
-      v = (db - (peak - 30.0f)) / 30.0f;
-    }
-    // gentle tilt so the low end reads calmer than the high end
-    v *= 1.0f - 0.22f * (static_cast<float>(b) /
-                         static_cast<float>(std::max(1, bands - 1)));
-    out[b] = std::min(1.0f, std::max(0.0f, v));
+  for (int bin = 0; bin < bins; ++bin) {
+    out[bin] = std::sqrt(re[bin] * re[bin] + im[bin] * im[bin]) *
+        4.0f / static_cast<float>(kFft);
   }
-  return 1;
+  return static_cast<int>(g_sr.load());
 }
 
 }  // extern "C"

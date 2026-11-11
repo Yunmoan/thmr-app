@@ -85,24 +85,33 @@ Float32List pcmMagnitudes(Float32List samples) {
 }
 
 Float32List logarithmicSpectrumBands(
-    Float32List magnitudes, int bands, int sampleRate) {
+    Float32List magnitudes, int bands, int sampleRate,
+    {double? maxHz, Float64List? peakDb}) {
   final result = Float32List(bands);
   final bins = magnitudes.length - 1;
   final nyquist = sampleRate / 2;
+  final upper = (maxHz ?? nyquist).clamp(40.0, nyquist);
   for (var band = 0; band < bands; band++) {
-    final low = (35 * math.pow(nyquist / 35, band / bands) * bins / nyquist)
+    final low = (40 * math.pow(upper / 40, band / bands) * bins / nyquist)
         .floor()
         .clamp(1, bins);
     final high =
-        (35 * math.pow(nyquist / 35, (band + 1) / bands) * bins / nyquist)
+        (40 * math.pow(upper / 40, (band + 1) / bands) * bins / nyquist)
             .ceil()
             .clamp(low + 1, bins + 1);
     var amplitude = 0.0;
+    var referenceDb = -120.0;
     for (var bin = low; bin < high; bin++) {
-      amplitude = math.max(amplitude, magnitudes[bin]);
+      final value = magnitudes[bin];
+      if (value.isFinite) amplitude = math.max(amplitude, value);
+      if (peakDb != null) referenceDb = math.max(referenceDb, peakDb[bin]);
     }
     final db = 20 * math.log(math.max(amplitude, 0.0000001)) / math.ln10;
-    result[band] = ((db + 72) / 72).clamp(0, 1);
+    result[band] = peakDb == null
+        ? ((db + 72) / 72).clamp(0, 1)
+        : db <= -72
+            ? 0
+            : ((db - referenceDb + 30) / 30).clamp(0, 1);
   }
   return result;
 }

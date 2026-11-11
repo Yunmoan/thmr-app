@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'mp3_decoder.dart';
+import 'adaptive_spectrum.dart';
 import 'spectrum_fft.dart';
 
 /// Only standard Dart/FFI imports: this entry point runs outside Flutter's UI
@@ -29,6 +30,8 @@ Future<void> runLinuxSpectrumWorker(List<Object> arguments) async {
       throw const HttpException('Radio relay unavailable');
     }
     final fft = PcmSpectrumDecoder();
+    final spectrum = AdaptiveSpectrum();
+    var decodedMicroseconds = 0.0;
     var pending = Uint8List(0);
     var synced = false;
     await for (final chunk in response) {
@@ -56,7 +59,15 @@ Future<void> runLinuxSpectrumWorker(List<Object> arguments) async {
           } else {
             synced = true;
             rate = decoder.sampleRate;
-            latest = fft.add(pcm, decoder.channels, rate) ?? latest;
+            decodedMicroseconds += pcm.length / decoder.channels / rate * 1e6;
+            final frame = fft.add(pcm, decoder.channels, rate);
+            if (frame != null) {
+              // Measure decoded audio time, so network bursts cannot accelerate
+              // learning or hide all the intermediate FFT frames.
+              spectrum.add(frame, rate,
+                  Duration(microseconds: decodedMicroseconds.round()));
+              latest = frame;
+            }
           }
           consumed += advance;
         }
@@ -66,7 +77,9 @@ Future<void> runLinuxSpectrumWorker(List<Object> arguments) async {
           pending = Uint8List.fromList(pending.sublist(8192));
         }
       }
-      if (latest != null) events.send(['frame', latest, rate]);
+      if (latest != null) {
+        events.send(['frame', latest, rate, spectrum.upperHz]);
+      }
     }
     if (!stopped) events.send(['error', '电台连接已中断，请重试实时频谱。']);
   } catch (_) {

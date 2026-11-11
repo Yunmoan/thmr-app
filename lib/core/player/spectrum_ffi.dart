@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 
 import 'spectrum.dart';
+import 'adaptive_spectrum.dart';
 
 typedef _StartNative = Int32 Function();
 typedef _StartDart = int Function();
@@ -29,15 +30,18 @@ class SpectrumCapture implements SpectrumSource {
   final _PollDart _pollFn;
 
   Pointer<Float>? _native;
-  int _bands = 0;
   int _refs = 0;
+  static const _bins = 513; // 1024-point real FFT, including Nyquist.
+  final _spectrum = AdaptiveSpectrum(autoGain: true);
+  final _clock = Stopwatch()..start();
+  Duration? _lastFrame;
 
   static SpectrumCapture? _build() {
     try {
       final lib = DynamicLibrary.open('thmr_capture.dll');
       final start = lib.lookupFunction<_StartNative, _StartDart>('thmr_start');
       final stop = lib.lookupFunction<_StopNative, _StopDart>('thmr_stop');
-      final poll = lib.lookupFunction<_PollNative, _PollDart>('thmr_poll');
+      final poll = lib.lookupFunction<_PollNative, _PollDart>('thmr_poll_fft');
       return SpectrumCapture._(start, stop, poll);
     } catch (_) {
       return null;
@@ -49,7 +53,11 @@ class SpectrumCapture implements SpectrumSource {
   @override
   void start() {
     _refs++;
-    if (_refs == 1) _startFn();
+    if (_refs == 1) {
+      _spectrum.reset();
+      _lastFrame = null;
+      _startFn();
+    }
   }
 
   @override
@@ -61,27 +69,25 @@ class SpectrumCapture implements SpectrumSource {
       if (_native != null) {
         calloc.free(_native!);
         _native = null;
-        _bands = 0;
       }
     }
   }
 
   @override
   Float32List? poll(int bands) {
-    if (bands <= 0) return null;
-    if (_native == null || _bands != bands) {
-      if (_native != null) calloc.free(_native!);
-      _native = calloc<Float>(bands);
-      _bands = bands;
-    }
-    final code = _pollFn(_native!, bands);
+    if (_refs == 0 || bands <= 0) return null;
+    _native ??= calloc<Float>(_bins);
+    final code = _pollFn(_native!, _bins);
     if (code < 0) return null;
-    final view = _native!.asTypedList(bands);
-    if (code == 0) {
-      for (var i = 0; i < bands; i++) {
-        view[i] *= 0.6;
-      }
+    final now = _clock.elapsed;
+    if (code > 0) {
+      _spectrum.add(_native!.asTypedList(_bins), code, now);
+      _lastFrame = now;
     }
-    return Float32List.fromList(view);
+    if (_lastFrame == null ||
+        now - _lastFrame! > const Duration(milliseconds: 250)) {
+      return null;
+    }
+    return _spectrum.bands(bands);
   }
 }

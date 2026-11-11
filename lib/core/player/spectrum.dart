@@ -3,6 +3,8 @@
 //  - Android: decoded PCM from this app's radio stream via method channel
 //  - Linux: bundled minimp3 + FFT in a worker isolate
 //  - others  : null -> UI stays still rather than simulating audio
+// All supported platforms share adaptive bandwidth detection and logarithmic
+// band mapping in Dart, before the UI's attack/release envelope.
 
 import 'dart:io' show Platform;
 import 'dart:typed_data';

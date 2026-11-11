@@ -8,6 +8,8 @@ import android.util.Log;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.HashMap;
+import java.util.Map;
 
 /** Decodes THMR's loopback MP3 stream to PCM, without any audio capture API. */
 final class StreamSpectrumDecoder {
@@ -55,7 +57,7 @@ final class StreamSpectrumDecoder {
         return decodeFailed;
     }
 
-    byte[] bands(int count) {
+    Map<String, Object> magnitudes() {
         float[] snapshot = new float[SpectrumMath.FFT_SIZE];
         int rate;
         synchronized (samplesLock) {
@@ -85,7 +87,10 @@ final class StreamSpectrumDecoder {
             }
             rate = sampleRate;
         }
-        return SpectrumMath.bands(snapshot, rate, count);
+        Map<String, Object> frame = new HashMap<>();
+        frame.put("sampleRate", rate);
+        frame.put("magnitudes", SpectrumMath.magnitudes(snapshot));
+        return frame;
     }
 
     private void decode(String url, long token) {
