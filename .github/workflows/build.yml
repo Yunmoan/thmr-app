@@ -107,6 +107,17 @@ jobs:
           flutter-version: ${{ needs.validate.outputs.flutter_version }}
           channel: stable
           cache: true
+      - name: Use the official Ubuntu archive instead of the Azure mirror
+        run: |
+          # The hosted runner maps Ubuntu suites to azure.archive.ubuntu.com through
+          # a mirrorlist; a DNS failure there stalls every package download. Point
+          # the sources at the official archive, which hosts all four suites.
+          for file in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
+            if [ -f "$file" ]; then
+              sudo sed -i -E 's|mirror\+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' "$file"
+            fi
+          done
+          grep -n 'URIs:' /etc/apt/sources.list.d/ubuntu.sources || true
       - name: Install native dependencies
         run: |
           sudo apt-get update
