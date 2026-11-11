@@ -1,13 +1,13 @@
 // Android spectrum from a second decoder of the app's shared radio bytes.
 // This never captures the microphone or other apps' output.
 
-import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 
 import 'shared_radio_stream.dart';
 import 'spectrum.dart';
+import 'adaptive_spectrum.dart';
 
 enum AndroidSpectrumStatus { starting, ready, unavailable }
 
@@ -29,7 +29,10 @@ class AndroidSpectrum implements RetryableSpectrumSource {
   int _refs = 0;
   int _generation = 0;
   bool _fetching = false;
-  Float32List? _last;
+  final _spectrum = AdaptiveSpectrum();
+  final _clock = Stopwatch()..start();
+  Duration? _lastFrame;
+  String? _url;
   AndroidSpectrumStatus status = AndroidSpectrumStatus.starting;
 
   @override
@@ -49,9 +52,11 @@ class AndroidSpectrum implements RetryableSpectrumSource {
 
   Future<void> _startCapture(int generation) async {
     status = AndroidSpectrumStatus.starting;
-    _last = null;
+    _spectrum.reset();
+    _lastFrame = null;
     try {
       final url = _streamUrl();
+      _url = url;
       if (url == null || url.isEmpty) {
         status = AndroidSpectrumStatus.unavailable;
         return;
@@ -73,7 +78,7 @@ class AndroidSpectrum implements RetryableSpectrumSource {
   @override
   Future<bool> retry() async {
     if (_refs == 0) return false;
-    final generation = _generation;
+    final generation = ++_generation;
     try {
       await _startCapture(generation);
       return _refs > 0 &&
@@ -91,43 +96,48 @@ class AndroidSpectrum implements RetryableSpectrumSource {
     _refs--;
     if (_refs == 0) {
       _generation++;
-      _last = null;
+      _lastFrame = null;
+      _spectrum.reset();
       channel.invokeMethod<void>('stop').catchError((_) {});
     }
   }
 
   @override
   Float32List? poll(int bands) {
+    if (_refs > 0 && _url != _streamUrl()) {
+      _startCapture(++_generation);
+      return null;
+    }
     if (_refs == 0 || status != AndroidSpectrumStatus.ready || bands <= 0) {
       return null;
     }
-    if (!_fetching) _fetch(bands, _generation);
-    return _last?.length == bands ? _last : null;
+    if (!_fetching) _fetch(_generation);
+    if (_lastFrame == null ||
+        _clock.elapsed - _lastFrame! > const Duration(milliseconds: 250)) {
+      return null;
+    }
+    return _spectrum.bands(bands);
   }
 
-  Future<void> _fetch(int bands, int generation) async {
+  Future<void> _fetch(int generation) async {
     _fetching = true;
     try {
-      final levels = await channel
-          .invokeMethod<Uint8List>('bands', <String, Object>{'bands': bands});
+      final frame = await channel.invokeMapMethod<String, Object>('magnitudes');
       if (generation != _generation || _refs == 0) return;
-      _last = levels == null ? null : spectrumBandsFromLevels(levels, bands);
+      if (frame != null) {
+        final magnitudes = frame['magnitudes'] as Float64List;
+        final rate = frame['sampleRate'] as int;
+        final now = _clock.elapsed;
+        _spectrum.add(Float32List.fromList(magnitudes), rate, now);
+        _lastFrame = now;
+      }
     } catch (_) {
       if (generation == _generation) {
-        _last = null;
+        _lastFrame = null;
         status = AndroidSpectrumStatus.unavailable;
       }
     } finally {
       _fetching = false;
     }
   }
-}
-
-/// Native decoder returns one unsigned 0..255 level per requested band.
-Float32List spectrumBandsFromLevels(Uint8List levels, int bands) {
-  final out = Float32List(bands);
-  for (var band = 0; band < math.min(bands, levels.length); band++) {
-    out[band] = levels[band] / 255;
-  }
-  return out;
 }

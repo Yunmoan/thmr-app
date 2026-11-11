@@ -1,18 +1,18 @@
 package cn.yunmoan.thmr.thmr_app;
 
-/** Real FFT of decoded PCM, mapped to logarithmic frequency bands. */
+/** PCM-normalized real FFT; adaptive band mapping is shared in Dart. */
 final class SpectrumMath {
     static final int FFT_SIZE = 2048;
 
-    static byte[] bands(float[] pcm, int sampleRate, int count) {
-        if (pcm.length != FFT_SIZE || sampleRate < 1000 || count < 1) {
+    static double[] magnitudes(float[] pcm) {
+        if (pcm.length != FFT_SIZE) {
             throw new IllegalArgumentException("Invalid spectrum input");
         }
         double[] real = new double[FFT_SIZE];
         double[] imaginary = new double[FFT_SIZE];
         for (int i = 0; i < FFT_SIZE; i++) {
             double window = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (FFT_SIZE - 1));
-            real[i] = pcm[i] * window;
+            real[i] = Float.isFinite(pcm[i]) ? pcm[i] * window : 0;
         }
         for (int i = 1, j = 0; i < FFT_SIZE; i++) {
             int bit = FFT_SIZE >> 1;
@@ -48,23 +48,9 @@ final class SpectrumMath {
                 }
             }
         }
-        byte[] result = new byte[count];
-        double minHz = 50;
-        double maxHz = Math.min(16000, sampleRate / 2.0);
-        double ratio = maxHz / minHz;
-        for (int band = 0; band < count; band++) {
-            double lowHz = minHz * Math.pow(ratio, (double) band / count);
-            double highHz = minHz * Math.pow(ratio, (double) (band + 1) / count);
-            int lowBin = Math.max(1, (int) Math.floor(lowHz * FFT_SIZE / sampleRate));
-            int highBin = Math.min(FFT_SIZE / 2,
-                    Math.max(lowBin + 1, (int) Math.ceil(highHz * FFT_SIZE / sampleRate)));
-            double peak = 0;
-            for (int bin = lowBin; bin < highBin; bin++) {
-                peak = Math.max(peak, Math.hypot(real[bin], imaginary[bin]));
-            }
-            double db = 20 * Math.log10(Math.max(1e-9, peak / (FFT_SIZE / 4.0)));
-            double level = Math.max(0, Math.min(1, (db + 55) / 55));
-            result[band] = (byte) Math.round(level * 255);
+        double[] result = new double[FFT_SIZE / 2 + 1];
+        for (int bin = 0; bin < result.length; bin++) {
+            result[bin] = Math.hypot(real[bin], imaginary[bin]) * 4.0 / FFT_SIZE;
         }
         return result;
     }

@@ -41,15 +41,12 @@ public class MainActivity extends AudioServiceActivity {
                             result.success("ready");
                         }
                     }
-                    case "bands" -> {
-                        Integer count = call.argument("bands");
-                        if (count == null || count < 1 || count > 128) {
-                            result.error("invalid_bands", "Band count must be 1..128", null);
-                        } else if (spectrum.failed()) {
+                    case "magnitudes" -> {
+                        if (spectrum.failed()) {
                             result.error("decoder_unavailable",
                                     "Could not decode the radio stream", null);
                         } else {
-                            result.success(spectrum.bands(count));
+                            result.success(spectrum.magnitudes());
                         }
                     }
                     case "stop" -> {
