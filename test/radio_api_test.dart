@@ -78,6 +78,29 @@ const _stationListJson = [
   {'id': 'touhou-curated', 'enabled': true, 'listeners': 3, 'uniqueIps': 2},
 ];
 
+const _yesterdayTrack = {
+  'stationId': 'touhou-curated',
+  'trackId': 't-history',
+  'title': '昨日曲目',
+  'artist': '社团',
+  'coverUrl': '/api/stations/touhou-curated/tracks/t-history/cover',
+};
+
+const _yesterdayJson = {
+  'collection': {'id': 'yesterday-touhou-curated', 'itemCount': 3},
+  'items': [
+    {..._yesterdayTrack, 'id': '1', 'position': 0},
+    {
+      'id': '2',
+      'position': 1,
+      'stationId': 'touhou-curated',
+      'trackId': 't-other',
+      'coverUrl': '',
+    },
+    {..._yesterdayTrack, 'id': '3', 'position': 2},
+  ],
+};
+
 void main() {
   late HttpServer server;
 
@@ -89,6 +112,8 @@ void main() {
       final json = switch (request.uri.path) {
         '/api/stations' => _stationListJson,
         '/api/stations/touhou/playlist' => _playlistJson,
+        '/api/stations/touhou-curated/yesterday' => _yesterdayJson,
+        '/api/stations/touhou/yesterday' => {'items': []},
         _ => _statusJson,
       };
       response.write(jsonEncode(json));
@@ -130,5 +155,24 @@ void main() {
   test('site listener total sums all Radio stations', () async {
     final api = RadioApi(baseUrl: 'http://127.0.0.1:${server.port}');
     expect(await api.siteListeners(), 17);
+  });
+
+  test('yesterday playlist preserves play order and resolves station covers',
+      () async {
+    final baseUrl = 'http://127.0.0.1:${server.port}';
+    final api = RadioApi(baseUrl: baseUrl);
+    final items = await api.yesterdayPlaylist('touhou-curated');
+
+    expect(items.map((item) => item.id), ['1', '2', '3']);
+    expect(items.map((item) => item.trackId), [
+      't-history',
+      't-other',
+      't-history',
+    ]);
+    expect(items.first.stationId, 'touhou-curated');
+    expect(items.first.coverUrl, '$baseUrl${_yesterdayTrack['coverUrl']}');
+    expect(items[1].coverUrl, isEmpty);
+    expect(await api.yesterdayPlaylist('touhou'), isEmpty);
+    await expectLater(api.yesterdayPlaylist('other'), throwsFormatException);
   });
 }

@@ -1,4 +1,4 @@
-// Collections list page: folders, new-folder dialog, shared-links viewer.
+// Personal collections, public playback history and shared links.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,16 +13,25 @@ import '../../shared/widgets/thmr_panel.dart';
 import '../../shared/widgets/network_notice.dart';
 import 'collection_detail.dart';
 import 'shared_collection_screen.dart';
+import 'yesterday_playlist.dart';
 
 /// 收藏夹列表页。
-class CollectionsScreen extends ConsumerWidget {
+class CollectionsScreen extends ConsumerStatefulWidget {
   const CollectionsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CollectionsScreen> createState() => _CollectionsScreenState();
+}
+
+class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
+  bool? _showYesterday;
+
+  @override
+  Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final collections = ref.watch(collectionsProvider);
     final offline = collections.valueOrNull?.offline ?? false;
+    final showYesterday = _showYesterday ?? !auth.signedIn;
     final tokens = Theme.of(context).thmr;
 
     return SafeArea(
@@ -44,17 +53,29 @@ class CollectionsScreen extends ConsumerWidget {
                   icon: const Icon(Icons.link_rounded),
                   onPressed: offline ? null : () => _openShared(context),
                 ),
-                if (auth.signedIn)
+                if (auth.signedIn && !showYesterday)
                   IconButton(
                     tooltip: '新建收藏夹',
                     icon: const Icon(Icons.create_new_folder_outlined),
-                    onPressed:
-                        offline ? null : () => _newCollection(context, ref),
+                    onPressed: offline ? null : () => _newCollection(context),
                   ),
               ],
             ),
             const SizedBox(height: 12),
-            if (!auth.signedIn)
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('我的列表')),
+                ButtonSegment(value: true, label: Text('昨日歌单')),
+              ],
+              selected: {showYesterday},
+              showSelectedIcon: false,
+              onSelectionChanged: (selection) =>
+                  setState(() => _showYesterday = selection.single),
+            ),
+            const SizedBox(height: 12),
+            if (showYesterday)
+              const Expanded(child: YesterdayPlaylist())
+            else if (!auth.signedIn)
               const Expanded(child: _SignedOutHint())
             else
               Expanded(
@@ -161,7 +182,7 @@ class CollectionsScreen extends ConsumerWidget {
     ));
   }
 
-  Future<void> _newCollection(BuildContext context, WidgetRef ref) async {
+  Future<void> _newCollection(BuildContext context) async {
     final controller = TextEditingController();
     final created = await showDialog<bool>(
       context: context,

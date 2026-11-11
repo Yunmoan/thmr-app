@@ -91,6 +91,20 @@ class RadioApi {
     return (raw ?? const []).map((e) => QueueEntry.fromJson(e)).toList();
   }
 
+  /// 昨日实际播放记录，保留接口返回的顺序与重复播放。
+  Future<List<CollectionItem>> yesterdayPlaylist(String stationId) async {
+    final json = await _getJson(
+        '/api/stations/${Uri.encodeComponent(stationId)}/yesterday');
+    final items = json['items'];
+    if (items is! List) {
+      throw const FormatException('Invalid yesterday playlist');
+    }
+    return [
+      for (final item in items)
+        CollectionItem.fromJson(item as Map<String, dynamic>),
+    ];
+  }
+
   /// 直播流地址(直连 MP3)。profileId 取自 station.bitrates 中 enabled 条目。
   String streamUrl(String stationId, String profileId) {
     final base = '$baseUrl/radio/$stationId/$profileId';
