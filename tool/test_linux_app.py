@@ -124,6 +124,25 @@ def wait_for(predicate, description, timeout=15):
     raise AssertionError(f'Timed out: {description}')
 
 
+def exported_indicator(bus, destination):
+    """Waitable evidence that Ayatana's async session-bus setup has finished."""
+    from gi.repository import Gio
+    root = '/org/ayatana/NotificationItem'
+
+    def introspect(path):
+        xml = bus.call_sync(destination, path, 'org.freedesktop.DBus.Introspectable',
+                            'Introspect', None, None, Gio.DBusCallFlags.NONE,
+                            2000, None).unpack()[0]
+        return Gio.DBusNodeInfo.new_for_xml(xml)
+
+    for child in introspect(root).nodes:
+        path = f'{root}/{child.path}'
+        if any(interface.name == 'org.kde.StatusNotifierItem'
+               for interface in introspect(path).interfaces):
+            return path
+    return None
+
+
 def exercise(bundle):
     from gi.repository import Gio, GLib
     bus = Gio.bus_get_sync(Gio.BusType.SESSION)
@@ -152,8 +171,8 @@ def exercise(bundle):
 
     registration = bus.register_object('/StatusNotifierWatcher', node.interfaces[0],
                                        method, property_value, None)
-    owner = Gio.bus_own_name_on_connection(bus, WATCHER, Gio.BusNameOwnerFlags.NONE,
-                                           None, None)
+    owner = None
+    watcher_ready = threading.Event()
     loop = GLib.MainLoop()
     loop_thread = threading.Thread(target=loop.run, daemon=True)
     loop_thread.start()
@@ -223,11 +242,26 @@ def exercise(bundle):
                     if player_property('CanSeek'):
                         raise AssertionError('Live radio advertises seeking')
                     window = wait_for(windows.find, 'GTK window')
-                    wait_for(lambda: registrations, 'AppIndicator registration')
+                    # A watcher already present during app_indicator_new() can
+                    # race Ayatana's bus_creation callback (null connection in
+                    # name_appeared_handler). Start with a genuinely absent
+                    # shell and publish the fake watcher only after the item
+                    # is exported, rather than relying on callback timing.
+                    wait_for(lambda: exported_indicator(bus, MPRIS),
+                             'AppIndicator D-Bus export')
                     windows.close(window)
                     time.sleep(0.5)
                     if app.poll() is not None or not windows.visible(window):
                         raise AssertionError('No-host close did not retain a recoverable window')
+                    owner = Gio.bus_own_name_on_connection(
+                        bus, WATCHER, Gio.BusNameOwnerFlags.NONE,
+                        lambda *_: watcher_ready.set(), None)
+                    wait_for(watcher_ready.is_set, 'test watcher ownership')
+                    wait_for(lambda: registrations, 'AppIndicator registration')
+                    windows.close(window)
+                    time.sleep(0.5)
+                    if app.poll() is not None or not windows.visible(window):
+                        raise AssertionError('Watcher without a host did not retain the window')
                     set_host(True)
                     time.sleep(2.5)  # Production monitor polls every two seconds.
                     windows.close(window)
@@ -245,7 +279,7 @@ def exercise(bundle):
                     exit_code = app.wait(timeout=8)
                     if exit_code != 0:
                         raise AssertionError(f'Tray exit failed: process returned {exit_code}')
-                    print('GTK integration passed: no-host fallback, tray hide, duplicate '
+                    print('GTK integration passed: absent watcher, no-host fallback, tray hide, duplicate '
                           'restore, host-loss recovery, MPRIS and graceful exit')
                 except Exception:
                     print('Xvfb windows:', windows.last_windows, file=sys.stderr)
@@ -264,7 +298,8 @@ def exercise(bundle):
         windows.x.XCloseDisplay(windows.display)
         loop.quit()
         loop_thread.join(timeout=2)
-        Gio.bus_unown_name(owner)
+        if owner is not None:
+            Gio.bus_unown_name(owner)
         bus.unregister_object(registration)
 
 
