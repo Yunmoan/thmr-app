@@ -107,16 +107,42 @@ jobs:
           flutter-version: ${{ needs.validate.outputs.flutter_version }}
           channel: stable
           cache: true
-      - name: Use the official Ubuntu archive instead of the Azure mirror
+      - name: Select a reachable Ubuntu mirror
         run: |
-          # The hosted runner maps Ubuntu suites to azure.archive.ubuntu.com through
-          # a mirrorlist; a DNS failure there stalls every package download. Point
-          # the sources at the official archive, which hosts all four suites.
-          for file in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
-            if [ -f "$file" ]; then
-              sudo sed -i -E 's|mirror\+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' "$file"
+          # Hosted runners map Ubuntu suites to azure.archive.ubuntu.com through a
+          # mirrorlist. When that host does not resolve, every package download
+          # stalls. Pick the first reachable full mirror and relax apt timeouts.
+          mirrors=(
+            https://mirrors.edge.kernel.org/ubuntu
+            https://mirror.math.princeton.edu/pub/ubuntu
+            https://ftp.osuosl.org/pub/ubuntu
+            https://mirrors.aliyun.com/ubuntu
+            https://mirrors.tuna.tsinghua.edu.cn/ubuntu
+            https://mirrors.ustc.edu.cn/ubuntu
+            https://mirrors.cloud.tencent.com/ubuntu
+            https://archive.ubuntu.com/ubuntu
+            https://security.ubuntu.com/ubuntu
+          )
+          picked=
+          for mirror in "${mirrors[@]}"; do
+            if curl -fsSL --max-time 12 -o /dev/null "$mirror/dists/noble/InRelease" &&
+               curl -fsSL --max-time 12 -o /dev/null "$mirror/dists/noble-security/InRelease"; then
+              picked=$mirror
+              break
             fi
           done
+          if [ -z "$picked" ]; then
+            echo "No reachable Ubuntu mirror found" >&2
+            exit 1
+          fi
+          echo "Using Ubuntu mirror: $picked"
+          for file in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
+            if [ -f "$file" ]; then
+              sudo sed -i -E "s|mirror\+file:/etc/apt/apt-mirrors\.txt|$picked/|g" "$file"
+            fi
+          done
+          printf 'Acquire::Retries "2";\nAcquire::http::Timeout "60";\nAcquire::https::Timeout "60";\n' \
+            | sudo tee /etc/apt/apt.conf.d/zz-thmr-apt >/dev/null
           grep -n 'URIs:' /etc/apt/sources.list.d/ubuntu.sources || true
       - name: Install native dependencies
         run: |
