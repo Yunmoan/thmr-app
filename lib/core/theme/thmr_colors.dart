@@ -2,7 +2,18 @@ import 'package:flutter/material.dart';
 
 /// Character themes. Each carries its own accent, paper gradient,
 /// background illustration and dark variants.
-enum AccentTheme { reimu, marisa, cirno, tenshi, sanae, koishi, remilia, satori }
+enum AccentTheme {
+  reimu,
+  marisa,
+  cirno,
+  tenshi,
+  sanae,
+  koishi,
+  remilia,
+  satori,
+  hearn,
+  renko,
+}
 
 /// Static brand constants (default Reimu crimson kept for compatibility).
 class ThmrColors {
@@ -464,6 +475,108 @@ class ThmrTokens extends ThemeExtension<ThmrTokens> {
     illustration: 'assets/brand/satori_background_alt.png',
   );
 
+  /// Hearn — 梦紫(梅莉的紫裙与金发,取秘封俱乐部的梦境色)。
+  static const ThmrTokens hearnLight = ThmrTokens(
+    accent: Color(0xFF7C5AB4),
+    onAccent: Color(0xFFFAF7FE),
+    pageBg: Color(0xFFF5EFFB),
+    ink: Color(0xFF1C1526),
+    mutedInk: Color(0xFF675C77),
+    supportInk: Color(0xFF5F5A70),
+    panelBg: Color(0xEBFCFAFE),
+    panelBorder: Color(0x29352A50),
+    panelSoft: Color(0x127C5AB4),
+    accentSoft: Color(0x217C5AB4),
+    fieldBg: Color(0xE6FFFFFF),
+    secondaryButtonBg: Color(0x141C1526),
+    pageGradient: LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [Color(0xD0F5EFFB), Color(0x92EBE3F6), Color(0x9CDFD5F0)],
+      stops: [0.0, 0.54, 1.0],
+    ),
+    shadow: Color(0x1A352A50),
+    solidPanel: Color(0xFFFCFAFE),
+    codeInk: Color(0xFF2A2038),
+    illustration: 'assets/brand/hearn_background_alt.png',
+  );
+
+  static const ThmrTokens hearnDark = ThmrTokens(
+    accent: Color(0xFF7C5AB4),
+    onAccent: Color(0xFFFAF7FE),
+    pageBg: Color(0xFF120D19),
+    ink: Color(0xFFF2EDFA),
+    mutedInk: Color(0xFFD1C7E2),
+    supportInk: Color(0xFFBEB7CC),
+    panelBg: Color(0xE6181222),
+    panelBorder: Color(0x21E8DFF2),
+    panelSoft: Color(0x12E8DFF2),
+    accentSoft: Color(0x387C5AB4),
+    fieldBg: Color(0x14F0EAF8),
+    secondaryButtonBg: Color(0x17E8DFF2),
+    pageGradient: LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [Color(0xD8181222), Color(0xA8120D19), Color(0xB40B0710)],
+      stops: [0.0, 0.54, 1.0],
+    ),
+    shadow: Color(0x52000000),
+    solidPanel: Color(0xFF181222),
+    codeInk: Color(0xFFE8DEF4),
+    illustration: 'assets/brand/hearn_background_alt.png',
+  );
+
+  /// Renko — 赤铜(黑帽红丝带与黄铜星盘/怀表的暖铜色)。
+  static const ThmrTokens renkoLight = ThmrTokens(
+    accent: Color(0xFFBE6B4A),
+    onAccent: Color(0xFF241806),
+    pageBg: Color(0xFFF6EFEB),
+    ink: Color(0xFF241C1A),
+    mutedInk: Color(0xFF6E6060),
+    supportInk: Color(0xFF665B57),
+    panelBg: Color(0xEBFDFBF9),
+    panelBorder: Color(0x294A322F),
+    panelSoft: Color(0x12BE6B4A),
+    accentSoft: Color(0x21BE6B4A),
+    fieldBg: Color(0xE6FFFFFF),
+    secondaryButtonBg: Color(0x14241C1A),
+    pageGradient: LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [Color(0xD0F6EFEB), Color(0x92EDE1DD), Color(0x9CE3D4D0)],
+      stops: [0.0, 0.54, 1.0],
+    ),
+    shadow: Color(0x1A4A322F),
+    solidPanel: Color(0xFFFDFBF9),
+    codeInk: Color(0xFF35261F),
+    illustration: 'assets/brand/renko_background_alt.png',
+  );
+
+  static const ThmrTokens renkoDark = ThmrTokens(
+    accent: Color(0xFFBE6B4A),
+    onAccent: Color(0xFF241806),
+    pageBg: Color(0xFF140F0D),
+    ink: Color(0xFFF6EFE8),
+    mutedInk: Color(0xFFD8C9C0),
+    supportInk: Color(0xFFC4B8B0),
+    panelBg: Color(0xE61E1714),
+    panelBorder: Color(0x21F0E4DC),
+    panelSoft: Color(0x12F0E4DC),
+    accentSoft: Color(0x38BE6B4A),
+    fieldBg: Color(0x14F6EDE6),
+    secondaryButtonBg: Color(0x17F0E4DC),
+    pageGradient: LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [Color(0xD81E1714), Color(0xA8140F0C), Color(0xB40D0907)],
+      stops: [0.0, 0.54, 1.0],
+    ),
+    shadow: Color(0x52000000),
+    solidPanel: Color(0xFF1E1714),
+    codeInk: Color(0xFFF2E6D8),
+    illustration: 'assets/brand/renko_background_alt.png',
+  );
+
   static ThmrTokens resolve(AccentTheme theme, Brightness brightness) {
     switch (theme) {
       case AccentTheme.tenshi:
@@ -482,6 +595,10 @@ class ThmrTokens extends ThemeExtension<ThmrTokens> {
         return brightness == Brightness.dark ? reimuDark : reimuLight;
       case AccentTheme.satori:
         return brightness == Brightness.dark ? satoriDark : satoriLight;
+      case AccentTheme.hearn:
+        return brightness == Brightness.dark ? hearnDark : hearnLight;
+      case AccentTheme.renko:
+        return brightness == Brightness.dark ? renkoDark : renkoLight;
     }
   }
 
