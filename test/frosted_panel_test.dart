@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -25,7 +26,34 @@ class _Texture extends CustomPainter {
   bool shouldRepaint(_Texture oldDelegate) => false;
 }
 
+/// Blur anti-aliasing differs slightly between Windows, where the baselines
+/// were captured, and the Linux CI renderer. A small allowance keeps the
+/// pixel baseline useful without failing on cross-platform edge pixels.
+class _TolerantGoldenComparator extends LocalFileComparator {
+  _TolerantGoldenComparator(super.testFile);
+
+  static const _tolerance = 0.01;
+
+  @override
+  Future<bool> compare(Uint8List imageBytes, Uri golden) async {
+    final result = await GoldenFileComparator.compareLists(
+      imageBytes,
+      await getGoldenBytes(golden),
+    );
+    if (result.passed || result.diffPercent <= _tolerance) {
+      result.dispose();
+      return true;
+    }
+    final error = await generateFailureOutput(result, golden, basedir);
+    result.dispose();
+    throw FlutterError(error);
+  }
+}
+
 void main() {
+  goldenFileComparator = _TolerantGoldenComparator(
+    Uri.parse('test/frosted_panel_test.dart'),
+  );
   for (final brightness in Brightness.values) {
     testWidgets('frost keeps background colour and blurs detail in $brightness',
         (tester) async {
