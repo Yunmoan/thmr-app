@@ -31,7 +31,7 @@ class _PageState extends State<_Page> {
 }
 
 void main() {
-  testWidgets('tabs initialize on first visit and retain input and scroll',
+  testWidgets('tabs are ready before switching and retain input and scroll',
       (tester) async {
     final active = ValueNotifier(false);
     addTearDown(active.dispose);
@@ -46,10 +46,12 @@ void main() {
         ),
       ),
     ));
-    expect(page.currentState, isNull);
+    final prepared = page.currentState;
+    expect(prepared, isNotNull);
     active.value = true;
     await tester.pumpAndSettle();
     final state = page.currentState!;
+    expect(state, same(prepared));
     state.text.text = 'Touhou';
     state.scroll.jumpTo(500);
     await tester.pump();

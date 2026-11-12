@@ -44,6 +44,26 @@ void main() {
     expect(controller.state.accentTheme, AccentTheme.reimu);
   });
 
+  test('appearance is applied atomically after its illustration is prepared',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final controller = SettingsController();
+    await controller.ready;
+    addTearDown(controller.dispose);
+    final updates = <AppSettings>[];
+    final remove = controller.addListener(updates.add, fireImmediately: false);
+    addTearDown(remove);
+    await controller.setAppearance(ThemeMode.dark, AccentTheme.marisa);
+    expect(updates, hasLength(1));
+    expect(updates.single.themeMode, ThemeMode.dark);
+    expect(updates.single.accentTheme, AccentTheme.marisa);
+    final restored = SettingsController();
+    addTearDown(restored.dispose);
+    await restored.ready;
+    expect(restored.state.themeMode, ThemeMode.dark);
+    expect(restored.state.accentTheme, AccentTheme.marisa);
+  });
+
   test('a user change wins over an in-flight settings load', () async {
     SharedPreferences.setMockInitialValues({
       'themeMode': ThemeMode.dark.index,

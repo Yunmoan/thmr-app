@@ -156,8 +156,25 @@ class _QueueListState extends State<_QueueList> {
   int _cacheWidth = 0;
   int _preloadGeneration = 0;
   double? _cacheExtent;
+  final _indexWidths = <String, double>{};
+  final _timeWidths = <String, double>{};
+  TextStyle? _indexMetricStyle, _timeMetricStyle;
+  (TextScaler, TextDirection, Locale?)? _metricContext;
 
   List<QueueEntry> get queue => widget.status.queue;
+
+  @override
+  void initState() {
+    super.initState();
+    PaintingBinding.instance.systemFonts.addListener(_fontsChanged);
+  }
+
+  void _fontsChanged() {
+    setState(() {
+      _indexWidths.clear();
+      _timeWidths.clear();
+    });
+  }
 
   @override
   void didChangeDependencies() {
@@ -226,6 +243,7 @@ class _QueueListState extends State<_QueueList> {
   @override
   void dispose() {
     ++_preloadGeneration;
+    PaintingBinding.instance.systemFonts.removeListener(_fontsChanged);
     _scrollController.dispose();
     super.dispose();
   }
@@ -261,25 +279,53 @@ class _QueueListState extends State<_QueueList> {
       color: tokens.mutedInk,
       fontFeatures: const [FontFeature.tabularFigures()],
     );
+    final defaultStyle = DefaultTextStyle.of(context).style;
+    final indexMetricStyle = defaultStyle.merge(indexStyle);
+    final timeMetricStyle = defaultStyle.merge(timeStyle);
+    final metricContext = (
+      MediaQuery.textScalerOf(context),
+      Directionality.of(context),
+      Localizations.maybeLocaleOf(context)
+    );
+    if (_metricContext != metricContext ||
+        _indexMetricStyle == null ||
+        _indexMetricStyle!.compareTo(indexMetricStyle) ==
+            RenderComparison.layout) {
+      _indexWidths.clear();
+    }
+    if (_metricContext != metricContext ||
+        _timeMetricStyle == null ||
+        _timeMetricStyle!.compareTo(timeMetricStyle) ==
+            RenderComparison.layout) {
+      _timeWidths.clear();
+    }
+    _metricContext = metricContext;
+    _indexMetricStyle = indexMetricStyle;
+    _timeMetricStyle = timeMetricStyle;
     // Reserve columns from the whole queue, so newly visible rows cannot shift
     // the title when index digits or schedule availability change.
     final indexWidth = _textColumnWidth(
       context,
       Iterable.generate(queue.length, (i) => '#${i + 1}'),
       indexStyle,
+      cache: _indexWidths,
     );
     final durationWidth = _textColumnWidth(
       context,
       queue.map((entry) => formatDuration(entry.durationSec)),
       timeStyle,
+      cache: _timeWidths,
     );
     final plannedWidth = _textColumnWidth(
       context,
       queue.map(queuePlannedHHmm).whereType<String>(),
       timeStyle,
+      cache: _timeWidths,
     );
     final scheduleWidth =
-        _textColumnWidth(context, ['预计'], timeStyle) + 4 + plannedWidth;
+        _textColumnWidth(context, ['预计'], timeStyle, cache: _timeWidths) +
+            4 +
+            plannedWidth;
     final timeWidth =
         durationWidth > scheduleWidth ? durationWidth : scheduleWidth;
     return Column(
@@ -429,21 +475,28 @@ class _QueueListState extends State<_QueueList> {
 }
 
 double _textColumnWidth(
-    BuildContext context, Iterable<String> labels, TextStyle? style) {
-  final painter = TextPainter(
-    textDirection: Directionality.of(context),
-    textScaler: MediaQuery.textScalerOf(context),
-    locale: Localizations.maybeLocaleOf(context),
-    maxLines: 1,
-  );
+    BuildContext context, Iterable<String> labels, TextStyle? style,
+    {required Map<String, double> cache}) {
+  TextPainter? painter;
   final effectiveStyle = DefaultTextStyle.of(context).style.merge(style);
   var width = 0.0;
   for (final label in labels) {
-    painter.text = TextSpan(text: label, style: effectiveStyle);
-    painter.layout();
-    if (painter.width > width) width = painter.width;
+    var measured = cache[label];
+    if (measured == null) {
+      painter ??= TextPainter(
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          locale: Localizations.maybeLocaleOf(context),
+          maxLines: 1);
+      painter.text = TextSpan(text: label, style: effectiveStyle);
+      painter.layout();
+      measured = painter.width;
+      if (cache.length >= 512) cache.remove(cache.keys.first);
+      cache[label] = measured;
+    }
+    if (measured > width) width = measured;
   }
-  painter.dispose();
+  painter?.dispose();
   return width.ceilToDouble();
 }
 

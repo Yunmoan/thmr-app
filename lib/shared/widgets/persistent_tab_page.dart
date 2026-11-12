@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Builds a tab on first use, then keeps its state while hidden and muted.
+/// Keeps tabs ready before selection and retains state while hidden and muted.
 class PersistentTabPage extends StatefulWidget {
   const PersistentTabPage({
     super.key,
@@ -17,7 +17,7 @@ class PersistentTabPage extends StatefulWidget {
 
 class _PersistentTabPageState extends State<PersistentTabPage>
     with SingleTickerProviderStateMixin {
-  late bool _visited = widget.active;
+  final _backdropKey = BackdropKey();
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 240),
@@ -34,7 +34,6 @@ class _PersistentTabPageState extends State<PersistentTabPage>
   void didUpdateWidget(covariant PersistentTabPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.active && !oldWidget.active) {
-      _visited = true;
       _controller.forward(from: 0);
     }
   }
@@ -47,9 +46,12 @@ class _PersistentTabPageState extends State<PersistentTabPage>
 
   @override
   Widget build(BuildContext context) {
-    if (!_visited) return const SizedBox.shrink();
+    final content = BackdropGroup(
+      backdropKey: _backdropKey,
+      child: widget.child,
+    );
     final animation = MediaQuery.disableAnimationsOf(context)
-        ? widget.child
+        ? content
         : FadeTransition(
             opacity: _controller.drive(CurveTween(curve: Curves.easeOutCubic)),
             child: SlideTransition(
@@ -57,7 +59,7 @@ class _PersistentTabPageState extends State<PersistentTabPage>
                 begin: const Offset(0, 0.014),
                 end: Offset.zero,
               ).chain(CurveTween(curve: Curves.easeOutCubic))),
-              child: widget.child,
+              child: content,
             ),
           );
     return Offstage(

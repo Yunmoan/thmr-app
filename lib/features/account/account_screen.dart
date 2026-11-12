@@ -10,6 +10,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/state/auth_provider.dart';
 import '../../core/state/settings_provider.dart';
 import '../../core/theme/thmr_theme.dart';
+import '../../core/theme/thmr_colors.dart' show ThmrTokens;
 import '../../core/update/app_update.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import 'about_panel.dart';
@@ -19,8 +20,40 @@ import 'radio_source_panel.dart';
 import '../diagnostics/diagnostics_screen.dart';
 
 /// 「我的」:账号(WebView 登录 M2 接入)+ 偏好设置 + 关于。
-class AccountScreen extends ConsumerWidget {
+class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
+
+  @override
+  ConsumerState<AccountScreen> createState() => _AccountScreenState();
+}
+
+class _AccountScreenState extends ConsumerState<AccountScreen> {
+  int _appearanceRevision = 0;
+  ThemeMode? _pendingMode;
+  AccentTheme? _pendingAccent;
+
+  Future<void> _selectAppearance({ThemeMode? mode, AccentTheme? accent}) async {
+    final current = ref.read(settingsProvider);
+    final targetMode = _pendingMode = mode ?? _pendingMode ?? current.themeMode;
+    final targetAccent =
+        _pendingAccent = accent ?? _pendingAccent ?? current.accentTheme;
+    final request = ++_appearanceRevision;
+    final brightness = switch (targetMode) {
+      ThemeMode.light => Brightness.light,
+      ThemeMode.dark => Brightness.dark,
+      ThemeMode.system => MediaQuery.platformBrightnessOf(context),
+    };
+    final asset = ThmrTokens.resolve(targetAccent, brightness).illustration;
+    // Decode before changing ThemeData so image loading does not eat the
+    // first frames of the existing colour/illustration transition.
+    await precacheImage(AssetImage(asset), context);
+    if (!mounted || request != _appearanceRevision) return;
+    _pendingMode = null;
+    _pendingAccent = null;
+    await ref
+        .read(settingsProvider.notifier)
+        .setAppearance(targetMode, targetAccent);
+  }
 
   /// Keep the login flow on this screen: the signed-out card is replaced as
   /// soon as authentication succeeds, while this context remains mounted.
@@ -62,7 +95,7 @@ class AccountScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final settings = ref.watch(settingsProvider);
     final miniSize = ref.watch(miniPlayerSizeProvider);
@@ -114,8 +147,7 @@ class AccountScreen extends ConsumerWidget {
                         label: Text('跟随')),
                   ],
                   selected: {settings.themeMode},
-                  onSelectionChanged: (s) =>
-                      ref.read(settingsProvider.notifier).setThemeMode(s.first),
+                  onSelectionChanged: (s) => _selectAppearance(mode: s.first),
                 ),
               ],
             ),
@@ -137,9 +169,7 @@ class AccountScreen extends ConsumerWidget {
                     for (final t in AccentTheme.values)
                       ChoiceChip(
                         selected: settings.accentTheme == t,
-                        onSelected: (_) => ref
-                            .read(settingsProvider.notifier)
-                            .setAccentTheme(t),
+                        onSelected: (_) => _selectAppearance(accent: t),
                         label: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [

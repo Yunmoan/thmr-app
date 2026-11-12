@@ -351,6 +351,7 @@ class CollectionItem {
   final int? durationSec;
   final String coverUrl; // 账号后端为绝对 URL
   final String? addedAt;
+  final int? playedAtMs;
 
   const CollectionItem({
     required this.id,
@@ -363,6 +364,7 @@ class CollectionItem {
     required this.durationSec,
     required this.coverUrl,
     required this.addedAt,
+    this.playedAtMs,
   });
 
   factory CollectionItem.fromJson(Map<String, dynamic> j) => CollectionItem(
@@ -377,6 +379,7 @@ class CollectionItem {
         coverUrl: absolutizeCover(
             (j['coverUrl'] ?? '') as String, appConfig.radioBaseUrl),
         addedAt: j['addedAt'] as String?,
+        playedAtMs: (j['playedAtMs'] as num?)?.toInt(),
       );
 }
 

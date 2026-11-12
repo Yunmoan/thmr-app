@@ -89,7 +89,7 @@ const _yesterdayTrack = {
 const _yesterdayJson = {
   'collection': {'id': 'yesterday-touhou-curated', 'itemCount': 3},
   'items': [
-    {..._yesterdayTrack, 'id': '1', 'position': 0},
+    {..._yesterdayTrack, 'id': '1', 'position': 0, 'playedAtMs': 1794326700000},
     {
       'id': '2',
       'position': 1,
@@ -170,6 +170,8 @@ void main() {
       't-history',
     ]);
     expect(items.first.stationId, 'touhou-curated');
+    expect(items.first.playedAtMs, 1794326700000);
+    expect(items[1].playedAtMs, isNull);
     expect(items.first.coverUrl, '$baseUrl${_yesterdayTrack['coverUrl']}');
     expect(items[1].coverUrl, isEmpty);
     expect(await api.yesterdayPlaylist('touhou'), isEmpty);

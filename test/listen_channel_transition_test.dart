@@ -16,6 +16,7 @@ import 'package:thmr_app/core/theme/thmr_colors.dart';
 import 'package:thmr_app/features/listen/listen_screen.dart';
 import 'package:thmr_app/features/listen/widgets/channel_switcher.dart';
 import 'package:thmr_app/features/listen/widgets/now_playing_panel.dart';
+import 'package:thmr_app/features/listen/widgets/channel_loading_skeleton.dart';
 
 const _curated = 'touhou-curated';
 
@@ -94,7 +95,7 @@ void main() {
     final player = find.byType(NowPlayingPanel);
     final oldPlayerElement = tester.element(player);
     final playButton = find.descendant(of: player, matching: find.text('播放'));
-    final loading = find.text('正在切换频道…');
+    final loading = find.byType(ChannelLoadingSkeleton);
     expect(find.text('综合曲目'), findsOneWidget);
     expect(playButton.hitTestable(), findsOneWidget);
 

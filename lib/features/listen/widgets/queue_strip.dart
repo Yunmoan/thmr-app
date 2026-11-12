@@ -15,66 +15,86 @@ String? queuePlannedHHmm(QueueEntry e) {
 }
 
 /// Secondary detail sheet for a queue entry (shared by strip & queue page).
-void showQueueEntryDetail(BuildContext context, QueueEntry entry, int index) {
+void showQueueEntryDetail(BuildContext context, QueueEntry entry, int index,
+    {String? heading,
+    String? album,
+    String? playbackLabel,
+    String? durationLabel}) {
   final tokens = Theme.of(context).thmr;
   final planned = queuePlannedHHmm(entry);
+  final duration = durationLabel ?? '时长 ${formatDuration(entry.durationSec)}';
   final wide = MediaQuery.of(context).size.width >= 720;
   showModalBottomSheet<void>(
     context: context,
+    isScrollControlled: true,
     constraints: BoxConstraints(maxWidth: wide ? 480 : double.infinity),
     builder: (_) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: entry.coverUrl.isEmpty
-                    ? Image.asset('assets/brand/cover-fallback.png',
-                        width: 180, fit: BoxFit.cover)
-                    : Image.network(entry.coverUrl,
-                        width: 180, fit: BoxFit.cover),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: entry.coverUrl.isEmpty
+                      ? Image.asset('assets/brand/cover-fallback.png',
+                          width: 180, fit: BoxFit.cover)
+                      : Image.network(entry.coverUrl,
+                          width: 180, fit: BoxFit.cover),
+                ),
               ),
-            ),
-            const SizedBox(height: 14),
-            Text('队列 #${index + 1}',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                      letterSpacing: 2,
-                      fontWeight: FontWeight.w700,
-                    )),
-            const SizedBox(height: 6),
-            Text(entry.title,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 4),
-            Text(entry.artist,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: tokens.mutedInk)),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.schedule_rounded, size: 15, color: tokens.mutedInk),
-                const SizedBox(width: 6),
-                Text(
-                  planned == null
-                      ? '时长 ${formatDuration(entry.durationSec)}'
-                      : '时长 ${formatDuration(entry.durationSec)} · 预计 $planned 播放',
+              const SizedBox(height: 14),
+              Text(heading ?? '队列 #${index + 1}',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                        letterSpacing: 2,
+                        fontWeight: FontWeight.w700,
+                      )),
+              const SizedBox(height: 6),
+              Text(entry.title,
                   style: Theme.of(context)
                       .textTheme
-                      .bodySmall
-                      ?.copyWith(color: tokens.mutedInk),
-                ),
+                      .titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              Text(entry.artist,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(color: tokens.mutedInk)),
+              if (album != null && album.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(album,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: tokens.mutedInk)),
               ],
-            ),
-          ],
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.schedule_rounded,
+                      size: 15, color: tokens.mutedInk),
+                  const SizedBox(width: 6),
+                  Flexible(
+                      child: Text(
+                    playbackLabel != null
+                        ? '$duration · $playbackLabel'
+                        : planned == null
+                            ? duration
+                            : '$duration · 预计 $planned 播放',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: tokens.mutedInk),
+                  )),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     ),

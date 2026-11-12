@@ -9,6 +9,7 @@ import 'package:thmr_app/core/state/channel_provider.dart';
 import 'package:thmr_app/core/state/radio_source_provider.dart';
 import 'package:thmr_app/core/theme/thmr_theme.dart';
 import 'package:thmr_app/features/collections/collections_screen.dart';
+import 'package:thmr_app/features/collections/yesterday_playlist.dart';
 
 const _curated = 'touhou-curated';
 
@@ -30,6 +31,9 @@ class _HistoryApi extends RadioApi {
         'trackId': 'history',
         'title': '昨日曲目',
         'artist': 'THMR',
+        'album': '昨日专辑',
+        'durationSec': 120,
+        'playedAtMs': DateTime.utc(2026, 11, 10, 16, 5).millisecondsSinceEpoch,
       }),
     ];
   }
@@ -64,6 +68,14 @@ void main() {
     expect(find.text('昨日曲目'), findsOneWidget);
     expect(find.text('北京时间 · 按播放顺序 · 1 次播放'), findsOneWidget);
     expect(find.byTooltip('新建收藏夹'), findsNothing);
+    expect(find.text('00:05 播放'), findsOneWidget);
+    await tester.tap(find.text('昨日曲目'));
+    await tester.pumpAndSettle();
+    expect(find.text('昨日歌单 #1'), findsOneWidget);
+    expect(find.text('昨日专辑'), findsOneWidget);
+    expect(find.textContaining('00:05 播放（北京时间）'), findsOneWidget);
+    Navigator.of(tester.element(find.text('昨日歌单 #1'))).pop();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byType(DropdownButton<String>));
     await tester.pumpAndSettle();
@@ -94,5 +106,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('尚未登录'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  test('legacy history does not invent a playback time', () {
+    final item = CollectionItem.fromJson({'trackId': 'old'});
+    expect(item.playedAtMs, isNull);
+    expect(yesterdayPlaybackTime(item), isNull);
   });
 }

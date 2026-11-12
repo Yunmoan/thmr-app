@@ -158,6 +158,16 @@ class SettingsController extends StateNotifier<AppSettings> {
     await prefs.setInt('themeMode', mode.index);
   }
 
+  Future<void> setAppearance(ThemeMode mode, AccentTheme accent) async {
+    _revision++;
+    state = state.copyWith(themeMode: mode, accentTheme: accent);
+    final prefs = await SharedPreferences.getInstance();
+    await Future.wait([
+      prefs.setInt('themeMode', mode.index),
+      prefs.setInt('accentTheme', accent.index),
+    ]);
+  }
+
   Future<void> setAccentTheme(AccentTheme theme) async {
     _revision++;
     state = state.copyWith(accentTheme: theme);

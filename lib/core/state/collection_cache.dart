@@ -141,5 +141,6 @@ class CollectionCache {
         'durationSec': item.durationSec,
         'coverUrl': item.coverUrl,
         'addedAt': item.addedAt,
+        if (item.playedAtMs != null) 'playedAtMs': item.playedAtMs,
       };
 }

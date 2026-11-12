@@ -13,6 +13,7 @@ import '../../core/state/radio_source_provider.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import 'widgets/bitrate_row.dart';
+import 'widgets/channel_loading_skeleton.dart';
 import 'widgets/channel_switcher.dart';
 import 'widgets/listener_stat.dart';
 import 'widgets/now_playing_panel.dart';
@@ -421,7 +422,10 @@ class _ChannelTransition extends StatelessWidget {
           ignoring: outgoing,
           child: ExcludeFocus(
             excluding: outgoing,
-            child: ExcludeSemantics(excluding: outgoing, child: transition),
+            child: ExcludeSemantics(
+              excluding: outgoing,
+              child: BackdropGroup(child: transition),
+            ),
           ),
         ),
       );
@@ -461,29 +465,7 @@ class _ChannelPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!loading) return const SizedBox.shrink();
-    return Align(
-      alignment: AlignmentDirectional.topStart,
-      heightFactor: 1,
-      child: ThmrPanel(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox.square(
-                dimension: 14,
-                child: CircularProgressIndicator(strokeWidth: 2)),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Semantics(
-                liveRegion: true,
-                child: Text(switching ? '正在切换频道…' : '正在加载频道…',
-                    style: Theme.of(context).textTheme.bodySmall),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    return ChannelLoadingSkeleton(switching: switching);
   }
 }
 

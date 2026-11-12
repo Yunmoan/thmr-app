@@ -45,9 +45,13 @@ class ThmrPanel extends StatelessWidget {
     final panel = frost
         ? ClipRRect(
             borderRadius: BorderRadius.circular(borderRadius),
-            child: BackdropFilter(
+            child: BackdropFilter.grouped(
               filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-              child: body,
+              // FadeTransition uses a save layer. Replace its filtered input
+              // instead of blending that backdrop into the layer twice.
+              blendMode: BlendMode.src,
+              // Nested frosted panels must not share their parent's backdrop.
+              child: BackdropGroup(child: body),
             ),
           )
         : ClipRRect(

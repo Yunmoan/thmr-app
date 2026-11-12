@@ -11,6 +11,16 @@ import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/network_notice.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import '../../shared/widgets/track_cover.dart';
+import '../listen/widgets/queue_strip.dart' show showQueueEntryDetail;
+
+String? yesterdayPlaybackTime(CollectionItem item) {
+  final timestamp = item.playedAtMs;
+  if (timestamp == null || timestamp <= 0) return null;
+  final time = DateTime.fromMillisecondsSinceEpoch(timestamp, isUtc: true)
+      .add(const Duration(hours: 8));
+  return '${time.hour.toString().padLeft(2, '0')}:'
+      '${time.minute.toString().padLeft(2, '0')}';
+}
 
 final _yesterdayPlaylistProvider =
     FutureProvider.autoDispose.family<List<CollectionItem>, String>((ref, id) {
@@ -124,21 +134,54 @@ class _YesterdayPlaylistState extends ConsumerState<YesterdayPlaylist> {
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final item = items[index];
+                  final playedAt = yesterdayPlaybackTime(item);
                   return ThmrPanel(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     frost: false,
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: TrackCover(url: item.coverUrl, size: 46),
-                      title: Text(
-                        item.title.isEmpty ? item.trackId : item.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        item.artist.isEmpty ? '未知歌手' : item.artist,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        onTap: () => showQueueEntryDetail(
+                          context,
+                          QueueEntry(
+                            trackId: item.trackId,
+                            title:
+                                item.title.isEmpty ? item.trackId : item.title,
+                            artist: item.artist.isEmpty ? '未知歌手' : item.artist,
+                            coverUrl: item.coverUrl,
+                            plannedStartMs: 0,
+                            plannedEndMs: 0,
+                            durationSec: item.durationSec ?? 0,
+                          ),
+                          index,
+                          heading: '昨日歌单 #${index + 1}',
+                          album: item.album,
+                          durationLabel:
+                              (item.durationSec ?? 0) > 0 ? null : '时长未知',
+                          playbackLabel: playedAt == null
+                              ? '播放时间未记录'
+                              : '$playedAt 播放（北京时间）',
+                        ),
+                        leading: TrackCover(url: item.coverUrl, size: 46),
+                        title: Text(
+                          item.title.isEmpty ? item.trackId : item.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        isThreeLine: true,
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(item.artist.isEmpty ? '未知歌手' : item.artist,
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(playedAt == null ? '播放时间未记录' : '$playedAt 播放',
+                                style: theme.textTheme.labelSmall
+                                    ?.copyWith(color: theme.thmr.mutedInk)),
+                          ],
+                        ),
+                        trailing:
+                            const Icon(Icons.chevron_right_rounded, size: 18),
                       ),
                     ),
                   );

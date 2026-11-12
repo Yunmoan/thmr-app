@@ -101,7 +101,11 @@ class RadioApi {
     }
     return [
       for (final item in items)
-        CollectionItem.fromJson(item as Map<String, dynamic>),
+        CollectionItem.fromJson({
+          ...item as Map<String, dynamic>,
+          'coverUrl':
+              absolutizeCover((item['coverUrl'] ?? '') as String, baseUrl),
+        }),
     ];
   }
 
