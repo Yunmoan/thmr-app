@@ -35,6 +35,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         id: flutter
         with:
+          # Keep validation and every platform build on the verified SDK.
+          flutter-version: '3.47.5'
           channel: stable
           cache: true
       - name: Resolve the version for every client
