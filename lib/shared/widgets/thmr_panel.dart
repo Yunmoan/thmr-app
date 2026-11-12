@@ -30,11 +30,15 @@ class ThmrPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).thmr;
+    final theme = Theme.of(context);
+    final tokens = theme.thmr;
+    // The page already washes out the artwork. Light paper needs a lighter
+    // tint so the blurred silhouette can still show through both layers.
+    final frostOpacity = theme.brightness == Brightness.light ? 0.60 : 0.80;
     final body = Container(
       decoration: BoxDecoration(
         color: frost
-            ? tokens.panelBg.withValues(alpha: 0.80)
+            ? tokens.panelBg.withValues(alpha: frostOpacity)
             : tokens.solidPanel.withValues(alpha: 0.86),
         borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(color: tokens.panelBorder),

@@ -67,8 +67,10 @@ void main() {
       int difference(int a, int b) =>
           List.generate(3, (c) => (channel(a, c) - channel(b, c)).abs())
               .reduce((a, b) => a + b);
-      expect(difference(125, 300), greaterThan(25),
-          reason: 'The artwork must remain visible through the panel');
+      expect(difference(125, 300),
+          greaterThan(brightness == Brightness.light ? 75 : 25),
+          reason:
+              '$brightness panel must transmit enough of the blurred artwork');
       expect(difference(124, 128), lessThan(12),
           reason: 'Fine background detail must be blurred, not just tinted');
       image.dispose();
