@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:thmr_app/app.dart';
 import 'package:thmr_app/core/state/settings_provider.dart';
 import 'package:thmr_app/core/theme/thmr_colors.dart';
 
@@ -53,5 +54,26 @@ void main() {
     await controller.ready;
     await change;
     expect(controller.state.themeMode, ThemeMode.light);
+  });
+
+  test('unrelated preferences and theme mode reuse the resolved themes',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final settings = container.read(settingsProvider.notifier);
+    await settings.ready;
+    final original = container.read(appThemesProvider);
+    await settings.setBitrate('touhou', '320k');
+    await settings.setAutoPlay(true);
+    await settings.setThemeMode(ThemeMode.dark);
+    final unchanged = container.read(appThemesProvider);
+    expect(unchanged.$1, same(original.$1));
+    expect(unchanged.$2, same(original.$2));
+    await settings.setAccentTheme(AccentTheme.cirno);
+    final changed = container.read(appThemesProvider);
+    expect(changed.$1, isNot(same(original.$1)));
+    expect(changed.$1.colorScheme.primary,
+        ThmrTokens.resolve(AccentTheme.cirno, Brightness.light).accent);
   });
 }

@@ -67,4 +67,28 @@ void main() {
     await controls.start();
     await controls.update({'status': 'Playing'});
   });
+
+  test('late startup cannot reactivate media controls during shutdown',
+      () async {
+    final started = Completer<void>();
+    messenger.setMockMethodCallHandler(MacosMediaControls.channel,
+        (call) async {
+      calls.add(call);
+      if (call.method == 'start') await started.future;
+      return null;
+    });
+    final controls = MacosMediaControls(
+      play: () async {},
+      pause: () async {},
+      stop: () async {},
+    );
+    final starting = controls.start();
+    await Future<void>.delayed(Duration.zero);
+    await controls.dispose();
+    started.complete();
+    await starting;
+    await controls.update({'status': 'Playing'});
+    await controls.start();
+    expect(calls.map((call) => call.method), ['start', 'stop']);
+  });
 }

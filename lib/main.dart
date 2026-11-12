@@ -11,7 +11,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'app.dart';
 import 'core/platform/window_presentation.dart';
 import 'core/platform/desktop_window.dart';
+import 'core/platform/desktop_tray.dart';
+import 'core/platform/application_exit.dart';
 import 'core/player/audio_engine.dart';
+import 'core/player/shared_radio_stream.dart';
 import 'core/state/settings_provider.dart';
 import 'core/theme/thmr_colors.dart';
 import 'core/update/update_packages.dart';
@@ -57,6 +60,22 @@ Future<void> main(List<String> args) async {
   await container.read(settingsProvider.notifier).ready;
 
   await initializeDesktopWindow();
+
+  if (!kIsWeb && Platform.isMacOS) {
+    final shutdown = ApplicationExitCoordinator(() async {
+      await DesktopTrayController.disposeActive();
+      // Cancel polling, reconnection timers and player subscriptions before
+      // disposing mpv. AppKit must keep the engine alive until this completes.
+      container.dispose();
+      try {
+        await disposeSystemMediaControls();
+      } finally {
+        await enginePlayer.dispose();
+        await sharedRadioStream.dispose();
+      }
+    });
+    AppLifecycleListener(onExitRequested: shutdown.requestExit);
+  }
 
   runApp(UncontrolledProviderScope(
     container: container,

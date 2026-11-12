@@ -1,6 +1,6 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/platform/desktop_window.dart';
@@ -264,7 +264,9 @@ class AccountScreen extends ConsumerWidget {
                         Text(
                             ref.watch(desktopTrayAvailableProvider)
                                 ? '点击窗口关闭键时的行为'
-                                : '托盘不可用时，最小化操作将保留在任务栏',
+                                : defaultTargetPlatform == TargetPlatform.macOS
+                                    ? '菜单栏图标不可用时，最小化操作将保留在 Dock'
+                                    : '托盘不可用时，最小化操作将保留在任务栏',
                             style: Theme.of(context)
                                 .textTheme
                                 .labelSmall
@@ -278,10 +280,9 @@ class AccountScreen extends ConsumerWidget {
                                 label: Text(switch (a) {
                                   CloseAction.ask => '每次询问',
                                   CloseAction.exit => '退出程序',
-                                  CloseAction.tray =>
-                                    ref.watch(desktopTrayAvailableProvider)
-                                        ? '最小化到托盘'
-                                        : '最小化到任务栏',
+                                  CloseAction.tray => desktopTrayActionLabel(
+                                      available: ref
+                                          .watch(desktopTrayAvailableProvider)),
                                 }),
                                 selected: settings.closeAction == a,
                                 onSelected: (_) => ref

@@ -25,10 +25,12 @@ class MacosMediaControls {
     'position': 0,
   };
   bool _ready = false;
+  bool _disposed = false;
 
   Future<void> start() async {
+    if (_disposed) return;
     channel.setMethodCallHandler((call) async {
-      if (call.method != 'command') return;
+      if (_disposed || call.method != 'command') return;
       final args = call.arguments as Map;
       try {
         switch (args['command']) {
@@ -45,6 +47,7 @@ class MacosMediaControls {
     });
     try {
       await channel.invokeMethod<void>('start');
+      if (_disposed) return;
       _ready = true;
       await _push();
     } catch (error) {
@@ -53,6 +56,7 @@ class MacosMediaControls {
   }
 
   Future<void> update(Map<String, Object> state) async {
+    if (_disposed) return;
     _state.addAll(state);
     await _push();
   }
@@ -68,6 +72,8 @@ class MacosMediaControls {
   }
 
   Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
     _ready = false;
     channel.setMethodCallHandler(null);
     try {

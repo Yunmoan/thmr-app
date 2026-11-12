@@ -449,9 +449,8 @@ class _PlayBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).thmr;
     final scheme = Theme.of(context).colorScheme;
-    // 窄订阅:仅相位 / 收听秒数变化才重建本条
+    // Only phase changes rebuild the controls; the clock owns its second tick.
     final phase = ref.watch(playbackProvider.select((s) => s.phase));
-    final elapsed = ref.watch(playbackProvider.select((s) => s.listenedSec));
     final busy = phase == PlaybackPhase.connecting ||
         phase == PlaybackPhase.reconnecting;
     final playing =
@@ -478,15 +477,9 @@ class _PlayBar extends ConsumerWidget {
           ),
           child: Row(
             children: [
-              SizedBox(
+              const SizedBox(
                 width: 52,
-                child: Text(
-                  formatDuration(elapsed),
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                child: _ListeningClock(),
               ),
               const SizedBox(width: 12),
               Expanded(child: AudioStrip(playing: playing, busy: busy)),
@@ -501,6 +494,22 @@ class _PlayBar extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ListeningClock extends ConsumerWidget {
+  const _ListeningClock();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final elapsed = ref.watch(playbackProvider.select((s) => s.listenedSec));
+    return Text(
+      formatDuration(elapsed),
+      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+        fontFeatures: const [FontFeature.tabularFigures()],
+        fontWeight: FontWeight.w700,
       ),
     );
   }
@@ -531,10 +540,12 @@ class _AudioStripState extends State<AudioStrip>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final Ticker _ticker = createTicker(_onTick);
   late final SpectrumSource? _cap = widget.source ?? getPlatformSpectrum();
+  final _frames = ValueNotifier(0);
   List<double> _values = [];
   Duration _last = Duration.zero;
   bool _capturing = false;
   bool _foreground = true;
+  bool _unavailable = false;
 
   @override
   void initState() {
@@ -623,7 +634,15 @@ class _AudioStripState extends State<AudioStrip>
       _ticker.stop();
       _last = Duration.zero;
     }
-    if (mounted) setState(() {});
+    final source = _cap;
+    final unavailable =
+        source is RetryableSpectrumSource && source.isUnavailable;
+    if (unavailable != _unavailable) {
+      setState(() => _unavailable = unavailable);
+    }
+    // The envelope updates pixels only. Keep layout, buttons and semantics out
+    // of the ~20 Hz path, including on high refresh rate displays.
+    _frames.value++;
   }
 
   void _step() {
@@ -649,6 +668,7 @@ class _AudioStripState extends State<AudioStrip>
     WidgetsBinding.instance.removeObserver(this);
     _ticker.dispose();
     _stopCapture();
+    _frames.dispose();
     super.dispose();
   }
 
@@ -663,6 +683,7 @@ class _AudioStripState extends State<AudioStrip>
         _values = List.generate(count, (i) => i < old.length ? old[i] : 0.08);
       }
       final retryable = _cap is RetryableSpectrumSource ? _cap : null;
+      _unavailable = retryable?.isUnavailable ?? false;
       final needsAction =
           widget.playing && retryable != null && retryable.isUnavailable;
       return RepaintBoundary(
@@ -675,6 +696,7 @@ class _AudioStripState extends State<AudioStrip>
                   values: _values,
                   color: accent,
                   playing: widget.playing,
+                  repaint: _frames,
                 ),
                 child: const SizedBox(width: double.infinity, height: 36),
               ),
@@ -712,7 +734,8 @@ class _SpectrumPainter extends CustomPainter {
     required this.values,
     required this.color,
     required this.playing,
-  });
+    required Listenable repaint,
+  }) : super(repaint: repaint);
 
   final List<double> values;
   final Color color;
@@ -745,9 +768,12 @@ class _SpectrumPainter extends CustomPainter {
     }
   }
 
-  // values mutate in place; repaint whenever the widget rebuilds.
+  // In-place envelope changes arrive through the repaint Listenable.
   @override
-  bool shouldRepaint(_SpectrumPainter oldDelegate) => true;
+  bool shouldRepaint(_SpectrumPainter oldDelegate) =>
+      values != oldDelegate.values ||
+      color != oldDelegate.color ||
+      playing != oldDelegate.playing;
 }
 
 /// 播放错误条:窄订阅,仅在错误出现/消失时重建。

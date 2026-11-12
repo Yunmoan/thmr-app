@@ -11,18 +11,26 @@ import 'features/shell/home_shell.dart';
 import 'features/account/update_panel.dart';
 import 'shared/widgets/thmr_background.dart';
 
+// Theme construction includes font resolution and the full Material theme.
+// Keep it independent of playback, bitrate and other unrelated preferences.
+final appThemesProvider = Provider((ref) {
+  final accent = ref.watch(settingsProvider.select((s) => s.accentTheme));
+  return (ThmrTheme.light(accent), ThmrTheme.dark(accent));
+});
+
 class ThmrApp extends ConsumerWidget {
   const ThmrApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(settingsProvider);
+    final mode = ref.watch(settingsProvider.select((s) => s.themeMode));
+    final (light, dark) = ref.watch(appThemesProvider);
     return MaterialApp(
       title: '东方音乐电台 THMR',
       debugShowCheckedModeBanner: false,
-      themeMode: settings.themeMode,
-      theme: ThmrTheme.light(settings.accentTheme),
-      darkTheme: ThmrTheme.dark(settings.accentTheme),
+      themeMode: mode,
+      theme: light,
+      darkTheme: dark,
       // Single shared background under every route: pages stay transparent
       // and the illustration never jumps between tabs.
       //

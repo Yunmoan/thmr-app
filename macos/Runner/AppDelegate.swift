@@ -50,7 +50,9 @@ class AppDelegate: FlutterAppDelegate {
   }
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-    return true
+    // The menu-bar item owns a recovery path while the radio keeps playing.
+    // Explicit Quit still goes through Flutter's asynchronous exit handler.
+    return false
   }
 
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {

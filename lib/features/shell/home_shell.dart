@@ -1,15 +1,13 @@
 import 'dart:async' show unawaited;
-import 'dart:io' show Directory, File, Platform;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
-import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/player/playback_controller.dart';
 import '../../core/player/audio_engine.dart';
 import '../../core/platform/desktop_window.dart';
+import '../../core/platform/desktop_tray.dart';
 import '../../core/platform/linux_tray.dart';
 import '../../core/player/shared_radio_stream.dart';
 import '../../core/player/spectrum_linux.dart';
@@ -17,6 +15,7 @@ import '../../core/state/settings_provider.dart';
 import '../../core/state/station_provider.dart';
 import '../../core/state/radio_source_provider.dart';
 import '../../shared/widgets/player_dock_bar.dart';
+import '../../shared/widgets/persistent_tab_page.dart';
 import '../account/account_screen.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../collections/collections_screen.dart';
@@ -32,8 +31,7 @@ class HomeShell extends ConsumerStatefulWidget {
   ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends ConsumerState<HomeShell>
-    with WindowListener, TrayListener {
+class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
   int _index = 0;
   bool _autoTried = false;
   bool _closing = false;
@@ -41,7 +39,13 @@ class _HomeShellState extends ConsumerState<HomeShell>
   bool _hiddenToTray = false;
   bool _trayReady = false;
   LinuxTrayMonitor? _trayMonitor;
-  Directory? _trayDirectory;
+  late final _tray = DesktopTrayController(
+    showWindow: () async {
+      _hiddenToTray = false;
+      await restoreDesktopWindow();
+    },
+    exitApplication: _reallyExit,
+  );
 
   static const _destinations = [
     (icon: Icons.radio_outlined, selected: Icons.radio, label: '收听'),
@@ -78,7 +82,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
 
   /// Keep the transition wrapper mounted so each page retains its state.
   Widget _page(int i) {
-    return _TabPage(
+    return PersistentTabPage(
       key: ValueKey('tab-$i'),
       active: _index == i,
       child: _pages[i],
@@ -95,9 +99,8 @@ class _HomeShellState extends ConsumerState<HomeShell>
     });
     if (hasDesktopWindowControls) {
       windowManager.addListener(this);
-      trayManager.addListener(this);
       unawaited(_setupTray());
-      if (Platform.isLinux) {
+      if (_tray.platform == TargetPlatform.linux) {
         _trayMonitor = LinuxTrayMonitor()
           ..addListener(_trayAvailabilityChanged);
         unawaited(_trayMonitor!.start());
@@ -108,45 +111,19 @@ class _HomeShellState extends ConsumerState<HomeShell>
   }
 
   Future<void> _setupTray() async {
-    try {
-      final icon = Platform.isWindows ? 'thmr_tray.ico' : 'icon-512.png';
-      final data = await rootBundle.load('assets/icons/$icon');
-      final directory = await Directory.systemTemp.createTemp('thmr-tray-');
-      if (!mounted || _closing) {
-        await directory.delete(recursive: true);
-        return;
-      }
-      _trayDirectory = directory;
-      final trayFile = File('${directory.path}/$icon');
-      await trayFile.writeAsBytes(data.buffer.asUint8List(), flush: true);
-      await trayManager.setIcon(trayFile.path);
-      if (Platform.isWindows) {
-        await trayManager.setToolTip('东方音乐电台 THMR');
-      }
-      await trayManager.setContextMenu(Menu(items: [
-        MenuItem(
-            label: '显示主窗口',
-            onClick: (_) async {
-              _hiddenToTray = false;
-              await restoreDesktopWindow();
-            }),
-        MenuItem.separator(),
-        MenuItem(label: '退出', onClick: (_) => _reallyExit()),
-      ]));
-      _trayReady = true;
-      if (Platform.isLinux) _trayAvailabilityChanged();
-    } catch (_) {
+    _trayReady = await _tray.start();
+    if (!_trayReady) {
       _trayMonitor?.dispose();
       _trayMonitor = null;
-      if (mounted) {
-        ref.read(desktopTrayAvailableProvider.notifier).state = false;
-      }
     }
+    _trayAvailabilityChanged();
   }
 
   void _trayAvailabilityChanged() {
-    if (!mounted || _closing) return;
-    final available = _trayReady && (_trayMonitor?.value ?? false);
+    if (!mounted || _closing || _tray.isDisposed) return;
+    final available = _trayReady &&
+        (_tray.platform != TargetPlatform.linux ||
+            (_trayMonitor?.value ?? false));
     ref.read(desktopTrayAvailableProvider.notifier).state = available;
     if (!available && _hiddenToTray) {
       _hiddenToTray = false;
@@ -205,16 +182,17 @@ class _HomeShellState extends ConsumerState<HomeShell>
         _trayMonitor?.dispose();
         _trayMonitor = null;
         await ref.read(playbackProvider.notifier).stop();
-        if (Platform.isLinux) await LinuxSpectrum.instance.dispose();
+        if (_tray.platform == TargetPlatform.linux) {
+          await LinuxSpectrum.instance.dispose();
+        }
         await disposeSystemMediaControls();
         await sharedRadioStream.dispose();
-        await trayManager.destroy();
-        await _trayDirectory?.delete(recursive: true);
+        await _tray.dispose();
       });
 
   @override
   void onWindowClose() async {
-    if (_closing || _closeDialogOpen) return;
+    if (_closing || _closeDialogOpen || _tray.isDisposed) return;
     // 关闭按钮:按用户偏好询问 / 直接退出 / 隐藏到托盘
     final action = ref.read(settingsProvider).closeAction;
     if (action == CloseAction.tray) {
@@ -245,6 +223,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
   Future<(CloseAction, bool)?> _askCloseAction() {
     var remember = false;
     final trayAvailable = ref.read(desktopTrayAvailableProvider);
+    final isMacOS = _tray.platform == TargetPlatform.macOS;
     return showDialog<(CloseAction, bool)>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -254,9 +233,13 @@ class _HomeShellState extends ConsumerState<HomeShell>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(trayAvailable
-                  ? '最小化到托盘将保持后台放送,随时从托盘恢复。'
-                  : '当前桌面托盘不可用，将最小化到任务栏并继续放送。'),
+              Text(isMacOS
+                  ? trayAvailable
+                      ? '隐藏到菜单栏后将继续放送，可从菜单栏图标或 Dock 恢复窗口。'
+                      : '菜单栏图标暂不可用，将最小化到 Dock 并继续放送。'
+                  : trayAvailable
+                      ? '最小化到托盘将保持后台放送,随时从托盘恢复。'
+                      : '当前桌面托盘不可用，将最小化到任务栏并继续放送。'),
               const SizedBox(height: 10),
               SizedBox(
                 height: 40,
@@ -285,7 +268,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
               onPressed: () =>
                   Navigator.of(dialogContext).pop((CloseAction.tray, remember)),
               icon: const Icon(Icons.call_received_rounded, size: 16),
-              label: Text(trayAvailable ? '最小化到托盘' : '最小化到任务栏'),
+              label: Text(desktopTrayActionLabel(available: trayAvailable)),
             ),
             const SizedBox(width: 8),
             FilledButton.icon(
@@ -310,22 +293,11 @@ class _HomeShellState extends ConsumerState<HomeShell>
   }
 
   @override
-  void onTrayIconMouseDown() {
-    _hiddenToTray = false;
-    unawaited(restoreDesktopWindow());
-  }
-
-  @override
-  void onTrayIconRightMouseDown() {
-    trayManager.popUpContextMenu();
-  }
-
-  @override
   void dispose() {
     _trayMonitor?.dispose();
     if (hasDesktopWindowControls) {
       windowManager.removeListener(this);
-      trayManager.removeListener(this);
+      unawaited(_tray.dispose());
     }
     super.dispose();
   }
@@ -334,7 +306,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
   Widget build(BuildContext context) {
     // Auto-connect once, when station state is ready and user opted in.
     // 窄订阅:主壳只关心「是否可自动连播」,不随秒级播放 tick 重建。
-    final settings = ref.watch(settingsProvider);
+    final autoPlay = ref.watch(settingsProvider.select((s) => s.autoPlay));
     final stationReady =
         ref.watch(stationProvider.select((s) => s.status != null));
     final sourceReady =
@@ -342,7 +314,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
     final (pbPhase, pbPaused) =
         ref.watch(playbackProvider.select((s) => (s.phase, s.userPaused)));
     if (!_autoTried &&
-        settings.autoPlay &&
+        autoPlay &&
         stationReady &&
         sourceReady &&
         pbPhase == PlaybackPhase.idle &&
@@ -431,67 +403,6 @@ class _HomeShellState extends ConsumerState<HomeShell>
               compact: compact,
               onOpenPlayer: () => _switchTo(0),
             ),
-    );
-  }
-}
-
-/// A persistent tab surface with a short entrance animation.
-class _TabPage extends StatefulWidget {
-  const _TabPage({super.key, required this.active, required this.child});
-
-  final bool active;
-  final Widget child;
-
-  @override
-  State<_TabPage> createState() => _TabPageState();
-}
-
-class _TabPageState extends State<_TabPage>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 240),
-    value: widget.active ? 0 : 1,
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.active) _c.forward();
-  }
-
-  @override
-  void didUpdateWidget(covariant _TabPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.active && !oldWidget.active) _c.forward(from: 0);
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final animation = MediaQuery.maybeOf(context)?.disableAnimations ?? false
-        ? widget.child
-        : FadeTransition(
-            opacity: _c.drive(CurveTween(curve: Curves.easeOutCubic)),
-            child: SlideTransition(
-              position: _c.drive(Tween<Offset>(
-                begin: const Offset(0, 0.014),
-                end: Offset.zero,
-              ).chain(CurveTween(curve: Curves.easeOutCubic))),
-              child: widget.child,
-            ),
-          );
-    return Offstage(
-      offstage: !widget.active,
-      child: TickerMode(
-        enabled: widget.active,
-        child: animation,
-      ),
     );
   }
 }
