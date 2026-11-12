@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
@@ -544,8 +546,22 @@ class _AudioStripState extends State<AudioStrip>
   List<double> _values = [];
   Duration _last = Duration.zero;
   bool _capturing = false;
-  bool _foreground = true;
   bool _unavailable = false;
+
+  bool get _canAnimate {
+    final state = WidgetsBinding.instance.lifecycleState;
+    if (state == null || state == AppLifecycleState.resumed) return true;
+    // Desktop windows remain visible when another window takes input focus.
+    // Keep sampling until the window is actually hidden/minimized.
+    return state == AppLifecycleState.inactive &&
+        switch (defaultTargetPlatform) {
+          TargetPlatform.windows ||
+          TargetPlatform.linux ||
+          TargetPlatform.macOS =>
+            true,
+          _ => false,
+        };
+  }
 
   @override
   void initState() {
@@ -566,8 +582,7 @@ class _AudioStripState extends State<AudioStrip>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    _foreground = state == AppLifecycleState.resumed;
-    if (_foreground && widget.playing) {
+    if (_canAnimate && widget.playing) {
       _begin();
     } else {
       _stopCapture();
@@ -584,7 +599,7 @@ class _AudioStripState extends State<AudioStrip>
   }
 
   void _begin() {
-    if (_cap == null || !_foreground || !TickerMode.valuesOf(context).enabled) {
+    if (_cap == null || !_canAnimate || !TickerMode.valuesOf(context).enabled) {
       return;
     }
     if (!_capturing) {
