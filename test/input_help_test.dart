@@ -114,7 +114,28 @@ void main() {
     expect(children[help + 1], isA<InputHelpCard>());
     expect(find.text('键盘与手柄操作（F1）'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  for (final platform in TargetPlatform.values) {
+    testWidgets('settings help visibility on $platform', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(ProviderScope(
+          child: MaterialApp(
+        theme: ThmrTheme.light(),
+        home: const Scaffold(body: AccountScreen()),
+      )));
+      await tester.pumpAndSettle();
+      final list = tester.widget<ListView>(find.byType(ListView).first);
+      final children =
+          (list.childrenDelegate as SliverChildListDelegate).children;
+      final mobile =
+          platform == TargetPlatform.android || platform == TargetPlatform.iOS;
+      expect(children.whereType<InputHelpCard>().length, mobile ? 0 : 1);
+      expect(children.whereType<SectionHeader>().any((w) => w.title == '操作帮助'),
+          !mobile);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }, variant: TargetPlatformVariant.only(platform));
+  }
 
   testWidgets('dialog switches legends and stays usable with large text',
       (tester) async {

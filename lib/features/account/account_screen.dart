@@ -408,9 +408,12 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             const SectionHeader(title: '应用更新'),
             const UpdatePanel(),
           ],
-          const SizedBox(height: 18),
-          const SectionHeader(title: '操作帮助'),
-          const InputHelpCard(),
+          if (defaultTargetPlatform != TargetPlatform.android &&
+              defaultTargetPlatform != TargetPlatform.iOS) ...[
+            const SizedBox(height: 18),
+            const SectionHeader(title: '操作帮助'),
+            const InputHelpCard(),
+          ],
           const SizedBox(height: 18),
           const SectionHeader(title: '关于'),
           AboutPanel(
