@@ -187,11 +187,14 @@ void main() {
     ));
 
     await tester.pumpAndSettle();
-    final loadingTop =
-        tester.getTopLeft(find.byKey(const ValueKey('skeleton-player'))).dy;
     initial.complete(_status(appConfig.stationId, '综合曲目'));
     await tester.pumpAndSettle();
-    expect(tester.getTopLeft(find.byType(NowPlayingPanel)).dy, loadingTop);
+    final descriptionRect = tester.getRect(find.text('持续放送幻想乡的音乐。'));
+    final channelRow = find
+        .ancestor(of: find.byType(ChannelSwitcher), matching: find.byType(Wrap))
+        .first;
+    expect(tester.getRect(channelRow).top - descriptionRect.bottom,
+        closeTo(12, 1));
     final switcher = find.byType(ChannelSwitcher);
     final headerElement = tester.element(switcher);
     final player = find.byType(NowPlayingPanel);

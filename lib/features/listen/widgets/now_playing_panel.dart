@@ -323,28 +323,21 @@ class NowPlayingTrackInfo extends ConsumerWidget {
               ),
         ),
         const SizedBox(height: 4),
-        ConstrainedBox(
-          constraints: BoxConstraints(
-              minHeight: MediaQuery.textScalerOf(context).scale(
-                      Theme.of(context).textTheme.titleLarge!.fontSize!) *
-                  1.25 *
-                  2),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 350),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeIn,
-            transitionBuilder: (child, anim) =>
-                FadeTransition(opacity: anim, child: child),
-            child: Text(
-              cur?.title ?? '暂无播放',
-              key: ValueKey(cur?.trackId ?? 'none'),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w800, height: 1.25),
-            ),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 350),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeIn,
+          transitionBuilder: (child, anim) =>
+              FadeTransition(opacity: anim, child: child),
+          child: Text(
+            cur?.title ?? '暂无播放',
+            key: ValueKey(cur?.trackId ?? 'none'),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context)
+                .textTheme
+                .titleLarge
+                ?.copyWith(fontWeight: FontWeight.w800, height: 1.25),
           ),
         ),
         const SizedBox(height: 6),

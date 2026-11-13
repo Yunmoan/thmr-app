@@ -241,15 +241,8 @@ class _Hero extends StatelessWidget {
                         ?.copyWith(fontWeight: FontWeight.w900, height: 1.15),
                   ),
                 ),
-                const SizedBox(height: 8),
-                Stack(children: [
-                  // Reserve two description lines before metadata arrives.
-                  ExcludeSemantics(
-                      child: Text('\n',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: Colors.transparent))),
+                if (description.isNotEmpty) ...[
+                  const SizedBox(height: 8),
                   Text(
                     description,
                     maxLines: 2,
@@ -259,7 +252,7 @@ class _Hero extends StatelessWidget {
                         .bodySmall
                         ?.copyWith(color: tokens.mutedInk),
                   ),
-                ]),
+                ],
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,

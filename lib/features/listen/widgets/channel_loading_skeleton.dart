@@ -56,9 +56,8 @@ class ChannelLoadingSkeleton extends StatelessWidget {
                   SkeletonText(style: text.labelSmall, fraction: .35),
                   const SizedBox(height: 4),
                   SkeletonText(
-                      style: text.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w800, height: 1.25),
-                      lines: 2),
+                      style: text.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800, height: 1.25)),
                   const SizedBox(height: 6),
                   SkeletonText(style: text.bodySmall, fraction: .55),
                   const SizedBox(height: 8),

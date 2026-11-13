@@ -116,6 +116,10 @@ void main() {
     final divider = tester.getRect(find.byType(Divider));
     final quality = tester.getRect(find.byType(BitrateRow));
     expect(quality.top - divider.bottom, greaterThanOrEqualTo(12));
+    expect(
+        tester.getRect(find.text('歌手')).top -
+            tester.getRect(find.text('曲目')).bottom,
+        closeTo(6, 1));
     expect(tester.takeException(), isNull);
   });
 
