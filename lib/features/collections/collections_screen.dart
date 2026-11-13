@@ -1,6 +1,8 @@
 // Personal collections, public playback history and shared links.
 
 import 'package:flutter/material.dart';
+
+import '../../shared/widgets/loading_skeleton.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/radio_api.dart';
@@ -85,8 +87,10 @@ class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
             else
               Expanded(
                 child: collections.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
+                  loading: () => TrackListSkeleton(
+                      rowPadding: const EdgeInsets.all(16),
+                      gap: 10,
+                      titleStyle: Theme.of(context).textTheme.titleMedium),
                   error: (e, _) => NetworkIssueView(
                     onRetry: () => ref.invalidate(collectionsProvider),
                     networkFailure: isNetworkFailure(e),

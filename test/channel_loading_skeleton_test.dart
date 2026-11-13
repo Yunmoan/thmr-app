@@ -29,8 +29,8 @@ void main() {
         expect(find.text('正在切换频道…'), findsNothing);
         expect(find.byType(CircularProgressIndicator), findsNothing);
         expect(find.byKey(const ValueKey('skeleton-player')), findsOneWidget);
-        expect(
-            find.byKey(const ValueKey('skeleton-control-0')), findsOneWidget);
+        expect(find.byKey(const ValueKey('skeleton-control-0')),
+            width >= 900 ? findsOneWidget : findsNothing);
         expect(find.byKey(const ValueKey('skeleton-history')),
             width >= 900 ? findsOneWidget : findsNothing);
         expect(find.byKey(const ValueKey('skeleton-queue')),

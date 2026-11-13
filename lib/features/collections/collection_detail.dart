@@ -1,6 +1,8 @@
 // Collection detail: items, sorting, share toggle + link bar, export.
 
 import 'package:flutter/material.dart';
+
+import '../../shared/widgets/loading_skeleton.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
@@ -335,7 +337,8 @@ class _CollectionDetailScreenState
 
   Widget _buildList(BuildContext context, ThmrTokens tokens) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const TrackListSkeleton(
+          padding: EdgeInsets.all(18), extraHeight: 46);
     }
     if (_error != null) {
       return NetworkIssueView(

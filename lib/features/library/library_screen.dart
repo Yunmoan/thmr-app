@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../shared/widgets/loading_skeleton.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/widgets/focus_outline.dart';
@@ -151,7 +153,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   Widget _buildBody(BuildContext context, ThmrTokens tokens, String stationId) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const TrackListSkeleton();
     }
     if (_error != null) {
       return NetworkIssueView(

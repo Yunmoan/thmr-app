@@ -5,12 +5,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:thmr_app/core/models/models.dart';
 import 'package:thmr_app/core/player/playback_controller.dart';
-import 'package:thmr_app/core/state/app_providers.dart';
 import 'package:thmr_app/core/state/station_provider.dart';
 import 'package:thmr_app/core/theme/thmr_theme.dart';
 import 'package:thmr_app/features/listen/widgets/bitrate_row.dart';
 import 'package:thmr_app/features/listen/widgets/now_playing_panel.dart';
 import 'package:thmr_app/features/listen/widgets/queue_strip.dart';
+import 'package:thmr_app/features/listen/widgets/channel_loading_skeleton.dart';
+import 'package:thmr_app/shared/widgets/player_panel_layout.dart';
 
 final status = StationStatus.fromJson({
   'station': {
@@ -41,6 +42,40 @@ class _Playback extends StateNotifier<PlaybackState>
 }
 
 void main() {
+  for (final width in [320.0, 375.0, 950.0, 1100.0]) {
+    testWidgets('loading player keeps its loaded height at $width',
+        (tester) async {
+      tester.view.physicalSize = Size(width, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      SharedPreferences.setMockInitialValues({});
+      final wide = width >= 980;
+      Widget app(Widget body) => ProviderScope(
+              overrides: [
+                stationProvider.overrideWith((ref) => _Station()),
+                playbackProvider.overrideWith((ref) => _Playback()),
+              ],
+              child: MaterialApp(
+                  theme: ThmrTheme.dark(), home: Scaffold(body: body)));
+      await tester.pumpWidget(
+          app(ChannelLoadingSkeleton(switching: false, wide: wide)));
+      await tester.pumpAndSettle();
+      final placeholder =
+          tester.getSize(find.byKey(const ValueKey('skeleton-player')));
+      await tester.pumpWidget(app(Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: wide ? width - 346 : width,
+            child: NowPlayingPanel(status: status, inlineBitrate: !wide),
+          ))));
+      await tester.pumpAndSettle();
+      expect(tester.getSize(find.byType(PlayerPanelLayout)).height,
+          closeTo(placeholder.height, 1));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('small player gives quality controls space below the divider',
       (tester) async {
     tester.view.physicalSize = const Size(375, 800);

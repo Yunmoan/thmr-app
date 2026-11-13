@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import '../../shared/widgets/loading_skeleton.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/widgets/focus_outline.dart';
@@ -56,7 +58,7 @@ class _YesterdayPlaylistState extends ConsumerState<YesterdayPlaylist> {
             ? [RadioChannel(id: activeId, name: activeId)]
             : null);
     if (channels == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const TrackListSkeleton(extraHeight: 20);
     }
     if (channels.isEmpty) {
       return const Center(child: Text('暂无可用频道。'));
@@ -121,7 +123,7 @@ class _YesterdayPlaylistState extends ConsumerState<YesterdayPlaylist> {
         Expanded(
           child: playlist.when(
             skipLoadingOnRefresh: false,
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const TrackListSkeleton(extraHeight: 20),
             error: (error, _) => NetworkIssueView(
               networkFailure: isNetworkFailure(error),
               message: '暂时无法读取昨日歌单，请稍后重试。',

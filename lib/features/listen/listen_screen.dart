@@ -111,7 +111,10 @@ class _WideLayout extends ConsumerWidget {
             child: _ChannelTransition(
               child: status == null
                   ? _ChannelPlaceholder(
-                      loading: station.initialLoading, switching: switching)
+                      loading: station.initialLoading,
+                      switching: switching,
+                      wide: true,
+                      showVote: _showVote(ref))
                   : Row(
                       key: ValueKey(status.station.id),
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -310,7 +313,10 @@ class _NarrowLayout extends ConsumerWidget {
           _ChannelTransition(
             child: st == null
                 ? _ChannelPlaceholder(
-                    loading: station.initialLoading, switching: switching)
+                    loading: station.initialLoading,
+                    switching: switching,
+                    wide: false,
+                    showVote: _showVote(ref))
                 : Column(
                     key: ValueKey(st.station.id),
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -457,15 +463,22 @@ class _ChannelTransition extends StatelessWidget {
 }
 
 class _ChannelPlaceholder extends StatelessWidget {
-  const _ChannelPlaceholder({required this.loading, required this.switching});
+  const _ChannelPlaceholder(
+      {required this.loading,
+      required this.switching,
+      required this.wide,
+      required this.showVote});
 
   final bool loading;
   final bool switching;
+  final bool wide;
+  final bool showVote;
 
   @override
   Widget build(BuildContext context) {
     if (!loading) return const SizedBox.shrink();
-    return ChannelLoadingSkeleton(switching: switching);
+    return ChannelLoadingSkeleton(
+        switching: switching, wide: wide, showVote: showVote);
   }
 }
 

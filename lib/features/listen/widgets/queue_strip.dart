@@ -125,7 +125,9 @@ class _QueueStripState extends State<QueueStrip> {
   void _onPointerSignal(PointerSignalEvent event) {
     if (event is! PointerScrollEvent ||
         event.scrollDelta.dy.abs() <= event.scrollDelta.dx.abs() ||
-        !_scrollController.hasClients) return;
+        !_scrollController.hasClients) {
+      return;
+    }
     final position = _scrollController.position;
     final delta = event.scrollDelta.dy;
     final target = (position.pixels + delta)

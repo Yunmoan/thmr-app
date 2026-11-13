@@ -17,7 +17,7 @@ import '../../../core/state/auth_provider.dart';
 import '../../../core/state/channel_provider.dart';
 import '../../../core/state/station_provider.dart';
 import '../../../core/theme/thmr_theme.dart';
-import '../../../shared/widgets/thmr_panel.dart';
+import '../../../shared/widgets/player_panel_layout.dart';
 import '../../../shared/widgets/volume_slider.dart';
 import '../../../shared/widgets/focus_outline.dart';
 import '../../../shared/widgets/volume_wheel_control.dart';
@@ -115,48 +115,30 @@ class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
     final favorited = ref.watch(favoritesStatusProvider
         .select((v) => v.asData?.value.favorited ?? false));
 
-    return ThmrPanel(
-      padding: const EdgeInsets.all(16),
-      child: Column(
+    return PlayerPanelLayout(
+      header: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // now-playing row: cover left, copy right (web PlayerConsole)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _Cover96(cur: cur),
-              const SizedBox(width: 14),
-              Expanded(
-                child: NowPlayingTrackInfo(
-                  cur: cur,
-                  favorited: favorited,
-                  onFavorite: cur == null ? null : () => _toggleFavorite(cur),
-                  onFeedback: cur == null
-                      ? null
-                      : () => showFeedbackSheet(
-                            context,
-                            track: cur,
-                            stationId: widget.status.station.id,
-                          ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // player-toggle long bar (web .player-toggle)
-          _PlayBar(onToggle: _onMainButton),
-          const _PlaybackError(),
-          const SizedBox(height: 12),
-          // volume: desktop = inline slider; mobile = icon + bottom sheet
-          _VolumeControl(desktopInline: !widget.inlineBitrate),
-          if (widget.inlineBitrate) ...[
-            const SizedBox(height: 12),
-            Divider(height: 1, color: Theme.of(context).thmr.panelBorder),
-            const SizedBox(height: 12),
-            const BitrateRow(),
-          ],
+          _Cover96(cur: cur),
+          const SizedBox(width: 14),
+          Expanded(
+              child: NowPlayingTrackInfo(
+            cur: cur,
+            favorited: favorited,
+            onFavorite: cur == null ? null : () => _toggleFavorite(cur),
+            onFeedback: cur == null
+                ? null
+                : () => showFeedbackSheet(context,
+                    track: cur, stationId: widget.status.station.id),
+          )),
         ],
       ),
+      playback: Column(mainAxisSize: MainAxisSize.min, children: [
+        _PlayBar(onToggle: _onMainButton),
+        const _PlaybackError()
+      ]),
+      volume: _VolumeControl(desktopInline: !widget.inlineBitrate),
+      quality: widget.inlineBitrate ? const BitrateRow() : null,
     );
   }
 }
@@ -341,21 +323,28 @@ class NowPlayingTrackInfo extends ConsumerWidget {
               ),
         ),
         const SizedBox(height: 4),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 350),
-          switchInCurve: Curves.easeOutCubic,
-          switchOutCurve: Curves.easeIn,
-          transitionBuilder: (child, anim) =>
-              FadeTransition(opacity: anim, child: child),
-          child: Text(
-            cur?.title ?? '暂无播放',
-            key: ValueKey(cur?.trackId ?? 'none'),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.w800, height: 1.25),
+        ConstrainedBox(
+          constraints: BoxConstraints(
+              minHeight: MediaQuery.textScalerOf(context).scale(
+                      Theme.of(context).textTheme.titleLarge!.fontSize!) *
+                  1.25 *
+                  2),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 350),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeIn,
+            transitionBuilder: (child, anim) =>
+                FadeTransition(opacity: anim, child: child),
+            child: Text(
+              cur?.title ?? '暂无播放',
+              key: ValueKey(cur?.trackId ?? 'none'),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800, height: 1.25),
+            ),
           ),
         ),
         const SizedBox(height: 6),
