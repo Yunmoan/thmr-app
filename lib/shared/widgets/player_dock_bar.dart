@@ -219,44 +219,48 @@ class _DockBitrate extends ConsumerWidget {
     final stationId = info!.id;
     final selected = station.selectedProfile(settings.bitrateFor(stationId));
 
-    return PopupMenuButton<String>(
-      position: PopupMenuPosition.over,
-      onSelected: (id) =>
-          ref.read(settingsProvider.notifier).setBitrate(stationId, id),
-      itemBuilder: (menuContext) => [
-        for (final p in profiles)
-          PopupMenuItem(
-            value: p.id,
-            child: Text(
-              p.label,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: p.id == selected.id ? accent : tokens.ink,
-                    fontWeight: p.id == selected.id ? FontWeight.w700 : null,
-                  ),
+    return FocusOutline(
+        radius: 6,
+        child: PopupMenuButton<String>(
+          position: PopupMenuPosition.over,
+          onSelected: (id) =>
+              ref.read(settingsProvider.notifier).setBitrate(stationId, id),
+          itemBuilder: (menuContext) => [
+            for (final p in profiles)
+              PopupMenuItem(
+                value: p.id,
+                child: AncestorFocusOutline(
+                    child: Text(
+                  p.label,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: p.id == selected.id ? accent : tokens.ink,
+                        fontWeight:
+                            p.id == selected.id ? FontWeight.w700 : null,
+                      ),
+                )),
+              ),
+          ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: tokens.fieldBg,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: tokens.panelBorder),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  selected.label,
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const Icon(Icons.arrow_drop_down_rounded, size: 16),
+              ],
             ),
           ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: tokens.fieldBg,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: tokens.panelBorder),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              selected.label,
-              style: Theme.of(context)
-                  .textTheme
-                  .labelMedium
-                  ?.copyWith(fontWeight: FontWeight.w600),
-            ),
-            const Icon(Icons.arrow_drop_down_rounded, size: 16),
-          ],
-        ),
-      ),
-    );
+        ));
   }
 }

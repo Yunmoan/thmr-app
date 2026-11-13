@@ -268,7 +268,8 @@ class NowPlayingTrackInfo extends ConsumerWidget {
         for (final c in cols)
           PopupMenuItem(
             value: c,
-            child: Row(
+            child: AncestorFocusOutline(
+                child: Row(
               children: [
                 Icon(
                   c.favorited
@@ -297,7 +298,7 @@ class NowPlayingTrackInfo extends ConsumerWidget {
                           : Theme.of(context).thmr.mutedInk),
                 ),
               ],
-            ),
+            )),
           ),
       ],
     );
@@ -418,27 +419,30 @@ class _TextAction extends StatelessWidget {
     return Material(
       color: active ? tokens.accentSoft : tokens.fieldBg,
       borderRadius: BorderRadius.circular(6),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
+      child: FocusOutline(
+          radius: 6,
+          child: InkWell(
+            onTap: onTap,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color:
-                  active ? accent.withValues(alpha: 0.5) : tokens.panelBorder,
-            ),
-          ),
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: active ? accent : tokens.ink,
-                  fontWeight: FontWeight.w600,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: active
+                      ? accent.withValues(alpha: 0.5)
+                      : tokens.panelBorder,
                 ),
-          ),
-        ),
-      ),
+              ),
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: active ? accent : tokens.ink,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ),
+          )),
     );
   }
 }
@@ -845,7 +849,8 @@ class _VolumeControlState extends ConsumerState<_VolumeControl> {
         child: VolumeWheelControl(
           value: volume,
           onChanged: (v) => ref.read(playbackProvider.notifier).setVolume(v),
-          child: InkWell(
+          child: FocusOutline(
+              child: InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: () => showModalBottomSheet<void>(
               context: context,
@@ -876,7 +881,7 @@ class _VolumeControlState extends ConsumerState<_VolumeControl> {
                 ],
               ),
             ),
-          ),
+          )),
         ),
       );
     }

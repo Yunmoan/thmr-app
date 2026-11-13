@@ -10,6 +10,7 @@ import 'package:thmr_app/shared/widgets/desktop_title_bar.dart';
 import 'package:thmr_app/shared/widgets/persistent_tab_page.dart';
 import 'package:thmr_app/shared/widgets/volume_slider.dart';
 import 'package:thmr_app/core/theme/thmr_colors.dart';
+import 'package:thmr_app/core/theme/thmr_focus_ring.dart';
 
 void main() {
   testWidgets('hidden tab releases focus and cannot receive it again',
@@ -87,13 +88,12 @@ void main() {
                         child: VolumeSlider(
                             value: value,
                             onChanged: (v) => setState(() => value = v))))))));
-    final paint = find.descendant(
-        of: find.byType(VolumeSlider), matching: find.byType(CustomPaint));
-    final unfocused = tester.widget<CustomPaint>(paint).painter!;
+    final ring = find.descendant(
+        of: find.byType(VolumeSlider), matching: find.byType(ThmrFocusRing));
+    expect(tester.widget<ThmrFocusRing>(ring).focused, isFalse);
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pump();
-    final focused = tester.widget<CustomPaint>(paint).painter!;
-    expect(focused.shouldRepaint(unfocused), isTrue);
+    expect(tester.widget<ThmrFocusRing>(ring).focused, isTrue);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
     await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);

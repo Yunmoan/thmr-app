@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/theme/thmr_focus_ring.dart';
+
 /// Volume control without Slider's OverlayPortal, which can produce orphaned
 /// accessibility nodes on Windows when shown in a pushed route.
 class VolumeSlider extends StatefulWidget {
@@ -91,30 +93,29 @@ class _VolumeSliderState extends State<VolumeSlider> {
               }
               return KeyEventResult.handled;
             },
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: (details) => setFromOffset(details.localPosition.dx),
-                onHorizontalDragStart: (details) =>
-                    setFromOffset(details.localPosition.dx),
-                onHorizontalDragUpdate: (details) =>
-                    setFromOffset(details.localPosition.dx),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: widget.height,
-                  child: CustomPaint(
-                    painter: _VolumeSliderPainter(
-                        current / 100,
-                        accent,
-                        track,
-                        _focused
-                            ? Theme.of(context).colorScheme.onSurface
-                            : null),
+            child: ThmrFocusRing(
+                focused: _focused,
+                radius: 6,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapDown: (details) =>
+                        setFromOffset(details.localPosition.dx),
+                    onHorizontalDragStart: (details) =>
+                        setFromOffset(details.localPosition.dx),
+                    onHorizontalDragUpdate: (details) =>
+                        setFromOffset(details.localPosition.dx),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: widget.height,
+                      child: CustomPaint(
+                        painter:
+                            _VolumeSliderPainter(current / 100, accent, track),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ),
+                )),
           ),
         ),
       );
@@ -123,13 +124,11 @@ class _VolumeSliderState extends State<VolumeSlider> {
 }
 
 class _VolumeSliderPainter extends CustomPainter {
-  const _VolumeSliderPainter(
-      this.fraction, this.accent, this.track, this.focusColor);
+  const _VolumeSliderPainter(this.fraction, this.accent, this.track);
 
   final double fraction;
   final Color accent;
   final Color track;
-  final Color? focusColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -155,23 +154,11 @@ class _VolumeSliderPainter extends CustomPainter {
       paint,
     );
     canvas.drawCircle(Offset(thumbX, y), 6, paint);
-    if (focusColor != null) {
-      paint
-        ..color = focusColor!
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-            (Offset.zero & size).deflate(1), const Radius.circular(6)),
-        paint,
-      );
-    }
   }
 
   @override
   bool shouldRepaint(_VolumeSliderPainter oldDelegate) =>
       fraction != oldDelegate.fraction ||
       accent != oldDelegate.accent ||
-      track != oldDelegate.track ||
-      focusColor != oldDelegate.focusColor;
+      track != oldDelegate.track;
 }

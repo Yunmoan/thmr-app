@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../../shared/widgets/focus_outline.dart';
 import '../../../core/models/models.dart';
 import '../../../core/theme/thmr_theme.dart';
 import '../../../shared/widgets/track_cover.dart';
@@ -166,77 +167,84 @@ class _QueueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).thmr;
-    return InkWell(
-      onTap: () => showQueueEntryDetail(context, entry, index),
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        width: 264,
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: tokens.panelBg.withValues(alpha: 0.82),
+    return FocusOutline(
+        radius: 10,
+        child: InkWell(
+          onTap: () => showQueueEntryDetail(context, entry, index),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: tokens.panelBorder),
-        ),
-        child: Row(
-          children: [
-            TrackCover(url: entry.coverUrl, size: 72, radius: 8),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Row(
+          child: Container(
+            width: 264,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: tokens.panelBg.withValues(alpha: 0.82),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: tokens.panelBorder),
+            ),
+            child: Row(
+              children: [
+                TrackCover(url: entry.coverUrl, size: 72, radius: 8),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        '#${index + 1}',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w800,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            '#${index + 1}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w800,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              entry.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleSmall
+                                  ?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: tokens.ink),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          entry.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleSmall
-                              ?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: tokens.ink),
+                      const SizedBox(height: 4),
+                      Text(
+                        entry.artist,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: tokens.mutedInk),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        plannedLabel(entry, index),
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: tokens.mutedInk,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    entry.artist,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: tokens.mutedInk),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    plannedLabel(entry, index),
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: tokens.mutedInk,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    );
+          ),
+        ));
   }
 }
 

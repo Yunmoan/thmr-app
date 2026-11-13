@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../shared/widgets/focus_outline.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../core/update/app_update.dart';
 import '../../shared/widgets/thmr_panel.dart';
@@ -194,10 +195,11 @@ class UpdatePanel extends ConsumerWidget {
                 Text('启动或返回应用时检查，每 24 小时最多检查一次', style: captionStyle),
               ],
             )),
-            Switch(
+            FocusOutline(
+                child: Switch(
               value: state.autoCheck,
               onChanged: (value) => controller.setAutoCheck(value),
-            ),
+            )),
           ]),
           const Divider(height: 22),
           Row(children: [
@@ -211,9 +213,10 @@ class UpdatePanel extends ConsumerWidget {
                 Text('发现新版本后在后台下载并校验，安装前会提示', style: captionStyle),
               ],
             )),
-            Switch(
-                value: state.autoDownload,
-                onChanged: (value) => controller.setAutoDownload(value)),
+            FocusOutline(
+                child: Switch(
+                    value: state.autoDownload,
+                    onChanged: (value) => controller.setAutoDownload(value))),
           ]),
           const Divider(height: 22),
           if (state.status == UpdateStatus.downloading) ...[

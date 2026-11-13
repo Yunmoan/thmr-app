@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../shared/widgets/focus_outline.dart';
 import '../../core/platform/desktop_window.dart';
 import '../../core/platform/linux_tray.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -137,15 +138,15 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     ButtonSegment(
                         value: ThemeMode.light,
                         icon: Icon(Icons.light_mode_outlined, size: 17),
-                        label: Text('浅色')),
+                        label: AncestorFocusOutline(child: Text('浅色'))),
                     ButtonSegment(
                         value: ThemeMode.dark,
                         icon: Icon(Icons.dark_mode_outlined, size: 17),
-                        label: Text('深色')),
+                        label: AncestorFocusOutline(child: Text('深色'))),
                     ButtonSegment(
                         value: ThemeMode.system,
                         icon: Icon(Icons.settings_suggest_outlined, size: 17),
-                        label: Text('跟随')),
+                        label: AncestorFocusOutline(child: Text('跟随'))),
                   ],
                   selected: {settings.themeMode},
                   onSelectionChanged: (s) => _selectAppearance(mode: s.first),
@@ -168,25 +169,28 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   runSpacing: 8,
                   children: [
                     for (final t in AccentTheme.values)
-                      ChoiceChip(
-                        selected: settings.accentTheme == t,
-                        onSelected: (_) => _selectAppearance(accent: t),
-                        label: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                color: _accentDot(t),
-                                shape: BoxShape.circle,
-                              ),
+                      FocusOutline(
+                          radius: 999,
+                          focusBounds: true,
+                          child: ChoiceChip(
+                            selected: settings.accentTheme == t,
+                            onSelected: (_) => _selectAppearance(accent: t),
+                            label: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: BoxDecoration(
+                                    color: _accentDot(t),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 7),
+                                Text(_accentLabel(t)),
+                              ],
                             ),
-                            const SizedBox(width: 7),
-                            Text(_accentLabel(t)),
-                          ],
-                        ),
-                      ),
+                          )),
                   ],
                 ),
                 const Divider(height: 22),
@@ -214,11 +218,12 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                         ],
                       ),
                     ),
-                    Switch(
+                    FocusOutline(
+                        child: Switch(
                       value: settings.autoPlay,
                       onChanged: (v) =>
                           ref.read(settingsProvider.notifier).setAutoPlay(v),
-                    ),
+                    )),
                   ],
                 ),
               ],
@@ -260,12 +265,13 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                           ],
                         ),
                       ),
-                      Switch(
+                      FocusOutline(
+                          child: Switch(
                         value: settings.miniShowIllustration,
                         onChanged: (value) => ref
                             .read(settingsProvider.notifier)
                             .setMiniShowIllustration(value),
-                      ),
+                      )),
                     ],
                   ),
                 ],
@@ -307,19 +313,23 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                           spacing: 8,
                           children: [
                             for (final a in CloseAction.values)
-                              ChoiceChip(
-                                label: Text(switch (a) {
-                                  CloseAction.ask => '每次询问',
-                                  CloseAction.exit => '退出程序',
-                                  CloseAction.tray => desktopTrayActionLabel(
-                                      available: ref
-                                          .watch(desktopTrayAvailableProvider)),
-                                }),
-                                selected: settings.closeAction == a,
-                                onSelected: (_) => ref
-                                    .read(settingsProvider.notifier)
-                                    .setCloseAction(a),
-                              ),
+                              FocusOutline(
+                                  radius: 999,
+                                  focusBounds: true,
+                                  child: ChoiceChip(
+                                    label: Text(switch (a) {
+                                      CloseAction.ask => '每次询问',
+                                      CloseAction.exit => '退出程序',
+                                      CloseAction.tray =>
+                                        desktopTrayActionLabel(
+                                            available: ref.watch(
+                                                desktopTrayAvailableProvider)),
+                                    }),
+                                    selected: settings.closeAction == a,
+                                    onSelected: (_) => ref
+                                        .read(settingsProvider.notifier)
+                                        .setCloseAction(a),
+                                  )),
                           ],
                         ),
                       ],
@@ -447,9 +457,15 @@ class _MiniSizeAndEdgeSettings extends ConsumerWidget {
         const SizedBox(height: 8),
         SegmentedButton<MiniPlayerSizePreset>(
           segments: const [
-            ButtonSegment(value: MiniPlayerSizePreset.small, label: Text('小')),
-            ButtonSegment(value: MiniPlayerSizePreset.medium, label: Text('中')),
-            ButtonSegment(value: MiniPlayerSizePreset.large, label: Text('大')),
+            ButtonSegment(
+                value: MiniPlayerSizePreset.small,
+                label: AncestorFocusOutline(child: Text('小'))),
+            ButtonSegment(
+                value: MiniPlayerSizePreset.medium,
+                label: AncestorFocusOutline(child: Text('中'))),
+            ButtonSegment(
+                value: MiniPlayerSizePreset.large,
+                label: AncestorFocusOutline(child: Text('大'))),
           ],
           selected: {size},
           onSelectionChanged: (sizes) =>
@@ -544,46 +560,46 @@ class _MiniEdgeChoice extends StatelessWidget {
       button: true,
       selected: selected,
       label: '$label，$caption',
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(9),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 9),
-          decoration: BoxDecoration(
-            color: selected ? tokens.accentSoft : tokens.panelSoft,
+      child: FocusOutline(
+          radius: 9,
+          child: InkWell(
+            onTap: onTap,
             borderRadius: BorderRadius.circular(9),
-            border: Border.all(
-              color: selected ? accent : tokens.panelBorder,
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SvgPicture.asset(
-                svg,
-                width: 24,
-                height: 24,
-                colorFilter: ColorFilter.mode(
-                  selected ? accent : tokens.mutedInk,
-                  BlendMode.srcIn,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 9),
+              decoration: BoxDecoration(
+                color: selected ? tokens.accentSoft : tokens.panelSoft,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(
+                  color: selected ? accent : tokens.panelBorder,
                 ),
-                excludeFromSemantics: true,
               ),
-              const SizedBox(height: 5),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context)
-                    .textTheme
-                    .labelMedium
-                    ?.copyWith(fontWeight: FontWeight.w700, color: tokens.ink),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SvgPicture.asset(
+                    svg,
+                    width: 24,
+                    height: 24,
+                    colorFilter: ColorFilter.mode(
+                      selected ? accent : tokens.mutedInk,
+                      BlendMode.srcIn,
+                    ),
+                    excludeFromSemantics: true,
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w700, color: tokens.ink),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
-      ),
+            ),
+          )),
     );
   }
 }
@@ -680,7 +696,8 @@ Future<void> _editNickname(
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('设置昵称'),
-        content: TextField(
+        content: FocusOutline(
+            child: TextField(
           controller: controller,
           autofocus: true,
           maxLength: 64,
@@ -691,7 +708,7 @@ Future<void> _editNickname(
           decoration:
               const InputDecoration(labelText: '昵称(2–64 字符)', counterText: ''),
           onSubmitted: (_) => Navigator.pop(context, true),
-        ),
+        )),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),

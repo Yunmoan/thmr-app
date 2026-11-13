@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../core/theme/thmr_theme.dart';
+import 'focus_outline.dart';
 import 'thmr_panel.dart';
 
 Future<void> showInputHelp(BuildContext context) => showDialog<void>(
@@ -75,8 +76,12 @@ class _InputHelpDialogState extends State<InputHelpDialog> {
                         SegmentedButton<bool>(
                           showSelectedIcon: false,
                           segments: const [
-                            ButtonSegment(value: false, label: Text('键盘')),
-                            ButtonSegment(value: true, label: Text('手柄')),
+                            ButtonSegment(
+                                value: false,
+                                label: AncestorFocusOutline(child: Text('键盘'))),
+                            ButtonSegment(
+                                value: true,
+                                label: AncestorFocusOutline(child: Text('手柄'))),
                           ],
                           selected: {_gamepad},
                           onSelectionChanged: (value) =>

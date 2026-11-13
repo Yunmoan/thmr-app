@@ -254,11 +254,12 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
                 height: 40,
                 child: Row(
                   children: [
-                    Checkbox(
+                    FocusOutline(
+                        child: Checkbox(
                       value: remember,
                       onChanged: (v) =>
                           setDialogState(() => remember = v ?? false),
-                    ),
+                    )),
                     const SizedBox(width: 6),
                     const Expanded(
                       child: Text('不再提醒,以后按此次选择执行'),
@@ -373,8 +374,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
                   destinations: [
                     for (final d in _destinations)
                       NavigationRailDestination(
-                        icon: Icon(d.icon),
-                        selectedIcon: Icon(d.selected),
+                        icon: NavigationRailFocusIcon(icon: d.icon),
+                        selectedIcon: NavigationRailFocusIcon(icon: d.selected),
                         label: Text(d.label),
                       ),
                   ],

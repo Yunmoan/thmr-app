@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/widgets/focus_outline.dart';
 import '../../core/api/network_failure.dart';
 import '../../core/models/models.dart';
 import '../../core/state/channel_provider.dart';
@@ -83,21 +84,23 @@ class _YesterdayPlaylistState extends ConsumerState<YesterdayPlaylist> {
             Expanded(
               child: Semantics(
                 label: '频道',
-                child: DropdownButton<String>(
+                child: FocusOutline(
+                    child: DropdownButton<String>(
                   isExpanded: true,
                   value: channel.id,
                   items: [
                     for (final entry in channels)
                       DropdownMenuItem(
                         value: entry.id,
-                        child:
-                            Text(entry.name, overflow: TextOverflow.ellipsis),
+                        child: AncestorFocusOutline(
+                            child: Text(entry.name,
+                                overflow: TextOverflow.ellipsis)),
                       ),
                   ],
                   onChanged: channels.length > 1
                       ? (id) => setState(() => _selectedChannelId = id)
                       : null,
-                ),
+                )),
               ),
             ),
             if (playlist.hasValue && !playlist.hasError)
@@ -140,7 +143,8 @@ class _YesterdayPlaylistState extends ConsumerState<YesterdayPlaylist> {
                     frost: false,
                     child: Material(
                       color: Colors.transparent,
-                      child: ListTile(
+                      child: FocusOutline(
+                          child: ListTile(
                         contentPadding: EdgeInsets.zero,
                         onTap: () => showQueueEntryDetail(
                           context,
@@ -182,7 +186,7 @@ class _YesterdayPlaylistState extends ConsumerState<YesterdayPlaylist> {
                         ),
                         trailing:
                             const Icon(Icons.chevron_right_rounded, size: 18),
-                      ),
+                      )),
                     ),
                   );
                 },

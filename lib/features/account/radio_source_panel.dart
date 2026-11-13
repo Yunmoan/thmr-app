@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/widgets/focus_outline.dart';
 import '../../core/state/radio_source_provider.dart';
 import '../../core/state/settings_provider.dart';
 import '../../core/theme/thmr_theme.dart';
@@ -40,12 +41,16 @@ class RadioSourcePanel extends ConsumerWidget {
         const SizedBox(height: 12),
         Wrap(spacing: 8, runSpacing: 8, children: [
           for (final choice in RadioSourcePreference.values)
-            ChoiceChip(
-              label: Text(choice.label),
-              selected: preference == choice,
-              onSelected: (_) =>
-                  ref.read(settingsProvider.notifier).setRadioSource(choice),
-            ),
+            FocusOutline(
+                radius: 999,
+                focusBounds: true,
+                child: ChoiceChip(
+                  label: Text(choice.label),
+                  selected: preference == choice,
+                  onSelected: (_) => ref
+                      .read(settingsProvider.notifier)
+                      .setRadioSource(choice),
+                )),
         ]),
         const SizedBox(height: 12),
         if (source.testing) ...[

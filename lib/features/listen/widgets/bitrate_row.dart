@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/widgets/focus_outline.dart';
 import '../../../core/state/settings_provider.dart';
 import '../../../core/state/station_provider.dart';
 import '../../../core/theme/thmr_theme.dart';
@@ -37,15 +38,20 @@ class BitrateRow extends ConsumerWidget {
           ),
         ),
         for (final p in profiles)
-          ChoiceChip(
-            label: Text(p.label),
-            selected: p.id == selected.id,
-            onSelected: (selected) {
-              if (selected) {
-                ref.read(settingsProvider.notifier).setBitrate(stationId, p.id);
-              }
-            },
-          ),
+          FocusOutline(
+              radius: 999,
+              focusBounds: true,
+              child: ChoiceChip(
+                label: Text(p.label),
+                selected: p.id == selected.id,
+                onSelected: (selected) {
+                  if (selected) {
+                    ref
+                        .read(settingsProvider.notifier)
+                        .setBitrate(stationId, p.id);
+                  }
+                },
+              )),
         // Low-key copy-stream-link action
         IconButton(
           tooltip: '复制收听链接(当前码率的流地址)',

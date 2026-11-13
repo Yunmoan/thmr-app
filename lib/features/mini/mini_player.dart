@@ -734,7 +734,8 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
                   label: '展开迷你播放器',
                   child: Material(
                     color: Colors.transparent,
-                    child: InkWell(
+                    child: FocusOutline(
+                        child: InkWell(
                       onTap: () => unawaited(_reveal()),
                       child: ColoredBox(
                         color: Theme.of(context)
@@ -746,7 +747,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
                           height: edge == MiniEdge.top ? 3 : double.infinity,
                         ),
                       ),
-                    ),
+                    )),
                   ),
                 ),
               ),
@@ -771,7 +772,8 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
                     child: Semantics(
                       label: '展开迷你播放器',
                       button: true,
-                      child: InkWell(
+                      child: FocusOutline(
+                          child: InkWell(
                         onTap: () => unawaited(_reveal()),
                         child: Icon(
                           switch (edge) {
@@ -782,7 +784,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
                           size: 14,
                           color: Theme.of(context).colorScheme.onPrimary,
                         ),
-                      ),
+                      )),
                     ),
                   ),
                 ),
@@ -822,7 +824,8 @@ class _MiniCompactSummary extends ConsumerWidget {
               ColoredBox(color: tokens.solidPanel),
               if (showIllustration)
                 const _MiniIllustration(height: 104, width: 80, bottom: -32),
-              InkWell(
+              FocusOutline(
+                  child: InkWell(
                 onTap: onTap,
                 child: Padding(
                   padding:
@@ -862,7 +865,7 @@ class _MiniCompactSummary extends ConsumerWidget {
                     ],
                   ),
                 ),
-              ),
+              )),
             ],
           ),
         ),

@@ -7,7 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/state/settings_provider.dart';
 import 'core/input/app_input.dart';
 import 'core/theme/thmr_theme.dart';
+import 'core/theme/thmr_focus_ring.dart';
 import 'features/mini/desktop_player_surface.dart';
+import 'features/mini/mini_player.dart' show miniPlayerProvider;
 import 'features/shell/home_shell.dart';
 import 'features/account/update_panel.dart';
 import 'shared/widgets/thmr_background.dart';
@@ -45,18 +47,21 @@ class ThmrApp extends ConsumerWidget {
         if (kIsWeb || !Platform.isWindows) {
           return AppInput(
               navigatorKey: navigatorKey,
-              child: Stack(
+              child: ThmrFocusLayer(
+                  child: Stack(
                 fit: StackFit.expand,
                 children: [
                   const ThmrBackground(child: SizedBox.expand()),
                   child ?? const SizedBox.expand(),
                 ],
-              ));
+              )));
         }
         return AppInput(
             navigatorKey: navigatorKey,
-            child:
-                DesktopPlayerSurface(child: child ?? const SizedBox.expand()));
+            child: ThmrFocusLayer(
+                reserveEdgeSpace: !ref.watch(miniPlayerProvider),
+                child: DesktopPlayerSurface(
+                    child: child ?? const SizedBox.expand())));
       },
       home: const AppUpdateMonitor(child: HomeShell()),
     );
