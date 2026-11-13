@@ -52,9 +52,10 @@ class ThmrPanel extends StatelessWidget {
             borderRadius: BorderRadius.circular(borderRadius),
             child: BackdropFilter.grouped(
               filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-              // FadeTransition uses a save layer. Replace its filtered input
-              // instead of blending that backdrop into the layer twice.
-              blendMode: BlendMode.src,
+              // Keep the destination opaque during tab/channel fades. Using
+              // src replaces it with the partially transparent filtered layer
+              // and punches through the window to the desktop underneath.
+              blendMode: BlendMode.srcOver,
               // Nested frosted panels must not share their parent's backdrop.
               child: BackdropGroup(child: body),
             ),

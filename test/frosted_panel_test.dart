@@ -55,6 +55,66 @@ void main() {
     Uri.parse('test/frosted_panel_test.dart'),
   );
   for (final brightness in Brightness.values) {
+    testWidgets('tab entry keeps the window opaque in $brightness',
+        (tester) async {
+      tester.view.physicalSize = const Size(430, 300);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final key = GlobalKey();
+      final active = ValueNotifier(false);
+      addTearDown(active.dispose);
+      await tester.pumpWidget(RepaintBoundary(
+        key: key,
+        child: MaterialApp(
+          theme: ThemeData(
+              brightness: brightness,
+              extensions: [ThmrTokens.resolve(AccentTheme.reimu, brightness)]),
+          home: Scaffold(
+            backgroundColor: Colors.transparent,
+            body: Stack(fit: StackFit.expand, children: [
+              RepaintBoundary(child: CustomPaint(painter: _Texture())),
+              Center(
+                child: SizedBox(
+                  width: 380,
+                  height: 200,
+                  child: ValueListenableBuilder(
+                    valueListenable: active,
+                    builder: (context, value, child) => PersistentTabPage(
+                        active: value,
+                        child: const ThmrPanel(child: SizedBox.expand())),
+                  ),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      for (var entry = 0; entry < 2; entry++) {
+        active.value = true;
+        await tester.pump();
+        for (final milliseconds in [16, 32, 64, 96, 48]) {
+          await tester.pump(Duration(milliseconds: milliseconds));
+          final boundary =
+              key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+          final image = await boundary.toImage(pixelRatio: 1);
+          final bytes = (await tester.runAsync(
+              () => image.toByteData(format: ui.ImageByteFormat.rawRgba)))!;
+          image.dispose();
+          for (var y = 0; y < 300; y += 10) {
+            for (var x = 0; x < 430; x += 10) {
+              expect(bytes.getUint8((y * 430 + x) * 4 + 3), 255,
+                  reason: 'Frosted cards must not punch through the opaque '
+                      'window background during tab entry $entry at ($x, $y)');
+            }
+          }
+        }
+        active.value = false;
+        await tester.pumpAndSettle();
+      }
+    });
+
     testWidgets('frost keeps background colour and blurs detail in $brightness',
         (tester) async {
       tester.view.physicalSize = const Size(430, 300);
