@@ -18,7 +18,7 @@ Finder get _visibleRings => find
 
 Future<void> _expectRingPixels(
     WidgetTester tester, GlobalKey capture, ThemeData theme,
-    {int colorTolerance = 0}) async {
+    {int colorTolerance = 0, double pixelRatio = 1}) async {
   final target = find.descendant(
     of: _visibleRings,
     matching: find.byType(CompositedTransformTarget),
@@ -35,7 +35,7 @@ Future<void> _expectRingPixels(
   await tester.runAsync(() async {
     final image = await (capture.currentContext!.findRenderObject()!
             as RenderRepaintBoundary)
-        .toImage(pixelRatio: 1);
+        .toImage(pixelRatio: pixelRatio);
     final pixels =
         (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
     for (final point in [
@@ -44,7 +44,9 @@ Future<void> _expectRingPixels(
       Offset(rect.center.dx, rect.top - 2.5),
       Offset(rect.center.dx, rect.bottom + 2.5),
     ]) {
-      final offset = (point.dy.floor() * image.width + point.dx.floor()) * 4;
+      final offset = ((point.dy * pixelRatio).floor() * image.width +
+              (point.dx * pixelRatio).floor()) *
+          4;
       final color = Color.fromARGB(
         pixels.getUint8(offset + 3),
         pixels.getUint8(offset),
@@ -112,8 +114,10 @@ void main() {
     for (final value in [true, false, true]) {
       selected.value = value;
       await tester.pumpAndSettle();
-      // The tangent of the stadium curve has slight raster antialiasing.
-      await _expectRingPixels(tester, capture, theme, colorTolerance: 12);
+      // Supersample the one-pixel stadium stroke so its tangent is not dominated
+      // by a platform-dependent antialiased edge at a single logical pixel.
+      await _expectRingPixels(tester, capture, theme,
+          colorTolerance: 12, pixelRatio: 3);
     }
   });
 
