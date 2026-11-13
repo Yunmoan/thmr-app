@@ -5,8 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/state/settings_provider.dart';
+import 'core/input/app_input.dart';
 import 'core/theme/thmr_theme.dart';
+import 'core/theme/thmr_focus_ring.dart';
 import 'features/mini/desktop_player_surface.dart';
+import 'features/mini/mini_player.dart' show miniPlayerProvider;
 import 'features/shell/home_shell.dart';
 import 'features/account/update_panel.dart';
 import 'shared/widgets/thmr_background.dart';
@@ -18,6 +21,8 @@ final appThemesProvider = Provider((ref) {
   return (ThmrTheme.light(accent), ThmrTheme.dark(accent));
 });
 
+final appNavigatorKeyProvider = Provider((ref) => GlobalKey<NavigatorState>());
+
 class ThmrApp extends ConsumerWidget {
   const ThmrApp({super.key});
 
@@ -25,7 +30,9 @@ class ThmrApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final mode = ref.watch(settingsProvider.select((s) => s.themeMode));
     final (light, dark) = ref.watch(appThemesProvider);
+    final navigatorKey = ref.watch(appNavigatorKeyProvider);
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: '东方音乐电台 THMR',
       debugShowCheckedModeBanner: false,
       themeMode: mode,
@@ -38,15 +45,23 @@ class ThmrApp extends ConsumerWidget {
       // tab and scroll state survive the swap.
       builder: (context, child) {
         if (kIsWeb || !Platform.isWindows) {
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              const ThmrBackground(child: SizedBox.expand()),
-              child ?? const SizedBox.expand(),
-            ],
-          );
+          return AppInput(
+              navigatorKey: navigatorKey,
+              child: ThmrFocusLayer(
+                  child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  const ThmrBackground(child: SizedBox.expand()),
+                  child ?? const SizedBox.expand(),
+                ],
+              )));
         }
-        return DesktopPlayerSurface(child: child ?? const SizedBox.expand());
+        return AppInput(
+            navigatorKey: navigatorKey,
+            child: ThmrFocusLayer(
+                reserveEdgeSpace: !ref.watch(miniPlayerProvider),
+                child: DesktopPlayerSurface(
+                    child: child ?? const SizedBox.expand())));
       },
       home: const AppUpdateMonitor(child: HomeShell()),
     );

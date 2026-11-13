@@ -78,7 +78,8 @@ void main() {
 
     final paint = find.descendant(
       of: find.byType(VolumeSlider),
-      matching: find.byType(CustomPaint),
+      matching: find.byWidgetPredicate(
+          (widget) => widget is CustomPaint && widget.painter != null),
     );
     Focus.of(tester.element(paint)).requestFocus();
     await tester.pump();

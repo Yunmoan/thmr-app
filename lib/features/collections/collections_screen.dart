@@ -1,6 +1,8 @@
 // Personal collections, public playback history and shared links.
 
 import 'package:flutter/material.dart';
+
+import '../../shared/widgets/loading_skeleton.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/radio_api.dart';
@@ -9,6 +11,7 @@ import '../../core/models/models.dart';
 import '../../core/state/app_providers.dart';
 import '../../core/state/auth_provider.dart';
 import '../../core/theme/thmr_theme.dart';
+import '../../shared/widgets/focus_outline.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import '../../shared/widgets/network_notice.dart';
 import 'collection_detail.dart';
@@ -64,8 +67,12 @@ class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
             const SizedBox(height: 12),
             SegmentedButton<bool>(
               segments: const [
-                ButtonSegment(value: false, label: Text('我的列表')),
-                ButtonSegment(value: true, label: Text('昨日歌单')),
+                ButtonSegment(
+                    value: false,
+                    label: AncestorFocusOutline(child: Text('我的列表'))),
+                ButtonSegment(
+                    value: true,
+                    label: AncestorFocusOutline(child: Text('昨日歌单'))),
               ],
               selected: {showYesterday},
               showSelectedIcon: false,
@@ -80,8 +87,10 @@ class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
             else
               Expanded(
                 child: collections.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
+                  loading: () => TrackListSkeleton(
+                      rowPadding: const EdgeInsets.all(16),
+                      gap: 10,
+                      titleStyle: Theme.of(context).textTheme.titleMedium),
                   error: (e, _) => NetworkIssueView(
                     onRetry: () => ref.invalidate(collectionsProvider),
                     networkFailure: isNetworkFailure(e),
@@ -160,12 +169,13 @@ class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('查看他人分享'),
-        content: TextField(
+        content: FocusOutline(
+            child: TextField(
           controller: controller,
           autofocus: true,
           decoration: const InputDecoration(hintText: '粘贴分享链接或分享码'),
           onSubmitted: (v) => Navigator.pop(context, v),
-        ),
+        )),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context), child: const Text('取消')),
@@ -188,7 +198,8 @@ class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('新建收藏夹'),
-        content: TextField(
+        content: FocusOutline(
+            child: TextField(
           controller: controller,
           autofocus: true,
           maxLength: 64,
@@ -196,7 +207,7 @@ class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
             labelText: '名称(2–64 字符)',
             counterText: '',
           ),
-        ),
+        )),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),

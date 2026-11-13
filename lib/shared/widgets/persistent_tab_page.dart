@@ -64,7 +64,10 @@ class _PersistentTabPageState extends State<PersistentTabPage>
           );
     return Offstage(
       offstage: !widget.active,
-      child: TickerMode(enabled: widget.active, child: animation),
+      child: ExcludeFocus(
+        excluding: !widget.active,
+        child: TickerMode(enabled: widget.active, child: animation),
+      ),
     );
   }
 }

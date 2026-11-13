@@ -160,10 +160,14 @@ class _DiagnosticsScreenState extends ConsumerState<DiagnosticsScreen> {
                             .labelSmall
                             ?.copyWith(color: tokens.mutedInk)),
                   ),
-                if (data.running)
-                  const Padding(
-                      padding: EdgeInsets.only(top: 14),
-                      child: LinearProgressIndicator()),
+                Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: SizedBox(
+                      height: 4,
+                      child: data.running
+                          ? const LinearProgressIndicator()
+                          : null),
+                ),
                 const SizedBox(height: 12),
                 Wrap(spacing: 10, runSpacing: 8, children: [
                   OutlinedButton.icon(
@@ -318,8 +322,11 @@ class _ServiceCard extends StatelessWidget {
             if (value.dnsAddresses.isNotEmpty)
               _Meta('DNS', value.dnsAddresses.join(' / ')),
             if (value.headers.isNotEmpty)
-              _Meta('响应头',
-                  value.headers.entries.map((e) => '${e.key}: ${e.value}').join('\n')),
+              _Meta(
+                  '响应头',
+                  value.headers.entries
+                      .map((e) => '${e.key}: ${e.value}')
+                      .join('\n')),
           ],
         ]));
   }

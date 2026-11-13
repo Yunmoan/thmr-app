@@ -5,6 +5,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/player/playback_controller.dart';
+import '../../core/input/app_commands.dart';
 import '../../core/player/audio_engine.dart';
 import '../../core/platform/desktop_window.dart';
 import '../../core/platform/desktop_tray.dart';
@@ -16,11 +17,13 @@ import '../../core/state/station_provider.dart';
 import '../../core/state/radio_source_provider.dart';
 import '../../shared/widgets/player_dock_bar.dart';
 import '../../shared/widgets/persistent_tab_page.dart';
+import '../../shared/widgets/focus_outline.dart';
 import '../account/account_screen.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../collections/collections_screen.dart';
 import '../library/library_screen.dart';
 import '../listen/listen_screen.dart';
+import '../mini/mini_player.dart' show miniPlayerProvider;
 
 /// 应用主壳:窄屏底部导航,宽屏(≥980px)左侧导航栏。
 /// Offstage 保留各页状态;切换时对新激活页做轻量滑入过渡。
@@ -32,7 +35,14 @@ class HomeShell extends ConsumerStatefulWidget {
 }
 
 class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
-  int _index = 0;
+  int get _index => ref.read(appTabProvider);
+  final _pageFocus = List.generate(
+      4,
+      (i) => FocusScopeNode(
+            debugLabel: '主页面 $i',
+            traversalEdgeBehavior: TraversalEdgeBehavior.parentScope,
+            directionalTraversalEdgeBehavior: TraversalEdgeBehavior.parentScope,
+          ));
   bool _autoTried = false;
   bool _closing = false;
   bool _closeDialogOpen = false;
@@ -75,9 +85,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
 
   void _switchTo(int i) {
     if (i == _index) return;
-    setState(() {
-      _index = i;
-    });
+    ref.read(appTabProvider.notifier).state = i;
   }
 
   /// Keep the transition wrapper mounted so each page retains its state.
@@ -85,7 +93,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
     return PersistentTabPage(
       key: ValueKey('tab-$i'),
       active: _index == i,
-      child: _pages[i],
+      child: FocusScope(
+          node: _pageFocus[i], child: FocusTraversalGroup(child: _pages[i])),
     );
   }
 
@@ -245,11 +254,12 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
                 height: 40,
                 child: Row(
                   children: [
-                    Checkbox(
+                    FocusOutline(
+                        child: Checkbox(
                       value: remember,
                       onChanged: (v) =>
                           setDialogState(() => remember = v ?? false),
-                    ),
+                    )),
                     const SizedBox(width: 6),
                     const Expanded(
                       child: Text('不再提醒,以后按此次选择执行'),
@@ -294,6 +304,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
 
   @override
   void dispose() {
+    for (final node in _pageFocus) {
+      node.dispose();
+    }
     _trayMonitor?.dispose();
     if (hasDesktopWindowControls) {
       windowManager.removeListener(this);
@@ -304,6 +317,14 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    final index = ref.watch(appTabProvider);
+    ref.listen(appTabProvider, (_, next) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !ref.read(miniPlayerProvider)) {
+          _pageFocus[next].requestFocus();
+        }
+      });
+    });
     // Auto-connect once, when station state is ready and user opted in.
     // 窄订阅:主壳只关心「是否可自动连播」,不随秒级播放 tick 重建。
     final autoPlay = ref.watch(settingsProvider.select((s) => s.autoPlay));
@@ -343,7 +364,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
                 NavigationRail(
                   backgroundColor:
                       Theme.of(context).thmr.solidPanel.withValues(alpha: 0.78),
-                  selectedIndex: _index,
+                  selectedIndex: index,
                   onDestinationSelected: _switchTo,
                   labelType: NavigationRailLabelType.all,
                   leading: Padding(
@@ -353,8 +374,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
                   destinations: [
                     for (final d in _destinations)
                       NavigationRailDestination(
-                        icon: Icon(d.icon),
-                        selectedIcon: Icon(d.selected),
+                        icon: NavigationRailFocusIcon(icon: d.icon),
+                        selectedIcon: NavigationRailFocusIcon(icon: d.selected),
                         label: Text(d.label),
                       ),
                   ],
@@ -394,7 +415,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
   /// 底部常驻播放条:非收听页时出现(AnimatedSize 平滑展开)。
   Widget _dockBar({required bool compact}) {
     return AnimatedSize(
-      duration: const Duration(milliseconds: 260),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 260),
       curve: Curves.easeOutCubic,
       alignment: Alignment.bottomCenter,
       child: _index == 0
@@ -431,55 +454,64 @@ class _ThmrNavBar extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 62,
+          height: (48 + MediaQuery.textScalerOf(context).scale(11) * 1.1)
+              .clamp(62.0, double.infinity),
           child: Row(
             children: [
               for (var i = 0; i < destinations.length; i++)
                 Expanded(
-                  child: Material(
+                  child: FocusOutline(
+                      child: Material(
                     color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => onChanged(i),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 220),
-                            curve: Curves.easeOutCubic,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: index == i ? 18 : 10,
-                              vertical: 5,
+                    child: Semantics(
+                      selected: index == i,
+                      button: true,
+                      child: InkWell(
+                        onTap: () => onChanged(i),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            AnimatedContainer(
+                              duration: MediaQuery.disableAnimationsOf(context)
+                                  ? Duration.zero
+                                  : const Duration(milliseconds: 220),
+                              curve: Curves.easeOutCubic,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: index == i ? 18 : 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: index == i
+                                    ? tokens.accentSoft
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Icon(
+                                index == i
+                                    ? destinations[i].selected
+                                    : destinations[i].icon,
+                                size: 21,
+                                color: index == i ? accent : tokens.mutedInk,
+                              ),
                             ),
-                            decoration: BoxDecoration(
-                              color: index == i
-                                  ? tokens.accentSoft
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(999),
+                            const SizedBox(height: 3),
+                            Text(
+                              destinations[i].label,
+                              style: TextStyle(
+                                fontSize: 11,
+                                height: 1.1,
+                                color:
+                                    index == i ? tokens.ink : tokens.mutedInk,
+                                fontWeight: index == i
+                                    ? FontWeight.w700
+                                    : FontWeight.w600,
+                              ),
                             ),
-                            child: Icon(
-                              index == i
-                                  ? destinations[i].selected
-                                  : destinations[i].icon,
-                              size: 21,
-                              color: index == i ? accent : tokens.mutedInk,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            destinations[i].label,
-                            style: TextStyle(
-                              fontSize: 11,
-                              height: 1.1,
-                              color: index == i ? tokens.ink : tokens.mutedInk,
-                              fontWeight: index == i
-                                  ? FontWeight.w700
-                                  : FontWeight.w600,
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
+                  )),
                 ),
             ],
           ),

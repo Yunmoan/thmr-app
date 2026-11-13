@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/widgets/focus_outline.dart';
 import '../../core/state/radio_source_provider.dart';
 import '../../core/state/settings_provider.dart';
 import '../../core/theme/thmr_theme.dart';
@@ -11,6 +12,18 @@ class RadioSourcePanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen(radioSourceProvider.select((state) => state.notice),
+        (previous, next) {
+      if (next == null ||
+          previous == next ||
+          !TickerMode.valuesOf(context).enabled) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(next),
+      ));
+    });
     final source = ref.watch(radioSourceProvider);
     final preference =
         ref.watch(settingsProvider.select((value) => value.radioSource));
@@ -40,52 +53,57 @@ class RadioSourcePanel extends ConsumerWidget {
         const SizedBox(height: 12),
         Wrap(spacing: 8, runSpacing: 8, children: [
           for (final choice in RadioSourcePreference.values)
-            ChoiceChip(
-              label: Text(choice.label),
-              selected: preference == choice,
-              onSelected: (_) =>
-                  ref.read(settingsProvider.notifier).setRadioSource(choice),
-            ),
+            FocusOutline(
+                radius: 999,
+                focusBounds: true,
+                child: ChoiceChip(
+                  label: Text(choice.label),
+                  selected: preference == choice,
+                  onSelected: (_) => ref
+                      .read(settingsProvider.notifier)
+                      .setRadioSource(choice),
+                )),
         ]),
         const SizedBox(height: 12),
-        if (source.testing) ...[
-          const LinearProgressIndicator(),
-          const SizedBox(height: 10),
-        ],
+        SizedBox(
+            height: 4,
+            child: source.testing ? const LinearProgressIndicator() : null),
+        const SizedBox(height: 10),
         Text(
-            source.ready
-                ? '当前使用：${source.selected.label} · ${Uri.parse(source.selected.baseUrl).host}'
-                : source.testing
-                    ? '正在读取少量音频数据，比较最优连接…'
-                    : '首次连接前自动测速',
+            '当前使用：${source.selected.label} · ${Uri.parse(source.selected.baseUrl).host}',
             style: Theme.of(context).textTheme.bodySmall),
-        if (source.measurements.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Wrap(spacing: 16, runSpacing: 6, children: [
-            for (final measurement in source.measurements)
-              Text(
-                  '${measurement.source.label}：${measurement.usable ? '${measurement.probe.elapsed.inMilliseconds} ms' : '测速未成功'}',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: tokens.mutedInk)),
-          ]),
-          const SizedBox(height: 4),
-          Text('耗时为连接并读取 32 KiB 音频的总时间。手动选择时，测速不会更改来源。',
-              style: Theme.of(context)
+        const SizedBox(height: 8),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          for (final candidate in radioSources)
+            Builder(builder: (context) {
+              final measurement = source.measurements
+                  .where((m) => m.source.id == candidate.id)
+                  .firstOrNull;
+              final result = measurement == null
+                  ? '等待测速'
+                  : measurement.usable
+                      ? '${measurement.probe.elapsed.inMilliseconds} ms'
+                      : '测速未成功';
+              final style = Theme.of(context)
                   .textTheme
-                  .labelSmall
-                  ?.copyWith(color: tokens.mutedInk)),
-        ],
-        if (source.notice != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(source.notice!,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: tokens.mutedInk)),
-          ),
+                  .bodySmall
+                  ?.copyWith(color: tokens.mutedInk);
+              return Row(children: [
+                Text('${candidate.label}：', style: style),
+                Flexible(
+                    child: Text(result,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: style)),
+              ]);
+            }),
+        ]),
+        const SizedBox(height: 4),
+        Text('耗时为连接并读取 32 KiB 音频的总时间。手动选择时，测速不会更改来源。',
+            style: Theme.of(context)
+                .textTheme
+                .labelSmall
+                ?.copyWith(color: tokens.mutedInk)),
       ]),
     );
   }

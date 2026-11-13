@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
+import '../../../shared/widgets/focus_outline.dart';
 import '../../../core/models/models.dart';
 import '../../../core/theme/thmr_theme.dart';
 import '../../../shared/widgets/thmr_panel.dart';
@@ -362,7 +363,8 @@ class _QueueListState extends State<_QueueList> {
                 itemBuilder: (context, i) {
                   final e = queue[i];
                   final planned = queuePlannedHHmm(e);
-                  return InkWell(
+                  return FocusOutline(
+                      child: InkWell(
                     onTap: () => showQueueEntryDetail(context, e, i),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -452,7 +454,7 @@ class _QueueListState extends State<_QueueList> {
                         ],
                       ),
                     ),
-                  );
+                  ));
                 },
               ),
             ),

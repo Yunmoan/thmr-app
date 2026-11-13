@@ -422,7 +422,7 @@ void main() {
   });
 
   for (final preset in MiniPlayerSizePreset.values) {
-    for (final textScale in [1.0, 1.3]) {
+    for (final textScale in [1.0, 1.3, 2.0]) {
       testWidgets('mini player $preset fits at ${textScale}x text',
           (tester) async {
         final windowSize =

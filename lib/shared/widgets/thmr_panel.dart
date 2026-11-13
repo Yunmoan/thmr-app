@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/thmr_theme.dart';
+import 'focus_outline.dart';
 
 /// 「和风纸面」面板:毛玻璃 + 细绯红描边 + 柔影。
 /// 对应 Web 端 --panel-bg / --panel-border / --shadow。
@@ -51,9 +52,10 @@ class ThmrPanel extends StatelessWidget {
             borderRadius: BorderRadius.circular(borderRadius),
             child: BackdropFilter.grouped(
               filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-              // FadeTransition uses a save layer. Replace its filtered input
-              // instead of blending that backdrop into the layer twice.
-              blendMode: BlendMode.src,
+              // Keep the destination opaque during tab/channel fades. Using
+              // src replaces it with the partially transparent filtered layer
+              // and punches through the window to the desktop underneath.
+              blendMode: BlendMode.srcOver,
               // Nested frosted panels must not share their parent's backdrop.
               child: BackdropGroup(child: body),
             ),
@@ -63,14 +65,16 @@ class ThmrPanel extends StatelessWidget {
             child: body,
           );
     if (onTap == null) return panel;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(borderRadius),
-        child: panel,
-      ),
-    );
+    return FocusOutline(
+        radius: borderRadius,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(borderRadius),
+            child: panel,
+          ),
+        ));
   }
 }
 
