@@ -19,6 +19,7 @@ import '../../../core/state/station_provider.dart';
 import '../../../core/theme/thmr_theme.dart';
 import '../../../shared/widgets/thmr_panel.dart';
 import '../../../shared/widgets/volume_slider.dart';
+import '../../../shared/widgets/focus_outline.dart';
 import '../../../shared/widgets/volume_wheel_control.dart';
 import 'bitrate_row.dart';
 import 'feedback_sheet.dart';
@@ -465,39 +466,48 @@ class _PlayBar extends ConsumerWidget {
       PlaybackPhase.reconnecting => '重连中',
     };
 
-    return Material(
+    return FocusOutline(
+        child: Material(
       color: tokens.fieldBg,
       borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onToggle,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: tokens.panelBorder),
-          ),
-          child: Row(
-            children: [
-              const SizedBox(
-                width: 52,
-                child: _ListeningClock(),
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: AudioStrip(playing: playing, busy: busy)),
-              const SizedBox(width: 12),
-              Text(
-                label,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: playing ? scheme.primary : tokens.mutedInk,
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-            ],
+      child: Semantics(
+        label: busy
+            ? '取消连接'
+            : playing
+                ? '暂停播放'
+                : '播放',
+        button: true,
+        child: InkWell(
+          onTap: onToggle,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: tokens.panelBorder),
+            ),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 52,
+                  child: _ListeningClock(),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: AudioStrip(playing: playing, busy: busy)),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: playing ? scheme.primary : tokens.mutedInk,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -549,6 +559,7 @@ class _AudioStripState extends State<AudioStrip>
   bool _unavailable = false;
 
   bool get _canAnimate {
+    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) return false;
     final state = WidgetsBinding.instance.lifecycleState;
     if (state == null || state == AppLifecycleState.resumed) return true;
     // Desktop windows remain visible when another window takes input focus.
@@ -572,7 +583,7 @@ class _AudioStripState extends State<AudioStrip>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (widget.playing && TickerMode.valuesOf(context).enabled) {
+    if (widget.playing && _canAnimate && TickerMode.valuesOf(context).enabled) {
       _begin();
     } else {
       _stopCapture();

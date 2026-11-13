@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:thmr_app/core/api/radio_api.dart';
+import 'package:thmr_app/core/input/app_commands.dart';
 import 'package:thmr_app/core/platform/desktop_tray.dart';
 import 'package:thmr_app/core/platform/linux_tray.dart';
 import 'package:thmr_app/core/player/playback_controller.dart';
@@ -155,6 +156,41 @@ void main() {
     await tester.pumpAndSettle();
     expect(windowCalls.where((call) => call.method == 'hide'), isEmpty);
     expect(windowCalls.where((call) => call.method == 'minimize'), isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+  testWidgets(
+      'page focus can reach navigation and hidden search stays unfocusable',
+      (tester) async {
+    await mount(tester);
+    final container =
+        ProviderScope.containerOf(tester.element(find.byType(HomeShell)));
+    container.read(appTabProvider.notifier).state = 1;
+    await tester.pumpAndSettle();
+    final search = container.read(librarySearchFocusProvider);
+    search.requestFocus();
+    await tester.pump();
+    expect(search.hasFocus, isTrue);
+    var reachedNavigation = false;
+    for (var i = 0; i < 30; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      FocusManager.instance.primaryFocus?.context
+          ?.visitAncestorElements((element) {
+        final widget = element.widget;
+        if (widget is Semantics && widget.properties.selected != null) {
+          reachedNavigation = true;
+        }
+        return true;
+      });
+      if (reachedNavigation) break;
+    }
+    expect(reachedNavigation, isTrue);
+    container.read(appTabProvider.notifier).state = 2;
+    await tester.pumpAndSettle();
+    search.requestFocus();
+    await tester.pump();
+    expect(search.hasFocus, isFalse);
     await tester.pumpWidget(const SizedBox.shrink());
   }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 }

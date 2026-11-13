@@ -17,6 +17,7 @@ class ThmrTheme {
       _build(ThmrTokens.resolve(theme, Brightness.dark), Brightness.dark);
 
   static ThemeData _build(ThmrTokens t, Brightness brightness) {
+    t = t.accessible();
     final accent = t.accent;
     final base = GoogleFonts.notoSerifScTextTheme();
     final textTheme = base.apply(bodyColor: t.ink, displayColor: t.ink);

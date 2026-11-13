@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/radio_api.dart';
+import '../../core/input/app_commands.dart';
 import '../../core/api/network_failure.dart';
 import '../../core/models/models.dart';
 import '../../core/state/auth_provider.dart';
@@ -103,6 +104,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               children: [
                 Expanded(
                   child: TextField(
+                    focusNode: ref.watch(librarySearchFocusProvider),
                     controller: _controller,
                     textInputAction: TextInputAction.search,
                     onSubmitted: (_) => _search(),

@@ -13,6 +13,7 @@ import '../../core/theme/thmr_theme.dart';
 import '../../core/theme/thmr_colors.dart' show ThmrTokens;
 import '../../core/update/app_update.dart';
 import '../../shared/widgets/thmr_panel.dart';
+import '../../shared/widgets/input_help.dart';
 import 'about_panel.dart';
 import 'login_screen.dart';
 import 'update_panel.dart';
@@ -397,6 +398,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             const SectionHeader(title: '应用更新'),
             const UpdatePanel(),
           ],
+          const SizedBox(height: 18),
+          const SectionHeader(title: '操作帮助'),
+          const InputHelpCard(),
           const SizedBox(height: 18),
           const SectionHeader(title: '关于'),
           AboutPanel(

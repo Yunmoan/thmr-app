@@ -7,8 +7,8 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
-import 'package:flutter/gestures.dart' show PointerEnterEvent, PointerExitEvent;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
@@ -21,6 +21,7 @@ import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/track_cover.dart';
 import '../../shared/widgets/volume_slider.dart';
 import '../../shared/widgets/volume_wheel_control.dart';
+import '../../shared/widgets/focus_outline.dart';
 
 /// Three selectable mini window sizes in logical pixels.
 const Size kMiniSmallWindowSize = Size(320, 96);
@@ -58,6 +59,9 @@ const Size kMainMinWindowSize = Size(430, 660);
 
 /// 是否处于迷你模式。
 final miniPlayerProvider = StateProvider<bool>((ref) => false);
+
+/// Navigation input can reveal an edge-tucked player before moving focus.
+final miniRevealRequests = ValueNotifier<int>(0);
 
 /// Prevent overlapping mode changes and edge motion during a presentation.
 final miniTransitionBusyProvider = StateProvider<bool>((ref) => false);
@@ -350,6 +354,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
   Future<void>? _positionWrite;
   Completer<void>? _positionDone;
   final _edgeProgress = ValueNotifier<double>(0);
+  final _keyboardFocus = FocusNode(debugLabel: '迷你播放器', skipTraversal: true);
 
   bool get _transitioning => ref.read(miniTransitionBusyProvider);
 
@@ -361,12 +366,16 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
       duration: const Duration(milliseconds: 160),
     )..addListener(_onPositionTick);
     WindowPresentation.activationRequests.addListener(_onActivationRequested);
+    miniRevealRequests.addListener(_onActivationRequested);
     if (!kIsWeb && Platform.isWindows) windowManager.addListener(this);
   }
 
   @override
   void dispose() {
-    WindowPresentation.activationRequests.removeListener(_onActivationRequested);
+    WindowPresentation.activationRequests
+        .removeListener(_onActivationRequested);
+    miniRevealRequests.removeListener(_onActivationRequested);
+    _keyboardFocus.dispose();
     _hideTimer?.cancel();
     _moveTimer?.cancel();
     _moveSerial++;
@@ -533,6 +542,10 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
 
   Future<void> _tuck(MiniEdgePlacement placement) async {
     if (!mounted || _transitioning) return;
+    if (_keyboardFocus.hasFocus || MediaQuery.accessibleNavigationOf(context)) {
+      await _setPosition(placement.expanded);
+      return;
+    }
     _tuckRequested = true;
     final mode = ref.read(settingsProvider).miniEdgeHideMode;
     final extent = _visibleExtent(mode, placement.edge);
@@ -628,7 +641,13 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     _hideTimer?.cancel();
     _hideTimer = Timer(const Duration(milliseconds: 450), () {
       final placement = _placement;
-      if (!mounted || _hovered || placement == null || _tucked) return;
+      if (!mounted ||
+          _hovered ||
+          _keyboardFocus.hasFocus ||
+          placement == null ||
+          _tucked) {
+        return;
+      }
       unawaited(_tuck(placement));
     });
   }
@@ -654,105 +673,123 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
       MiniEdge.right => Alignment.centerLeft,
       null => Alignment.center,
     };
-    return MouseRegion(
-      onEnter: _onEnter,
-      onExit: _onExit,
-      child: ClipRect(
-          child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (!_tucked)
-            ValueListenableBuilder<double>(
-              valueListenable: _edgeProgress,
-              child: _MiniPlayerBody(
-                attachedEdge: edge,
-                onDragStart: _dragWindow,
-                stationState: widget.stationState,
-                playbackState: widget.playbackState,
-              ),
-              builder: (context, progress, child) {
-                // The native window retains room for the summary/hover strip.
-                // Slide the body through that last extent too, so removing it
-                // at rest cannot erase a still-visible slice of the player.
-                final remaining = _visibleExtent(mode, edge) * progress;
-                final offset = switch (edge) {
-                  MiniEdge.top => Offset(0, -remaining),
-                  MiniEdge.left => Offset(-remaining, 0),
-                  MiniEdge.right => Offset(remaining, 0),
-                  null => Offset.zero,
-                };
-                return Transform.translate(offset: offset, child: child);
-              },
-            ),
-          if (edge == MiniEdge.top && mode == MiniEdgeHideMode.compact)
-            _edgeHandle(Align(
-              alignment: Alignment.bottomCenter,
-              child: _MiniCompactSummary(
-                stationState: widget.stationState,
-                onTap: () => unawaited(_reveal()),
-              ),
-            )),
-          if (_tucked && edge != null && mode == MiniEdgeHideMode.hidden)
-            Align(
-              alignment: tabAlignment,
-              child: Semantics(
-                button: true,
-                label: '悬停或点击展开迷你播放器',
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => unawaited(_reveal()),
-                  child: ColoredBox(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.01),
-                    child: SizedBox(
-                      width: edge == MiniEdge.top ? double.infinity : 3,
-                      height: edge == MiniEdge.top ? 3 : double.infinity,
-                    ),
-                  ),
+    return Focus(
+      focusNode: _keyboardFocus,
+      onFocusChange: (focused) {
+        if (focused) {
+          _hideTimer?.cancel();
+          unawaited(_reveal());
+        }
+      },
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent) {
+          _hideTimer?.cancel();
+          unawaited(_reveal());
+        }
+        return KeyEventResult.ignored;
+      },
+      child: MouseRegion(
+        onEnter: _onEnter,
+        onExit: _onExit,
+        child: ClipRect(
+            child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (!_tucked)
+              ValueListenableBuilder<double>(
+                valueListenable: _edgeProgress,
+                child: _MiniPlayerBody(
+                  attachedEdge: edge,
+                  onDragStart: _dragWindow,
+                  stationState: widget.stationState,
+                  playbackState: widget.playbackState,
                 ),
+                builder: (context, progress, child) {
+                  // The native window retains room for the summary/hover strip.
+                  // Slide the body through that last extent too, so removing it
+                  // at rest cannot erase a still-visible slice of the player.
+                  final remaining = _visibleExtent(mode, edge) * progress;
+                  final offset = switch (edge) {
+                    MiniEdge.top => Offset(0, -remaining),
+                    MiniEdge.left => Offset(-remaining, 0),
+                    MiniEdge.right => Offset(remaining, 0),
+                    null => Offset.zero,
+                  };
+                  return Transform.translate(offset: offset, child: child);
+                },
               ),
-            ),
-          if (edge != null &&
-              (mode == MiniEdgeHideMode.tab ||
-                  (mode == MiniEdgeHideMode.compact && edge != MiniEdge.top)))
-            _edgeTab(Align(
-              alignment: tabAlignment,
-              child: SizedBox(
-                width: edge == MiniEdge.top ? 44 : 16,
-                height: edge == MiniEdge.top ? 16 : 44,
-                child: Material(
-                  color: Theme.of(context).colorScheme.primary,
-                  borderRadius: switch (edge) {
-                    MiniEdge.top =>
-                      const BorderRadius.vertical(bottom: Radius.circular(8)),
-                    MiniEdge.left =>
-                      const BorderRadius.horizontal(right: Radius.circular(8)),
-                    MiniEdge.right =>
-                      const BorderRadius.horizontal(left: Radius.circular(8)),
-                  },
-                  child: Semantics(
-                    label: '展开迷你播放器',
-                    button: true,
+            if (edge == MiniEdge.top && mode == MiniEdgeHideMode.compact)
+              _edgeHandle(Align(
+                alignment: Alignment.bottomCenter,
+                child: _MiniCompactSummary(
+                  stationState: widget.stationState,
+                  onTap: () => unawaited(_reveal()),
+                ),
+              )),
+            if (_tucked && edge != null && mode == MiniEdgeHideMode.hidden)
+              Align(
+                alignment: tabAlignment,
+                child: Semantics(
+                  button: true,
+                  label: '展开迷你播放器',
+                  child: Material(
+                    color: Colors.transparent,
                     child: InkWell(
                       onTap: () => unawaited(_reveal()),
-                      child: Icon(
-                        switch (edge) {
-                          MiniEdge.top => Icons.keyboard_arrow_down_rounded,
-                          MiniEdge.left => Icons.chevron_right_rounded,
-                          MiniEdge.right => Icons.chevron_left_rounded,
-                        },
-                        size: 14,
-                        color: Theme.of(context).colorScheme.onPrimary,
+                      child: ColoredBox(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.01),
+                        child: SizedBox(
+                          width: edge == MiniEdge.top ? double.infinity : 3,
+                          height: edge == MiniEdge.top ? 3 : double.infinity,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            )),
-        ],
-      )),
+            if (edge != null &&
+                (mode == MiniEdgeHideMode.tab ||
+                    (mode == MiniEdgeHideMode.compact && edge != MiniEdge.top)))
+              _edgeTab(Align(
+                alignment: tabAlignment,
+                child: SizedBox(
+                  width: edge == MiniEdge.top ? 44 : 16,
+                  height: edge == MiniEdge.top ? 16 : 44,
+                  child: Material(
+                    color: Theme.of(context).colorScheme.primary,
+                    borderRadius: switch (edge) {
+                      MiniEdge.top =>
+                        const BorderRadius.vertical(bottom: Radius.circular(8)),
+                      MiniEdge.left => const BorderRadius.horizontal(
+                          right: Radius.circular(8)),
+                      MiniEdge.right =>
+                        const BorderRadius.horizontal(left: Radius.circular(8)),
+                    },
+                    child: Semantics(
+                      label: '展开迷你播放器',
+                      button: true,
+                      child: InkWell(
+                        onTap: () => unawaited(_reveal()),
+                        child: Icon(
+                          switch (edge) {
+                            MiniEdge.top => Icons.keyboard_arrow_down_rounded,
+                            MiniEdge.left => Icons.chevron_right_rounded,
+                            MiniEdge.right => Icons.chevron_left_rounded,
+                          },
+                          size: 14,
+                          color: Theme.of(context).colorScheme.onPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              )),
+          ],
+        )),
+      ),
     );
   }
 }
@@ -1003,7 +1040,8 @@ class _MiniPlayerBody extends ConsumerWidget {
                           _MiniRotatingSubtitle(
                             artist: cur?.artist ?? '等待下一首',
                             listeners: status?.listeners,
-                            height: layout.subtitle,
+                            height: MediaQuery.textScalerOf(context)
+                                .scale(layout.subtitle),
                           ),
                           SizedBox(height: layout.controlsGap),
                           _MiniControls(playbackState: playbackState),
@@ -1045,7 +1083,10 @@ class _MiniRotatingSubtitleState extends State<_MiniRotatingSubtitle> {
   void initState() {
     super.initState();
     _timer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (widget.listeners != null && mounted) {
+      if (mounted &&
+          widget.listeners != null &&
+          !MediaQuery.disableAnimationsOf(context) &&
+          !MediaQuery.accessibleNavigationOf(context)) {
         setState(() => _showListeners = !_showListeners);
       }
     });
@@ -1059,9 +1100,12 @@ class _MiniRotatingSubtitleState extends State<_MiniRotatingSubtitle> {
 
   @override
   Widget build(BuildContext context) {
-    final showListeners = _showListeners && widget.listeners != null;
     final reduceMotion =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final showListeners = !reduceMotion &&
+        !MediaQuery.accessibleNavigationOf(context) &&
+        _showListeners &&
+        widget.listeners != null;
     final label = showListeners ? '${widget.listeners} 人在听' : widget.artist;
     return SizedBox(
       height: widget.height,
@@ -1120,23 +1164,25 @@ class _MiniCaptionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).thmr;
-    return SizedBox(
-      width: size,
-      height: size - 1,
-      child: Material(
-        color: Colors.transparent,
-        child: Semantics(
-          button: true,
-          label: label,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(5),
-            hoverColor: tokens.ink.withValues(alpha: 0.08),
-            child: Icon(icon, size: size * 0.55, color: tokens.mutedInk),
+    return FocusOutline(
+        radius: 5,
+        child: SizedBox(
+          width: size,
+          height: size - 1,
+          child: Material(
+            color: Colors.transparent,
+            child: Semantics(
+              button: true,
+              label: label,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(5),
+                hoverColor: tokens.ink.withValues(alpha: 0.08),
+                child: Icon(icon, size: size * 0.55, color: tokens.mutedInk),
+              ),
+            ),
           ),
-        ),
-      ),
-    );
+        ));
   }
 }
 
@@ -1183,41 +1229,65 @@ class _MiniControls extends ConsumerWidget {
     final playing =
         phase == PlaybackPhase.online || phase == PlaybackPhase.buffering;
 
+    final valueStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: tokens.mutedInk,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    final valuePainter = TextPainter(
+      text: TextSpan(text: '100%', style: valueStyle),
+      textScaler: MediaQuery.textScalerOf(context),
+      textDirection: Directionality.of(context),
+    )..layout();
+    final valueWidth =
+        valuePainter.width.ceilToDouble().clamp(layout.value, double.infinity);
+    valuePainter.dispose();
+
     return Row(
       children: [
-        SizedBox(
-          width: layout.play,
-          height: layout.play,
-          child: Material(
-            color: accent,
-            borderRadius: BorderRadius.circular(999),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(999),
-              onTap: () {
-                final url = ref.read(streamUrlProvider);
-                ref.read(playbackProvider.notifier).toggle(url);
-              },
-              child: Center(
-                child: busy
-                    ? SizedBox(
-                        width: 15,
-                        height: 15,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: tokens.onAccent,
-                        ),
-                      )
-                    : Icon(
-                        playing
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        size: layout.playIcon,
-                        color: tokens.onAccent,
-                      ),
+        FocusOutline(
+            radius: 999,
+            child: SizedBox(
+              width: layout.play,
+              height: layout.play,
+              child: Material(
+                color: accent,
+                borderRadius: BorderRadius.circular(999),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(999),
+                  onTap: () {
+                    final url = ref.read(streamUrlProvider);
+                    ref.read(playbackProvider.notifier).toggle(url);
+                  },
+                  child: Semantics(
+                    label: busy
+                        ? '取消连接'
+                        : playing
+                            ? '暂停播放'
+                            : '播放',
+                    button: true,
+                    excludeSemantics: true,
+                    child: Center(
+                      child: busy
+                          ? SizedBox(
+                              width: 15,
+                              height: 15,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: tokens.onAccent,
+                              ),
+                            )
+                          : Icon(
+                              playing
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                              size: layout.playIcon,
+                              color: tokens.onAccent,
+                            ),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
-        ),
+            )),
         SizedBox(width: layout.gap),
         VolumeWheelControl(
           value: volume,
@@ -1228,6 +1298,7 @@ class _MiniControls extends ConsumerWidget {
             padding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,
             icon: Icon(
+              semanticLabel: volume <= 0 ? '取消静音' : '静音',
               volume <= 0
                   ? Icons.volume_off_rounded
                   : volume < 50
@@ -1252,14 +1323,13 @@ class _MiniControls extends ConsumerWidget {
           ),
         ),
         SizedBox(
-          width: layout.value,
+          width: valueWidth,
           child: Text(
             '${volume.round()}%',
             textAlign: TextAlign.right,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: tokens.mutedInk,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
+            maxLines: 1,
+            softWrap: false,
+            style: valueStyle,
           ),
         ),
       ],

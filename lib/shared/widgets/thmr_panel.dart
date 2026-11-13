@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/thmr_theme.dart';
+import 'focus_outline.dart';
 
 /// 「和风纸面」面板:毛玻璃 + 细绯红描边 + 柔影。
 /// 对应 Web 端 --panel-bg / --panel-border / --shadow。
@@ -63,14 +64,16 @@ class ThmrPanel extends StatelessWidget {
             child: body,
           );
     if (onTap == null) return panel;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(borderRadius),
-        child: panel,
-      ),
-    );
+    return FocusOutline(
+        radius: borderRadius,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(borderRadius),
+            child: panel,
+          ),
+        ));
   }
 }
 

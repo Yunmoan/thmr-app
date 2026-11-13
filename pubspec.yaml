@@ -60,6 +60,7 @@ dependencies:
   path: ^1.9.1
   path_provider: ^2.1.5
   file_picker: ^11.0.3
+  gamepads: ^0.1.15
 
 dev_dependencies:
   flutter_test:
@@ -89,3 +90,4 @@ flutter:
     - assets/brand/
     - assets/icons/
     - assets/updater/
+    - assets/input_prompts/
