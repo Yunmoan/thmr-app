@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../shared/widgets/loading_skeleton.dart';
 import '../../../shared/widgets/player_panel_layout.dart';
 import '../../../shared/widgets/thmr_panel.dart';
+import 'queue_strip.dart' show queueStripHeight;
 
 /// Uses the same player geometry and breakpoint as the loaded channel.
 class ChannelLoadingSkeleton extends StatelessWidget {
@@ -107,13 +108,14 @@ class ChannelLoadingSkeleton extends StatelessWidget {
     Widget vote() => ThmrPanel(
         key: const ValueKey('skeleton-vote'),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: SizedBox(
-            height: 48,
+        child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
             child: Row(children: [
               const SkeletonBlock(width: 21, height: 21),
               const SizedBox(width: 9),
               Expanded(
                   child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                     SkeletonText(style: text.labelLarge),
@@ -144,7 +146,7 @@ class ChannelLoadingSkeleton extends StatelessWidget {
                   children: [
                     SkeletonText(style: text.labelSmall, fraction: .25),
                     const SizedBox(height: 8),
-                    SizedBox(height: 40, child: queueRow(compact: true)),
+                    queueRow(compact: true),
                     const SizedBox(height: 12),
                     const Divider(),
                     const SizedBox(height: 10),
@@ -207,7 +209,7 @@ class ChannelLoadingSkeleton extends StatelessWidget {
               const SizedBox(height: 18),
               const SectionHeader(title: '接下来'),
               SizedBox(
-                  height: 92,
+                  height: queueStripHeight(context),
                   child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: 3,

@@ -42,6 +42,27 @@ class _Playback extends StateNotifier<PlaybackState>
 }
 
 void main() {
+  for (final size in [const Size(375, 800), const Size(667, 375)]) {
+    testWidgets('queue fits portrait and landscape with large text at $size',
+        (tester) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(MaterialApp(
+          theme: ThmrTheme.dark(),
+          builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: const TextScaler.linear(2)),
+              child: child!),
+          home: Scaffold(
+              body: SingleChildScrollView(child: QueueStrip(status: status)))));
+      await tester.pumpAndSettle();
+      expect(tester.getSize(find.byType(ListView)).height, greaterThan(92));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final width in [320.0, 375.0, 950.0, 1100.0]) {
     testWidgets('loading player keeps its loaded height at $width',
         (tester) async {

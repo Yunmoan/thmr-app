@@ -104,6 +104,21 @@ void showQueueEntryDetail(BuildContext context, QueueEntry entry, int index,
 }
 
 /// 「接下来」队列 — 横向卡片,高度对齐 Web 端 92px 队列卡。
+double queueStripHeight(BuildContext context) {
+  final text = Theme.of(context).textTheme;
+  var height = 30.0; // Three lines, two gaps, padding and border.
+  for (final style in [text.titleSmall, text.bodySmall, text.labelSmall]) {
+    final painter = TextPainter(
+        text: TextSpan(text: '曲目', style: style),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context))
+      ..layout();
+    height += painter.height;
+    painter.dispose();
+  }
+  return height > 92 ? height : 92;
+}
+
 class QueueStrip extends StatefulWidget {
   const QueueStrip({super.key, required this.status});
 
@@ -169,7 +184,7 @@ class _QueueStripState extends State<QueueStrip> {
         Listener(
           onPointerSignal: _onPointerSignal,
           child: SizedBox(
-            height: 92,
+            height: queueStripHeight(context),
             child: ListView.separated(
               controller: _scrollController,
               scrollDirection: Axis.horizontal,
@@ -270,6 +285,8 @@ class _QueueCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         plannedLabel(entry, index),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: tokens.mutedInk,
                           fontFeatures: const [FontFeature.tabularFigures()],
