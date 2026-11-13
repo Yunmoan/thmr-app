@@ -1,5 +1,6 @@
 // Mobile queue strip: horizontal cards; tap opens the detail sheet.
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../../shared/widgets/focus_outline.dart';
@@ -103,13 +104,43 @@ void showQueueEntryDetail(BuildContext context, QueueEntry entry, int index,
 }
 
 /// 「接下来」队列 — 横向卡片,高度对齐 Web 端 92px 队列卡。
-class QueueStrip extends StatelessWidget {
+class QueueStrip extends StatefulWidget {
   const QueueStrip({super.key, required this.status});
 
   final StationStatus status;
 
   @override
+  State<QueueStrip> createState() => _QueueStripState();
+}
+
+class _QueueStripState extends State<QueueStrip> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent ||
+        event.scrollDelta.dy.abs() <= event.scrollDelta.dx.abs() ||
+        !_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    final delta = event.scrollDelta.dy;
+    final target = (position.pixels + delta)
+        .clamp(position.minScrollExtent, position.maxScrollExtent);
+    if (target == position.pixels) return;
+    // Resolve once so the enclosing page does not scroll at the same time.
+    // Native horizontal wheel/trackpad events remain owned by the ListView.
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      position.pointerScroll(delta);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final status = widget.status;
     final tokens = Theme.of(context).thmr;
     final queue = status.queue;
     if (queue.isEmpty) {
@@ -133,16 +164,20 @@ class QueueStrip extends StatelessWidget {
     }
     return Column(
       children: [
-        SizedBox(
-          height: 92,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: queue.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
-            itemBuilder: (context, i) {
-              final e = queue[i];
-              return _QueueCard(entry: e, index: i);
-            },
+        Listener(
+          onPointerSignal: _onPointerSignal,
+          child: SizedBox(
+            height: 92,
+            child: ListView.separated(
+              controller: _scrollController,
+              scrollDirection: Axis.horizontal,
+              itemCount: queue.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, i) {
+                final e = queue[i];
+                return _QueueCard(entry: e, index: i);
+              },
+            ),
           ),
         ),
         const SizedBox(height: 2),

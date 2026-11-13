@@ -150,9 +150,9 @@ class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
           // volume: desktop = inline slider; mobile = icon + bottom sheet
           _VolumeControl(desktopInline: !widget.inlineBitrate),
           if (widget.inlineBitrate) ...[
-            const SizedBox(height: 4),
-            Divider(color: Theme.of(context).thmr.panelBorder),
-            const SizedBox(height: 2),
+            const SizedBox(height: 12),
+            Divider(height: 1, color: Theme.of(context).thmr.panelBorder),
+            const SizedBox(height: 12),
             const BitrateRow(),
           ],
         ],
