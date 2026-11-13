@@ -6,12 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/radio_api.dart';
 import '../../core/models/models.dart';
+import '../../core/player/playback_controller.dart';
 import '../../core/state/app_providers.dart';
 import '../../core/state/channel_provider.dart';
 import '../../core/state/station_provider.dart';
 import '../../core/state/radio_source_provider.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/thmr_panel.dart';
+import '../../shared/widgets/status_notice.dart';
 import 'widgets/bitrate_row.dart';
 import 'widgets/channel_loading_skeleton.dart';
 import 'widgets/channel_switcher.dart';
@@ -44,35 +46,41 @@ class _ListenScreenState extends ConsumerState<ListenScreen> {
     if (info != null) _lastStation = info;
     // Keep the heading in place until the new channel supplies its metadata.
     final heading = info ?? (station.initialLoading ? _lastStation : null);
-    final selecting = ref.watch(radioSourceProvider
-        .select((source) => source.testing && !source.tested));
+    final source = ref.watch(radioSourceProvider);
+    final selecting = source.testing && !source.tested;
+    final failure = ref
+        .watch(playbackProvider.select((state) => (state.error, state.phase)));
+    final playbackError = failure.$2 == PlaybackPhase.idle ? null : failure.$1;
+    final temporaryError = station.status != null &&
+        station.error != null &&
+        !_persistentStationError(station.error!);
+    final message = temporaryError
+        ? _stationErrorMessage(station.error!)
+        : playbackError ?? (selecting ? '正在比较最优播放源，完成后即可收听…' : source.notice);
+    final busy = selecting && !temporaryError && playbackError == null;
 
     return SafeArea(
       bottom: false,
-      child: Column(children: [
-        if (selecting)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-            child: Row(children: [
-              const SizedBox(
-                  width: 15,
-                  height: 15,
-                  child: CircularProgressIndicator(strokeWidth: 2)),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: Text('正在比较最优播放源，完成后即可收听…',
-                      style: Theme.of(context).textTheme.bodySmall)),
-            ]),
-          ),
-        Expanded(child: LayoutBuilder(builder: (context, c) {
-          final wide = c.maxWidth >= 980;
-          if (wide) {
+      child: Stack(fit: StackFit.expand, children: [
+        LayoutBuilder(builder: (context, c) {
+          if (c.maxWidth >= 980) {
             return _WideLayout(
                 station: station, heading: heading, switching: switching);
           }
           return _NarrowLayout(
               station: station, heading: heading, switching: switching);
-        })),
+        }),
+        Positioned(
+            bottom: 16,
+            left: 16,
+            right: 16,
+            child: StatusNotice(
+                message: message,
+                busy: busy,
+                duration: busy ? null : const Duration(seconds: 6),
+                onRetry: temporaryError
+                    ? () => ref.read(stationProvider.notifier).refresh()
+                    : null)),
       ]),
     );
   }
@@ -101,7 +109,8 @@ class _WideLayout extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _Hero(status: status, heading: heading, switching: switching),
-          if (error != null)
+          if (error != null &&
+              (status == null || _persistentStationError(error)))
             _ErrorCard(
               error: error,
               onRetry: () => ref.read(stationProvider.notifier).refresh(),
@@ -232,8 +241,15 @@ class _Hero extends StatelessWidget {
                         ?.copyWith(fontWeight: FontWeight.w900, height: 1.15),
                   ),
                 ),
-                if (description.isNotEmpty) ...[
-                  const SizedBox(height: 8),
+                const SizedBox(height: 8),
+                Stack(children: [
+                  // Reserve two description lines before metadata arrives.
+                  ExcludeSemantics(
+                      child: Text('\n',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: Colors.transparent))),
                   Text(
                     description,
                     maxLines: 2,
@@ -243,7 +259,7 @@ class _Hero extends StatelessWidget {
                         .bodySmall
                         ?.copyWith(color: tokens.mutedInk),
                   ),
-                ],
+                ]),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
@@ -304,7 +320,7 @@ class _NarrowLayout extends ConsumerWidget {
             alignment: Alignment.centerLeft,
             child: ChannelSwitcher(station: st?.station),
           ),
-          if (error != null)
+          if (error != null && (st == null || _persistentStationError(error)))
             _ErrorCard(
               error: error,
               onRetry: () => ref.read(stationProvider.notifier).refresh(),
@@ -491,21 +507,6 @@ class _ErrorCard extends StatelessWidget {
   final Object error;
   final VoidCallback onRetry;
 
-  String get _friendly {
-    if (error is ApiException) {
-      final e = error as ApiException;
-      switch (e.statusCode) {
-        case 503:
-          return '电台暂未开放放送(维护或休眠中),稍后自动重试。';
-        case 404:
-          return '未找到该电台,请检查频道 ID 配置。';
-        default:
-          return '服务返回异常(${e.statusCode}),正在自动重试。';
-      }
-    }
-    return '网络连接失败,正在自动重试…';
-  }
-
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).thmr;
@@ -519,7 +520,7 @@ class _ErrorCard extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                _friendly,
+                _stationErrorMessage(error),
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
@@ -537,3 +538,21 @@ class _ErrorCard extends StatelessWidget {
     );
   }
 }
+
+String _stationErrorMessage(Object error) {
+  if (error is ApiException) {
+    final e = error;
+    switch (e.statusCode) {
+      case 503:
+        return '电台暂未开放放送(维护或休眠中),稍后自动重试。';
+      case 404:
+        return '未找到该电台,请检查频道 ID 配置。';
+      default:
+        return '服务返回异常(${e.statusCode}),正在自动重试。';
+    }
+  }
+  return '网络连接失败,正在自动重试…';
+}
+
+bool _persistentStationError(Object error) =>
+    error is ApiException && [400, 401, 403, 404].contains(error.statusCode);

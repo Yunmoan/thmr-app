@@ -27,7 +27,7 @@ import 'feedback_sheet.dart';
 /// 正在放送面板:封面 + 曲名 + 直播进度 + 控制排(收藏 / 播放 / 反馈)。
 ///
 /// 重建范围刻意收窄:本面板只订阅低频状态(电台 10s 轮询、收藏状态);
-/// 秒级变化由 [_PlayBar] / [_VolumeControl] / [_PlaybackError] 各自窄订阅,
+/// 秒级变化由 [_PlayBar] / [_VolumeControl] 各自窄订阅,
 /// 整面板不再每秒重建。
 class NowPlayingPanel extends ConsumerStatefulWidget {
   const NowPlayingPanel(
@@ -801,7 +801,9 @@ class _PlaybackError extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final error = ref.watch(playbackProvider.select((s) => s.error));
+    final failure =
+        ref.watch(playbackProvider.select((s) => (s.error, s.phase)));
+    final error = failure.$2 == PlaybackPhase.idle ? failure.$1 : null;
     if (error == null) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 8),

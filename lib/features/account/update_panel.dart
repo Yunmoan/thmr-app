@@ -55,18 +55,30 @@ class _AppUpdateMonitorState extends ConsumerState<AppUpdateMonitor>
   Widget build(BuildContext context) {
     if (!supportsAppUpdates) return widget.child;
     final update = ref.watch(appUpdateProvider);
-    return Column(children: [
+    return Stack(fit: StackFit.expand, children: [
+      widget.child,
       if (update.showNotice)
-        SafeArea(
-          bottom: false,
-          child: _UpdateNotice(
-            update: update,
-            onIgnore: () =>
-                ref.read(appUpdateProvider.notifier).ignoreRelease(),
-            onView: () => showAppUpdate(context, update.release!),
-          ),
-        ),
-      Expanded(child: widget.child),
+        Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 640),
+                      child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: _UpdateNotice(
+                            update: update,
+                            onIgnore: () => ref
+                                .read(appUpdateProvider.notifier)
+                                .ignoreRelease(),
+                            onView: () =>
+                                showAppUpdate(context, update.release!),
+                          )))),
+            )),
     ]);
   }
 }
@@ -106,6 +118,9 @@ class _UpdateNotice extends StatelessWidget {
     );
     return Material(
       key: const ValueKey('app-update-notice'),
+      elevation: 6,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
       color: theme.colorScheme.surface,
       child: DecoratedBox(
         decoration: BoxDecoration(
@@ -144,8 +159,12 @@ class _UpdateNotice extends StatelessWidget {
               ]);
             }),
           ),
-          if (update.status == UpdateStatus.downloading)
-            LinearProgressIndicator(value: update.progress, minHeight: 2),
+          SizedBox(
+              height: 2,
+              child: update.status == UpdateStatus.downloading
+                  ? LinearProgressIndicator(
+                      value: update.progress, minHeight: 2)
+                  : null),
         ]),
       ),
     );

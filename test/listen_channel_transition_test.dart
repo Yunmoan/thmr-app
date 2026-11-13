@@ -17,11 +17,17 @@ import 'package:thmr_app/features/listen/listen_screen.dart';
 import 'package:thmr_app/features/listen/widgets/channel_switcher.dart';
 import 'package:thmr_app/features/listen/widgets/now_playing_panel.dart';
 import 'package:thmr_app/features/listen/widgets/channel_loading_skeleton.dart';
+import 'package:thmr_app/shared/widgets/status_notice.dart';
 
 const _curated = 'touhou-curated';
 
 StationStatus _status(String id, String title) => StationStatus.fromJson({
-      'station': {'id': id, 'name': '东方音乐电台', 'enabled': true},
+      'station': {
+        'id': id,
+        'name': '东方音乐电台',
+        'enabled': true,
+        'public': {'title': '东方音乐电台', 'description': '持续放送幻想乡的音乐。'}
+      },
       'totals': {'listeners': 12},
       'current': {'trackId': '$id-track', 'startedAtMs': 12345, 'title': title},
     });
@@ -39,11 +45,15 @@ class _DelayedStation extends StateNotifier<StationUiState>
 
   @override
   Future<void> refresh() async {}
+
+  void update(StationUiState value) => state = value;
 }
 
 class _IdlePlayback extends StateNotifier<PlaybackState>
     implements PlaybackController {
   _IdlePlayback() : super(const PlaybackState());
+
+  void update(PlaybackState value) => state = value;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -54,7 +64,95 @@ class _RadioApi extends RadioApi {
   Future<int> siteListeners() async => 17;
 }
 
+class _Sources extends RadioSourceController {
+  void update(RadioSourceState value) => state = value;
+}
+
 void main() {
+  for (final width in [375.0, 1100.0]) {
+    testWidgets('transient notices leave home content in place at $width',
+        (tester) async {
+      tester.view.physicalSize = Size(width, 960);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      SharedPreferences.setMockInitialValues({});
+      final status = _status(appConfig.stationId, '当前曲目');
+      final poller = _DelayedStation(Future.value(status));
+      final sources = _Sources();
+      final playback = _IdlePlayback();
+      await tester.pumpWidget(ProviderScope(
+          overrides: [
+            channelCatalogProvider.overrideWith((ref) async =>
+                [RadioChannel(id: appConfig.stationId, name: '综合频道')]),
+            radioApiProvider.overrideWithValue(_RadioApi()),
+            stationProvider.overrideWith((ref) => poller),
+            radioSourceProvider.overrideWith((ref) => sources),
+            playbackProvider.overrideWith((ref) => playback),
+            voteEnabledProvider.overrideWith((ref) async => false),
+          ],
+          child: MaterialApp(
+              theme: ThemeData.dark().copyWith(extensions: [
+                ThmrTokens.resolve(AccentTheme.cirno, Brightness.dark)
+              ]),
+              home: const Scaffold(body: ListenScreen()))));
+      await tester.pumpAndSettle();
+      final playerRect = tester.getRect(find.byType(NowPlayingPanel));
+      final selectorRect = tester.getRect(find.byType(ChannelSwitcher));
+      final focus = FocusManager.instance.primaryFocus;
+      void unchanged() {
+        expect(tester.getRect(find.byType(NowPlayingPanel)), playerRect);
+        expect(tester.getRect(find.byType(ChannelSwitcher)), selectorRect);
+        expect(FocusManager.instance.primaryFocus, same(focus));
+      }
+
+      sources.update(const RadioSourceState(testing: true));
+      await tester.pump();
+      expect(find.text('正在比较最优播放源，完成后即可收听…'), findsOneWidget);
+      unchanged();
+      sources.update(const RadioSourceState(tested: true));
+      await tester.pumpAndSettle();
+      expect(find.text('正在比较最优播放源，完成后即可收听…'), findsNothing);
+      unchanged();
+      poller.update(StationUiState(
+          status: status, initialLoading: false, error: Exception('offline')));
+      await tester.pump();
+      expect(find.text('网络连接失败,正在自动重试…'), findsOneWidget);
+      expect(find.text('立即重试'), findsNothing);
+      unchanged();
+      await tester.pump(const Duration(seconds: 7));
+      expect(find.text('网络连接失败,正在自动重试…'), findsNothing);
+      unchanged();
+      poller.update(StationUiState(status: status, initialLoading: false));
+      playback.update(const PlaybackState(
+          phase: PlaybackPhase.reconnecting, error: '播放连接失败，请重试'));
+      await tester.pump();
+      expect(
+          find.descendant(
+              of: find.byType(StatusNotice), matching: find.text('播放连接失败，请重试')),
+          findsOneWidget);
+      unchanged();
+      playback.update(const PlaybackState());
+      await tester.pump();
+      unchanged();
+      playback.update(const PlaybackState(error: '连续重连失败,请稍后手动重试'));
+      await tester.pump();
+      expect(find.text('连续重连失败,请稍后手动重试'), findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.byType(StatusNotice),
+              matching: find.text('连续重连失败,请稍后手动重试')),
+          findsNothing);
+      playback.update(const PlaybackState());
+      poller.update(
+          StationUiState(initialLoading: false, error: Exception('offline')));
+      await tester.pumpAndSettle();
+      expect(find.text('立即重试'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   testWidgets('desktop channel changes keep the selector mounted while loading',
       (tester) async {
     tester.view.physicalSize = const Size(1100, 850);
@@ -88,8 +186,12 @@ void main() {
       ),
     ));
 
+    await tester.pumpAndSettle();
+    final loadingTop =
+        tester.getTopLeft(find.byKey(const ValueKey('skeleton-player'))).dy;
     initial.complete(_status(appConfig.stationId, '综合曲目'));
     await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.byType(NowPlayingPanel)).dy, loadingTop);
     final switcher = find.byType(ChannelSwitcher);
     final headerElement = tester.element(switcher);
     final player = find.byType(NowPlayingPanel);

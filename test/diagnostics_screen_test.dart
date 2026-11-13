@@ -48,7 +48,58 @@ class _FixtureDiagnostics extends DiagnosticsService {
       );
 }
 
+class _ControlledSources extends RadioSourceController {
+  void update(RadioSourceState value) => state = value;
+}
+
 void main() {
+  testWidgets(
+      'source test progress and results preserve the settings card size',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues({});
+    final sources = _ControlledSources();
+    await tester.pumpWidget(ProviderScope(
+        overrides: [
+          radioSourceProvider.overrideWith((ref) => sources),
+        ],
+        child: MaterialApp(
+            theme: ThmrTheme.dark(),
+            home: const Scaffold(
+                body: SingleChildScrollView(
+                    child: Padding(
+                        padding: EdgeInsets.all(12),
+                        child: RadioSourcePanel()))))));
+    await tester.pumpAndSettle();
+    final bounds = tester.getRect(find.byType(RadioSourcePanel));
+    sources.update(const RadioSourceState(testing: true));
+    await tester.pump();
+    expect(tester.getRect(find.byType(RadioSourcePanel)), bounds);
+    sources.update(RadioSourceState(
+        tested: true,
+        measurements: [
+          for (final source in radioSources)
+            SourceMeasurement(
+                source,
+                NetworkProbeResult(
+                  uri: Uri.parse(source.baseUrl),
+                  statusCode: 200,
+                  contentType: 'audio/mpeg',
+                  bytesRead: 32768,
+                  elapsed: const Duration(milliseconds: 123),
+                )),
+        ],
+        notice: '测速未完成，暂用当前来源，可稍后重测。'));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byType(RadioSourcePanel)), bounds);
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   var previewFont = false;
   setUpAll(() async {
     final font = File('C:/Windows/Fonts/msyh.ttc');
