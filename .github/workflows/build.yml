@@ -412,6 +412,12 @@ jobs:
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}
           RELEASE_BUILD: ${{ needs.validate.outputs.build_number }}
         run: |
+          # Fork previews can build packages without the upstream signing keys.
+          # Partial configuration and every v* tag must still pass key validation.
+          if [ "$GITHUB_REF_TYPE" != tag ] && [ -z "$THMR_UPDATE_PRIVATE_KEY$THMR_UPDATE_PUBLIC_KEY" ]; then
+            echo '::notice::No update signing keys configured; preview packages will omit the updater manifest.'
+            exit 0
+          fi
           base="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG"
           node tool/update_release.cjs manifest --version "$RELEASE_VERSION" --build-number "$RELEASE_BUILD" \
             --artifacts release --base-url "$base/" --output release/metadata/thmr-update.json \
