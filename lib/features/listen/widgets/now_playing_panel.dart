@@ -31,9 +31,13 @@ import 'feedback_sheet.dart';
 /// 整面板不再每秒重建。
 class NowPlayingPanel extends ConsumerStatefulWidget {
   const NowPlayingPanel(
-      {super.key, required this.status, this.inlineBitrate = true});
+      {super.key,
+      required this.status,
+      this.inlineBitrate = true,
+      this.switching = false});
 
   final StationStatus status;
+  final bool switching;
 
   /// Mobile: quality chips live inside the panel; desktop keeps a separate
   /// panel (its own row) instead.
@@ -44,6 +48,7 @@ class NowPlayingPanel extends ConsumerStatefulWidget {
 }
 
 class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
+  bool _lastFavorited = false;
   Future<void> _onMainButton() {
     return ref
         .read(playbackProvider.notifier)
@@ -112,8 +117,10 @@ class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
   @override
   Widget build(BuildContext context) {
     final cur = widget.status.current;
-    final favorited = ref.watch(favoritesStatusProvider
+    final latestFavorited = ref.watch(favoritesStatusProvider
         .select((v) => v.asData?.value.favorited ?? false));
+    if (!widget.switching) _lastFavorited = latestFavorited;
+    final favorited = _lastFavorited;
 
     return PlayerPanelLayout(
       header: Row(
@@ -138,7 +145,7 @@ class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
         const _PlaybackError()
       ]),
       volume: _VolumeControl(desktopInline: !widget.inlineBitrate),
-      quality: widget.inlineBitrate ? const BitrateRow() : null,
+      quality: widget.inlineBitrate ? BitrateRow(status: widget.status) : null,
     );
   }
 }
@@ -311,6 +318,26 @@ class NowPlayingTrackInfo extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).thmr;
+    final title = AnimatedSwitcher(
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 350),
+      layoutBuilder: _trackTextLayout,
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeIn,
+      transitionBuilder: (child, anim) =>
+          FadeTransition(opacity: anim, child: child),
+      child: Text(
+        cur?.title ?? '暂无播放',
+        key: ValueKey(cur?.trackId ?? 'none'),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context)
+            .textTheme
+            .titleLarge
+            ?.copyWith(fontWeight: FontWeight.w800, height: 1.25),
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -323,26 +350,19 @@ class NowPlayingTrackInfo extends ConsumerWidget {
               ),
         ),
         const SizedBox(height: 4),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 350),
-          switchInCurve: Curves.easeOutCubic,
-          switchOutCurve: Curves.easeIn,
-          transitionBuilder: (child, anim) =>
-              FadeTransition(opacity: anim, child: child),
-          child: Text(
-            cur?.title ?? '暂无播放',
-            key: ValueKey(cur?.trackId ?? 'none'),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.w800, height: 1.25),
-          ),
-        ),
+        MediaQuery.disableAnimationsOf(context)
+            ? title
+            : AnimatedSize(
+                duration: const Duration(milliseconds: 220),
+                alignment: Alignment.topLeft,
+                child: title,
+              ),
         const SizedBox(height: 6),
         AnimatedSwitcher(
-          duration: const Duration(milliseconds: 350),
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 350),
+          layoutBuilder: _trackTextLayout,
           transitionBuilder: (child, anim) =>
               FadeTransition(opacity: anim, child: child),
           child: Text(
@@ -381,6 +401,24 @@ class NowPlayingTrackInfo extends ConsumerWidget {
     );
   }
 }
+
+// Only incoming text determines layout; fading text keeps its original width
+// and top-left origin, without pushing the new title or artist to the centre.
+Widget _trackTextLayout(Widget? current, List<Widget> previous) => SizedBox(
+      width: double.infinity,
+      child: Stack(
+          alignment: AlignmentDirectional.topStart,
+          clipBehavior: Clip.none,
+          children: [
+            for (final child in previous)
+              Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: ExcludeSemantics(child: child)),
+            if (current != null) current,
+          ]),
+    );
 
 /// small bordered text button, mirrors web .track-feedback-button.
 class _TextAction extends StatelessWidget {

@@ -32,20 +32,22 @@ class ListenScreen extends ConsumerStatefulWidget {
 }
 
 class _ListenScreenState extends ConsumerState<ListenScreen> {
-  StationInfo? _lastStation;
+  StationUiState? _lastLoaded;
 
   @override
   Widget build(BuildContext context) {
     final station = ref.watch(stationProvider);
-    final channel = ref.watch(activeStationIdProvider);
     final info = station.status?.station;
-    final switching = info == null &&
-        station.initialLoading &&
-        _lastStation != null &&
-        _lastStation?.id != channel;
-    if (info != null) _lastStation = info;
-    // Keep the heading in place until the new channel supplies its metadata.
-    final heading = info ?? (station.initialLoading ? _lastStation : null);
+    final switching =
+        info == null && station.initialLoading && _lastLoaded != null;
+    if (info != null) _lastLoaded = station;
+    // A channel switch keeps the existing surface and its scroll positions.
+    // The real provider stays unchanged, so playback still waits for new data.
+    final display = switching
+        ? StationUiState(
+            status: _lastLoaded!.status, updatedAt: _lastLoaded!.updatedAt)
+        : station;
+    final heading = display.status?.station;
     final source = ref.watch(radioSourceProvider);
     final selecting = source.testing && !source.tested;
     final failure = ref
@@ -56,8 +58,14 @@ class _ListenScreenState extends ConsumerState<ListenScreen> {
         !_persistentStationError(station.error!);
     final message = temporaryError
         ? _stationErrorMessage(station.error!)
-        : playbackError ?? (selecting ? '正在比较最优播放源，完成后即可收听…' : source.notice);
-    final busy = selecting && !temporaryError && playbackError == null;
+        : playbackError ??
+            (switching
+                ? '正在切换频道…'
+                : selecting
+                    ? '正在比较最优播放源，完成后即可收听…'
+                    : source.notice);
+    final busy =
+        (switching || selecting) && !temporaryError && playbackError == null;
 
     return SafeArea(
       bottom: false,
@@ -65,10 +73,10 @@ class _ListenScreenState extends ConsumerState<ListenScreen> {
         LayoutBuilder(builder: (context, c) {
           if (c.maxWidth >= 980) {
             return _WideLayout(
-                station: station, heading: heading, switching: switching);
+                station: display, heading: heading, switching: switching);
           }
           return _NarrowLayout(
-              station: station, heading: heading, switching: switching);
+              station: display, heading: heading, switching: switching);
         }),
         Positioned(
             bottom: 16,
@@ -117,7 +125,8 @@ class _WideLayout extends ConsumerWidget {
             ),
           const SizedBox(height: 16),
           Expanded(
-            child: _ChannelTransition(
+            child: _ChannelSurface(
+              switching: switching,
               child: status == null
                   ? _ChannelPlaceholder(
                       loading: station.initialLoading,
@@ -125,7 +134,7 @@ class _WideLayout extends ConsumerWidget {
                       wide: true,
                       showVote: _showVote(ref))
                   : Row(
-                      key: ValueKey(status.station.id),
+                      key: const ValueKey('wide-channel-content'),
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
@@ -138,9 +147,11 @@ class _WideLayout extends ConsumerWidget {
                                 NowPlayingPanel(
                                   status: status,
                                   inlineBitrate: false,
+                                  switching: switching,
                                 ),
                                 const SizedBox(height: 12),
-                                _DesktopControls(status: status),
+                                _DesktopControls(
+                                    status: status, switching: switching),
                               ],
                             ),
                           ),
@@ -167,37 +178,46 @@ bool _showVote(WidgetRef ref) => ref
     .watch(voteEnabledProvider.select((value) => value.asData?.value == true));
 
 class _DesktopControls extends ConsumerWidget {
-  const _DesktopControls({required this.status});
+  const _DesktopControls({required this.status, required this.switching});
 
   final StationStatus status;
+  final bool switching;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final showVote = _showVote(ref);
     final showBitrate = status.station.enabledBitrates.isNotEmpty;
-    const quality = ThmrPanel(
-      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    final quality = ThmrPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Align(
         alignment: Alignment.centerLeft,
         widthFactor: 1,
         heightFactor: 1,
-        child: BitrateRow(),
+        child: BitrateRow(status: status),
       ),
     );
 
     if (!showVote) return showBitrate ? quality : const SizedBox.shrink();
-    final vote = VotePanel(status: status);
+    final vote = VotePanel(
+        key: ValueKey(status.station.id), status: status, switching: switching);
     if (!showBitrate) return vote;
-    return IntrinsicHeight(
-      child: Row(
+    return LayoutBuilder(builder: (context, constraints) {
+      final voteWidth = (constraints.maxWidth - 8) / 2;
+      return IntrinsicHeight(
+          child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Expanded(child: quality),
+          Expanded(child: quality),
           const SizedBox(width: 8),
-          Expanded(child: vote),
+          Expanded(
+              child: VotePanel(
+                  key: ValueKey(status.station.id),
+                  status: status,
+                  switching: switching,
+                  availableWidth: voteWidth)),
         ],
-      ),
-    );
+      ));
+    });
   }
 }
 
@@ -220,7 +240,7 @@ class _Hero extends StatelessWidget {
     final title = heading?.public?.title ?? heading?.name ?? '东方音乐电台 THMR';
     final description = heading?.public?.description ?? '';
 
-    return ThmrPanel(
+    final panel = ThmrPanel(
       padding: const EdgeInsets.fromLTRB(22, 18, 22, 18),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -272,6 +292,12 @@ class _Hero extends StatelessWidget {
         ],
       ),
     );
+    return MediaQuery.disableAnimationsOf(context)
+        ? panel
+        : AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            alignment: Alignment.topLeft,
+            child: panel);
   }
 }
 
@@ -319,7 +345,8 @@ class _NarrowLayout extends ConsumerWidget {
               onRetry: () => ref.read(stationProvider.notifier).refresh(),
             ),
           const SizedBox(height: 14),
-          _ChannelTransition(
+          _ChannelSurface(
+            switching: switching,
             child: st == null
                 ? _ChannelPlaceholder(
                     loading: station.initialLoading,
@@ -327,13 +354,16 @@ class _NarrowLayout extends ConsumerWidget {
                     wide: false,
                     showVote: _showVote(ref))
                 : Column(
-                    key: ValueKey(st.station.id),
+                    key: const ValueKey('narrow-channel-content'),
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      NowPlayingPanel(status: st),
+                      NowPlayingPanel(status: st, switching: switching),
                       if (showVote) ...[
                         const SizedBox(height: 12),
-                        VotePanel(status: st),
+                        VotePanel(
+                            key: ValueKey(st.station.id),
+                            status: st,
+                            switching: switching),
                       ],
                       const SizedBox(height: 18),
                       SectionHeader(
@@ -420,6 +450,27 @@ class _TopBar extends StatelessWidget {
   }
 }
 
+/// Keep pending channel data out of focus, hit testing and announcements while
+/// retaining the same rendered subtree until the new status is ready.
+class _ChannelSurface extends StatelessWidget {
+  const _ChannelSurface({required this.switching, required this.child});
+
+  final bool switching;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+        ignoring: switching,
+        child: ExcludeFocus(
+            excluding: switching,
+            child: ExcludeSemantics(
+                excluding: switching,
+                child: TickerMode(
+                    enabled: !switching,
+                    child: _ChannelTransition(child: child)))),
+      );
+}
+
 class _ChannelTransition extends StatelessWidget {
   const _ChannelTransition({required this.child});
 
@@ -460,11 +511,7 @@ class _ChannelTransition extends StatelessWidget {
       ),
       transitionBuilder: (child, animation) => FadeTransition(
         opacity: animation,
-        child: SlideTransition(
-          position: Tween(begin: const Offset(0, 0.01), end: Offset.zero)
-              .animate(animation),
-          child: child,
-        ),
+        child: child,
       ),
       child: child,
     );
