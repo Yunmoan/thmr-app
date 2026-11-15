@@ -29,47 +29,54 @@ class _DesktopPlayerSurfaceState extends ConsumerState<DesktopPlayerSurface> {
   Widget build(BuildContext context) {
     final mini = ref.watch(miniPlayerProvider);
     final busy = ref.watch(miniTransitionBusyProvider);
-    return IgnorePointer(
-      ignoring: busy,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Offstage(
-            offstage: mini,
-            child: const ThmrBackground(child: SizedBox.expand()),
-          ),
-          Padding(
-            padding: mini ? EdgeInsets.zero : const EdgeInsets.only(top: 38),
-            child: TickerMode(
-              enabled: !mini,
-              child: LayoutBuilder(builder: (context, constraints) {
-                // Native bounds include non-client borders; preserve the real
-                // Flutter content extent so hidden pages do not reflow/scroll.
-                if (!mini) _mainContentSize = constraints.biggest;
-                final size = _mainContentSize ?? kMainMinWindowSize;
-                return Offstage(
-                  offstage: mini,
-                  child: OverflowBox(
-                    alignment: Alignment.topLeft,
-                    maxWidth: double.infinity,
-                    maxHeight: double.infinity,
-                    child: SizedBox.fromSize(size: size, child: widget.child),
-                  ),
-                );
-              }),
+    return ExcludeFocus(
+      excluding: busy,
+      child: IgnorePointer(
+        ignoring: busy,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Offstage(
+              offstage: mini,
+              child: const ThmrBackground(child: SizedBox.expand()),
             ),
-          ),
-          if (mini)
-            MiniPlayerTransition(child: widget.miniPlayer)
-          else
-            Align(
-              alignment: Alignment.topCenter,
-              child: DesktopTitleBar(
-                onMini: () =>
-                    enterMiniMode(ref, MediaQuery.textScalerOf(context)),
+            Padding(
+              padding: mini ? EdgeInsets.zero : const EdgeInsets.only(top: 38),
+              child: TickerMode(
+                enabled: !mini,
+                child: LayoutBuilder(builder: (context, constraints) {
+                  // Native bounds include non-client borders; preserve the real
+                  // Flutter content extent so hidden pages do not reflow/scroll.
+                  if (!mini) _mainContentSize = constraints.biggest;
+                  final size = _mainContentSize ?? kMainMinWindowSize;
+                  return Offstage(
+                    offstage: mini,
+                    child: ExcludeFocus(
+                      excluding: mini,
+                      child: OverflowBox(
+                        alignment: Alignment.topLeft,
+                        maxWidth: double.infinity,
+                        maxHeight: double.infinity,
+                        child:
+                            SizedBox.fromSize(size: size, child: widget.child),
+                      ),
+                    ),
+                  );
+                }),
               ),
             ),
-        ],
+            if (mini)
+              MiniPlayerTransition(child: widget.miniPlayer)
+            else
+              Align(
+                alignment: Alignment.topCenter,
+                child: DesktopTitleBar(
+                  onMini: () =>
+                      enterMiniMode(ref, MediaQuery.textScalerOf(context)),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

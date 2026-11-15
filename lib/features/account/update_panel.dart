@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../shared/widgets/focus_outline.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../core/update/app_update.dart';
 import '../../shared/widgets/thmr_panel.dart';
@@ -54,18 +55,30 @@ class _AppUpdateMonitorState extends ConsumerState<AppUpdateMonitor>
   Widget build(BuildContext context) {
     if (!supportsAppUpdates) return widget.child;
     final update = ref.watch(appUpdateProvider);
-    return Column(children: [
+    return Stack(fit: StackFit.expand, children: [
+      widget.child,
       if (update.showNotice)
-        SafeArea(
-          bottom: false,
-          child: _UpdateNotice(
-            update: update,
-            onIgnore: () =>
-                ref.read(appUpdateProvider.notifier).ignoreRelease(),
-            onView: () => showAppUpdate(context, update.release!),
-          ),
-        ),
-      Expanded(child: widget.child),
+        Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 640),
+                      child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: _UpdateNotice(
+                            update: update,
+                            onIgnore: () => ref
+                                .read(appUpdateProvider.notifier)
+                                .ignoreRelease(),
+                            onView: () =>
+                                showAppUpdate(context, update.release!),
+                          )))),
+            )),
     ]);
   }
 }
@@ -105,6 +118,9 @@ class _UpdateNotice extends StatelessWidget {
     );
     return Material(
       key: const ValueKey('app-update-notice'),
+      elevation: 6,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
       color: theme.colorScheme.surface,
       child: DecoratedBox(
         decoration: BoxDecoration(
@@ -143,8 +159,12 @@ class _UpdateNotice extends StatelessWidget {
               ]);
             }),
           ),
-          if (update.status == UpdateStatus.downloading)
-            LinearProgressIndicator(value: update.progress, minHeight: 2),
+          SizedBox(
+              height: 2,
+              child: update.status == UpdateStatus.downloading
+                  ? LinearProgressIndicator(
+                      value: update.progress, minHeight: 2)
+                  : null),
         ]),
       ),
     );
@@ -194,10 +214,11 @@ class UpdatePanel extends ConsumerWidget {
                 Text('启动或返回应用时检查，每 24 小时最多检查一次', style: captionStyle),
               ],
             )),
-            Switch(
+            FocusOutline(
+                child: Switch(
               value: state.autoCheck,
               onChanged: (value) => controller.setAutoCheck(value),
-            ),
+            )),
           ]),
           const Divider(height: 22),
           Row(children: [
@@ -211,9 +232,10 @@ class UpdatePanel extends ConsumerWidget {
                 Text('发现新版本后在后台下载并校验，安装前会提示', style: captionStyle),
               ],
             )),
-            Switch(
-                value: state.autoDownload,
-                onChanged: (value) => controller.setAutoDownload(value)),
+            FocusOutline(
+                child: Switch(
+                    value: state.autoDownload,
+                    onChanged: (value) => controller.setAutoDownload(value))),
           ]),
           const Divider(height: 22),
           if (state.status == UpdateStatus.downloading) ...[

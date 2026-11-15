@@ -97,10 +97,12 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('发现新版本 · v0.1.10'), findsOneWidget);
+    final contentRect = tester.getRect(find.text('电台页面'));
     await tester.tap(find.byTooltip('忽略此版本'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('app-update-notice')), findsNothing);
     expect(find.text('电台页面'), findsOneWidget);
+    expect(tester.getRect(find.text('电台页面')), contentRect);
     await tester.pumpWidget(const SizedBox.shrink());
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 

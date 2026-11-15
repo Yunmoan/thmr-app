@@ -93,7 +93,10 @@ void main() {
     await settings.setAccentTheme(AccentTheme.cirno);
     final changed = container.read(appThemesProvider);
     expect(changed.$1, isNot(same(original.$1)));
-    expect(changed.$1.colorScheme.primary,
-        ThmrTokens.resolve(AccentTheme.cirno, Brightness.light).accent);
+    expect(
+        changed.$1.colorScheme.primary,
+        ThmrTokens.resolve(AccentTheme.cirno, Brightness.light)
+            .accessible()
+            .accent);
   });
 }

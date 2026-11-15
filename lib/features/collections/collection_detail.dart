@@ -1,10 +1,13 @@
 // Collection detail: items, sorting, share toggle + link bar, export.
 
 import 'package:flutter/material.dart';
+
+import '../../shared/widgets/loading_skeleton.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../shared/widgets/focus_outline.dart';
 import '../../core/config.dart';
 import '../../core/api/network_failure.dart';
 import '../../core/models/models.dart';
@@ -242,10 +245,18 @@ class _CollectionDetailScreenState
               _load();
             },
             itemBuilder: (_) => const [
-              PopupMenuItem(value: 'position', child: Text('手动顺序')),
-              PopupMenuItem(value: 'title', child: Text('曲名')),
-              PopupMenuItem(value: 'artist', child: Text('艺术家')),
-              PopupMenuItem(value: 'addedAt', child: Text('添加时间')),
+              PopupMenuItem(
+                  value: 'position',
+                  child: AncestorFocusOutline(child: Text('手动顺序'))),
+              PopupMenuItem(
+                  value: 'title',
+                  child: AncestorFocusOutline(child: Text('曲名'))),
+              PopupMenuItem(
+                  value: 'artist',
+                  child: AncestorFocusOutline(child: Text('艺术家'))),
+              PopupMenuItem(
+                  value: 'addedAt',
+                  child: AncestorFocusOutline(child: Text('添加时间'))),
             ],
           ),
           PopupMenuButton<String>(
@@ -254,9 +265,15 @@ class _CollectionDetailScreenState
             icon: const Icon(Icons.ios_share_rounded),
             onSelected: (v) => _export(context, v),
             itemBuilder: (_) => const [
-              PopupMenuItem(value: 'json', child: Text('JSON')),
-              PopupMenuItem(value: 'm3u', child: Text('M3U 播放列表')),
-              PopupMenuItem(value: 'csv', child: Text('CSV')),
+              PopupMenuItem(
+                  value: 'json',
+                  child: AncestorFocusOutline(child: Text('JSON'))),
+              PopupMenuItem(
+                  value: 'm3u',
+                  child: AncestorFocusOutline(child: Text('M3U 播放列表'))),
+              PopupMenuItem(
+                  value: 'csv',
+                  child: AncestorFocusOutline(child: Text('CSV'))),
             ],
           ),
         ],
@@ -320,7 +337,8 @@ class _CollectionDetailScreenState
 
   Widget _buildList(BuildContext context, ThmrTokens tokens) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const TrackListSkeleton(
+          padding: EdgeInsets.all(18), extraHeight: 46);
     }
     if (_error != null) {
       return NetworkIssueView(
@@ -509,7 +527,7 @@ class _ShareToggle extends StatelessWidget {
                 .textTheme
                 .labelMedium
                 ?.copyWith(fontWeight: FontWeight.w600)),
-        Switch(value: enabled, onChanged: onChanged),
+        FocusOutline(child: Switch(value: enabled, onChanged: onChanged)),
       ],
     );
   }

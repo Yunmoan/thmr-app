@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../shared/widgets/focus_outline.dart';
 import '../../../core/api/radio_api.dart';
 import '../../../core/state/radio_source_provider.dart';
 import '../../../core/config.dart';
@@ -155,24 +156,29 @@ class _FeedbackFormState extends ConsumerState<_FeedbackForm> {
               runSpacing: 8,
               children: [
                 for (final (value, label) in _feedbackTypes)
-                  ChoiceChip(
-                    label: Text(label),
-                    selected: _type == value,
-                    onSelected: (_) => setState(() => _type = value),
-                  ),
+                  FocusOutline(
+                      radius: 999,
+                      focusBounds: true,
+                      child: ChoiceChip(
+                        label: Text(label),
+                        selected: _type == value,
+                        onSelected: (_) => setState(() => _type = value),
+                      )),
               ],
             ),
             const SizedBox(height: 16),
-            TextField(
+            FocusOutline(
+                child: TextField(
               controller: _contact,
               maxLength: 200,
               decoration: const InputDecoration(
                 labelText: '联系方式(必填)',
                 hintText: '邮箱 / QQ 等,便于回访',
               ),
-            ),
+            )),
             const SizedBox(height: 8),
-            TextField(
+            FocusOutline(
+                child: TextField(
               controller: _message,
               maxLength: 1000,
               maxLines: 3,
@@ -180,7 +186,7 @@ class _FeedbackFormState extends ConsumerState<_FeedbackForm> {
                 labelText: '补充说明(可选)',
                 hintText: '例如:曲名/艺术家信息有误、音质异常…',
               ),
-            ),
+            )),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,

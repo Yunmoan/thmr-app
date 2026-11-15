@@ -13,9 +13,17 @@ import '../../../core/theme/thmr_theme.dart';
 import '../../../shared/widgets/thmr_panel.dart';
 
 class VotePanel extends ConsumerStatefulWidget {
-  const VotePanel({super.key, required this.status});
+  const VotePanel(
+      {super.key,
+      required this.status,
+      this.switching = false,
+      this.availableWidth});
 
   final StationStatus status;
+  final bool switching;
+
+  /// Width supplied by a parent that measures intrinsic card heights.
+  final double? availableWidth;
 
   @override
   ConsumerState<VotePanel> createState() => _VotePanelState();
@@ -23,10 +31,13 @@ class VotePanel extends ConsumerStatefulWidget {
 
 class _VotePanelState extends ConsumerState<VotePanel> {
   String? _pendingLabel;
+  AsyncValue<VoteStatus>? _lastResult;
 
   @override
   Widget build(BuildContext context) {
-    final result = ref.watch(voteStatusProvider);
+    final latestResult = ref.watch(voteStatusProvider);
+    if (!widget.switching) _lastResult = latestResult;
+    final result = _lastResult ?? latestResult;
     final vote = result.asData?.value;
     final signedIn = ref.watch(authProvider.select((auth) => auth.signedIn));
     final round =
@@ -57,56 +68,110 @@ class _VotePanelState extends ConsumerState<VotePanel> {
           : '正在同步投票';
     }
 
-    return ThmrPanel(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        children: [
-          Icon(Icons.how_to_vote_outlined, size: 21, color: accent),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('投票切歌',
-                    style: theme.textTheme.labelLarge
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-                Text(detail,
-                    style: theme.textTheme.labelSmall
-                        ?.copyWith(color: tokens.mutedInk)),
-                if (canVote) ...[
-                  const SizedBox(height: 4),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 160),
-                    child: LinearProgressIndicator(
-                      value: (round.votes / round.threshold).clamp(0.0, 1.0),
-                      minHeight: 3,
-                      borderRadius: BorderRadius.circular(2),
-                      backgroundColor: tokens.panelBorder,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (canVote || pendingLabel != null) ...[
-            const SizedBox(width: 8),
-            FilledButton.tonal(
-              onPressed:
-                  pendingLabel == null && canVote ? () => _submit(vote!) : null,
-              child: Semantics(
+    final buttonLabel = pendingLabel ??
+        (!signedIn
+            ? '登录后投票'
+            : canVote && vote!.myVote
+                ? '撤回'
+                : '投一票');
+    final labels =
+        signedIn ? const ['投一票', '撤回', '投票中…', '撤回中…'] : const ['登录后投票'];
+    final labelStyle = theme.filledButtonTheme.style?.textStyle?.resolve({}) ??
+        theme.textTheme.labelLarge;
+    final buttonPadding =
+        (theme.filledButtonTheme.style?.padding?.resolve({}) ??
+                const EdgeInsets.symmetric(horizontal: 24))
+            .resolve(Directionality.of(context));
+    double measure(String text, TextStyle? style) {
+      final painter = TextPainter(
+        text: TextSpan(
+            text: text, style: DefaultTextStyle.of(context).style.merge(style)),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout();
+      final width = painter.width;
+      painter.dispose();
+      return width;
+    }
+
+    final labelWidth = labels
+        .map((label) => measure(label, labelStyle))
+        .reduce((a, b) => a > b ? a : b);
+    final buttonWidth =
+        (labelWidth + buttonPadding.horizontal).clamp(64.0, double.infinity);
+    final hasProgress = round != null && round.threshold > 0;
+
+    Widget content(double width) {
+      final button = SizedBox(
+          width: buttonWidth,
+          child: FilledButton.tonal(
+            onPressed: !widget.switching && pendingLabel == null && canVote
+                ? () => _submit(vote!)
+                : null,
+            style: FilledButton.styleFrom(textStyle: labelStyle),
+            child: Semantics(
                 liveRegion: pendingLabel != null,
-                child: Text(pendingLabel ??
-                    (!signedIn
-                        ? '登录后投票'
-                        : vote!.myVote
-                            ? '撤回'
-                            : '投一票')),
-              ),
-            ),
-          ],
-        ],
-      ),
+                child: Text(buttonLabel, maxLines: 1, softWrap: false)),
+          ));
+      final info = Row(children: [
+        Icon(Icons.how_to_vote_outlined, size: 21, color: accent),
+        const SizedBox(width: 9),
+        Expanded(
+            child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              Text('投票切歌',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelLarge
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+              Tooltip(
+                  message: detail,
+                  child: Text(detail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: tokens.mutedInk))),
+              const SizedBox(height: 4),
+              ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 160),
+                  child: ExcludeSemantics(
+                      excluding: !hasProgress,
+                      child: LinearProgressIndicator(
+                        value: hasProgress
+                            ? (round.votes / round.threshold).clamp(0.0, 1.0)
+                            : 0,
+                        minHeight: 3,
+                        borderRadius: BorderRadius.circular(2),
+                        backgroundColor: tokens.panelBorder,
+                      ))),
+            ])),
+      ]);
+      // Keep the same arrangement across loading/result/error states. Large
+      // text uses a second row instead of squeezing out the status message.
+      final minimumInfoWidth = 30 + measure('投票切歌', labelStyle);
+      if (width < minimumInfoWidth + 8 + buttonWidth) {
+        return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              info,
+              const SizedBox(height: 8),
+              Align(alignment: Alignment.centerRight, child: button),
+            ]);
+      }
+      return Row(
+          children: [Expanded(child: info), const SizedBox(width: 8), button]);
+    }
+
+    const padding = EdgeInsets.symmetric(horizontal: 12, vertical: 8);
+    return ThmrPanel(
+      padding: padding,
+      child: widget.availableWidth == null
+          ? LayoutBuilder(
+              builder: (_, constraints) => content(constraints.maxWidth))
+          : content(widget.availableWidth! - padding.horizontal - 2),
     );
   }
 

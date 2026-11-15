@@ -4,8 +4,57 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
 const { createManifest, inspectManifest, publicBytes, releaseNotes } = require('./update_release.cjs');
+
+test('workflow permits unsigned previews but enforces signing for tags and configured keys', {
+  skip: process.platform === 'win32' && !process.env.THMR_TEST_BASH,
+}, async t => {
+  const workflow = fs.readFileSync(path.join(__dirname, '../.github/workflows/build.yml'), 'utf8').replace(/\r\n/g, '\n');
+  const step = workflow.split('      - name: Sign the updater manifest')[1].split('      - name:')[0];
+  const script = step.split('        run: |')[1].replace(/^ {10}/gm, '');
+  const { privateKey } = crypto.generateKeyPairSync('ed25519');
+  const pem = privateKey.export({ type: 'pkcs8', format: 'pem' });
+  const publicKey = publicBytes(privateKey);
+  for (const [name, refType, privatePem, publicValue, succeeds, signed] of [
+    ['unconfigured preview', 'branch', '', '', true, false],
+    ['unconfigured tag', 'tag', '', '', false, false],
+    ['public key only', 'branch', '', publicKey, false, false],
+    ['private key only', 'branch', pem, '', false, false],
+    ['mismatched keys', 'branch', pem, Buffer.alloc(32).toString('base64'), false, false],
+    ['configured preview', 'branch', pem, publicKey, true, true],
+    ['configured tag', 'tag', pem, publicKey, true, true],
+  ]) {
+    await t.test(name, () => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'thmr-signing-'));
+      try {
+        fs.mkdirSync(path.join(directory, 'tool'));
+        fs.copyFileSync(path.join(__dirname, 'update_release.cjs'), path.join(directory, 'tool/update_release.cjs'));
+        fs.mkdirSync(path.join(directory, 'release/metadata'), { recursive: true });
+        fs.writeFileSync(path.join(directory, 'release/metadata/RELEASE_NOTES.md'), '- 测试');
+        for (const file of ['thmr-app-windows-x64.zip', 'thmr-app-macos-universal.zip',
+          'thmr-app-linux-x64.tar.gz', 'thmr-app-android.apk']) {
+          fs.writeFileSync(path.join(directory, 'release', file), file);
+        }
+        const result = spawnSync(process.env.THMR_TEST_BASH || 'bash', ['-e', '-c', script], {
+          cwd: directory, encoding: 'utf8', timeout: 15000,
+          env: { ...process.env, GITHUB_REF_TYPE: refType, GITHUB_REPOSITORY: 'example/thmr-app',
+            RELEASE_TAG: refType === 'tag' ? 'v0.1.9' : 'build-0.1.9-101',
+            RELEASE_VERSION: '0.1.9', RELEASE_BUILD: '101',
+            THMR_UPDATE_PRIVATE_KEY: privatePem, THMR_UPDATE_PUBLIC_KEY: publicValue },
+        });
+        assert.ifError(result.error);
+        assert.equal(result.status === 0, succeeds, result.stdout + result.stderr);
+        if (!succeeds) assert.match(result.stderr, /Configure THMR_UPDATE_PRIVATE_KEY|Signing key does not match/);
+        const file = path.join(directory, 'release/metadata/thmr-update.json');
+        assert.equal(fs.existsSync(file), signed);
+        if (signed) assert.equal(inspectManifest(JSON.parse(fs.readFileSync(file)), publicKey).build_number, 101);
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    });
+  }
+});
 
 test('signed payload carries the version and build; macOS updates keep ZIP compatibility', async t => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'thmr-manifest-'));

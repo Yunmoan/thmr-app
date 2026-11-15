@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+
+import '../../shared/widgets/loading_skeleton.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/widgets/focus_outline.dart';
 import '../../core/api/radio_api.dart';
+import '../../core/input/app_commands.dart';
 import '../../core/api/network_failure.dart';
 import '../../core/models/models.dart';
 import '../../core/state/auth_provider.dart';
@@ -102,7 +106,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             Row(
               children: [
                 Expanded(
-                  child: TextField(
+                  child: FocusOutline(
+                      child: TextField(
+                    focusNode: ref.watch(librarySearchFocusProvider),
                     controller: _controller,
                     textInputAction: TextInputAction.search,
                     onSubmitted: (_) => _search(),
@@ -110,7 +116,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                       prefixIcon: Icon(Icons.search_rounded),
                       hintText: '搜索曲名 / 艺术家 / 专辑…',
                     ),
-                  ),
+                  )),
                 ),
                 const SizedBox(width: 8),
                 PopupMenuButton<String>(
@@ -122,7 +128,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   },
                   itemBuilder: (_) => [
                     for (final (v, label) in _sortOptions)
-                      PopupMenuItem(value: v, child: Text(label)),
+                      PopupMenuItem(
+                          value: v,
+                          child: AncestorFocusOutline(child: Text(label))),
                   ],
                   icon: const Icon(Icons.sort_rounded),
                 ),
@@ -145,7 +153,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   Widget _buildBody(BuildContext context, ThmrTokens tokens, String stationId) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const TrackListSkeleton();
     }
     if (_error != null) {
       return NetworkIssueView(
@@ -344,7 +352,8 @@ class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
             )
           else
             ...collections.map(
-              (c) => ListTile(
+              (c) => FocusOutline(
+                  child: ListTile(
                 leading: Icon(
                   c.share.enabled
                       ? Icons.bookmark_rounded
@@ -354,7 +363,7 @@ class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
                 title: Text(c.name),
                 subtitle: Text('${c.itemCount} 首'),
                 onTap: _busy ? null : () => _add(c),
-              ),
+              )),
             ),
           const SizedBox(height: 10),
         ],

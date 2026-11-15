@@ -17,8 +17,9 @@ import '../../../core/state/auth_provider.dart';
 import '../../../core/state/channel_provider.dart';
 import '../../../core/state/station_provider.dart';
 import '../../../core/theme/thmr_theme.dart';
-import '../../../shared/widgets/thmr_panel.dart';
+import '../../../shared/widgets/player_panel_layout.dart';
 import '../../../shared/widgets/volume_slider.dart';
+import '../../../shared/widgets/focus_outline.dart';
 import '../../../shared/widgets/volume_wheel_control.dart';
 import 'bitrate_row.dart';
 import 'feedback_sheet.dart';
@@ -26,13 +27,17 @@ import 'feedback_sheet.dart';
 /// 正在放送面板:封面 + 曲名 + 直播进度 + 控制排(收藏 / 播放 / 反馈)。
 ///
 /// 重建范围刻意收窄:本面板只订阅低频状态(电台 10s 轮询、收藏状态);
-/// 秒级变化由 [_PlayBar] / [_VolumeControl] / [_PlaybackError] 各自窄订阅,
+/// 秒级变化由 [_PlayBar] / [_VolumeControl] 各自窄订阅,
 /// 整面板不再每秒重建。
 class NowPlayingPanel extends ConsumerStatefulWidget {
   const NowPlayingPanel(
-      {super.key, required this.status, this.inlineBitrate = true});
+      {super.key,
+      required this.status,
+      this.inlineBitrate = true,
+      this.switching = false});
 
   final StationStatus status;
+  final bool switching;
 
   /// Mobile: quality chips live inside the panel; desktop keeps a separate
   /// panel (its own row) instead.
@@ -43,6 +48,7 @@ class NowPlayingPanel extends ConsumerStatefulWidget {
 }
 
 class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
+  bool _lastFavorited = false;
   Future<void> _onMainButton() {
     return ref
         .read(playbackProvider.notifier)
@@ -111,51 +117,35 @@ class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
   @override
   Widget build(BuildContext context) {
     final cur = widget.status.current;
-    final favorited = ref.watch(favoritesStatusProvider
+    final latestFavorited = ref.watch(favoritesStatusProvider
         .select((v) => v.asData?.value.favorited ?? false));
+    if (!widget.switching) _lastFavorited = latestFavorited;
+    final favorited = _lastFavorited;
 
-    return ThmrPanel(
-      padding: const EdgeInsets.all(16),
-      child: Column(
+    return PlayerPanelLayout(
+      header: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // now-playing row: cover left, copy right (web PlayerConsole)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _Cover96(cur: cur),
-              const SizedBox(width: 14),
-              Expanded(
-                child: NowPlayingTrackInfo(
-                  cur: cur,
-                  favorited: favorited,
-                  onFavorite: cur == null ? null : () => _toggleFavorite(cur),
-                  onFeedback: cur == null
-                      ? null
-                      : () => showFeedbackSheet(
-                            context,
-                            track: cur,
-                            stationId: widget.status.station.id,
-                          ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // player-toggle long bar (web .player-toggle)
-          _PlayBar(onToggle: _onMainButton),
-          const _PlaybackError(),
-          const SizedBox(height: 12),
-          // volume: desktop = inline slider; mobile = icon + bottom sheet
-          _VolumeControl(desktopInline: !widget.inlineBitrate),
-          if (widget.inlineBitrate) ...[
-            const SizedBox(height: 4),
-            Divider(color: Theme.of(context).thmr.panelBorder),
-            const SizedBox(height: 2),
-            const BitrateRow(),
-          ],
+          _Cover96(cur: cur),
+          const SizedBox(width: 14),
+          Expanded(
+              child: NowPlayingTrackInfo(
+            cur: cur,
+            favorited: favorited,
+            onFavorite: cur == null ? null : () => _toggleFavorite(cur),
+            onFeedback: cur == null
+                ? null
+                : () => showFeedbackSheet(context,
+                    track: cur, stationId: widget.status.station.id),
+          )),
         ],
       ),
+      playback: Column(mainAxisSize: MainAxisSize.min, children: [
+        _PlayBar(onToggle: _onMainButton),
+        const _PlaybackError()
+      ]),
+      volume: _VolumeControl(desktopInline: !widget.inlineBitrate),
+      quality: widget.inlineBitrate ? BitrateRow(status: widget.status) : null,
     );
   }
 }
@@ -267,7 +257,8 @@ class NowPlayingTrackInfo extends ConsumerWidget {
         for (final c in cols)
           PopupMenuItem(
             value: c,
-            child: Row(
+            child: AncestorFocusOutline(
+                child: Row(
               children: [
                 Icon(
                   c.favorited
@@ -296,7 +287,7 @@ class NowPlayingTrackInfo extends ConsumerWidget {
                           : Theme.of(context).thmr.mutedInk),
                 ),
               ],
-            ),
+            )),
           ),
       ],
     );
@@ -327,6 +318,26 @@ class NowPlayingTrackInfo extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).thmr;
+    final title = AnimatedSwitcher(
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 350),
+      layoutBuilder: _trackTextLayout,
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeIn,
+      transitionBuilder: (child, anim) =>
+          FadeTransition(opacity: anim, child: child),
+      child: Text(
+        cur?.title ?? '暂无播放',
+        key: ValueKey(cur?.trackId ?? 'none'),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context)
+            .textTheme
+            .titleLarge
+            ?.copyWith(fontWeight: FontWeight.w800, height: 1.25),
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -339,26 +350,19 @@ class NowPlayingTrackInfo extends ConsumerWidget {
               ),
         ),
         const SizedBox(height: 4),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 350),
-          switchInCurve: Curves.easeOutCubic,
-          switchOutCurve: Curves.easeIn,
-          transitionBuilder: (child, anim) =>
-              FadeTransition(opacity: anim, child: child),
-          child: Text(
-            cur?.title ?? '暂无播放',
-            key: ValueKey(cur?.trackId ?? 'none'),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.w800, height: 1.25),
-          ),
-        ),
+        MediaQuery.disableAnimationsOf(context)
+            ? title
+            : AnimatedSize(
+                duration: const Duration(milliseconds: 220),
+                alignment: Alignment.topLeft,
+                child: title,
+              ),
         const SizedBox(height: 6),
         AnimatedSwitcher(
-          duration: const Duration(milliseconds: 350),
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 350),
+          layoutBuilder: _trackTextLayout,
           transitionBuilder: (child, anim) =>
               FadeTransition(opacity: anim, child: child),
           child: Text(
@@ -398,6 +402,24 @@ class NowPlayingTrackInfo extends ConsumerWidget {
   }
 }
 
+// Only incoming text determines layout; fading text keeps its original width
+// and top-left origin, without pushing the new title or artist to the centre.
+Widget _trackTextLayout(Widget? current, List<Widget> previous) => SizedBox(
+      width: double.infinity,
+      child: Stack(
+          alignment: AlignmentDirectional.topStart,
+          clipBehavior: Clip.none,
+          children: [
+            for (final child in previous)
+              Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: ExcludeSemantics(child: child)),
+            if (current != null) current,
+          ]),
+    );
+
 /// small bordered text button, mirrors web .track-feedback-button.
 class _TextAction extends StatelessWidget {
   const _TextAction({
@@ -417,27 +439,30 @@ class _TextAction extends StatelessWidget {
     return Material(
       color: active ? tokens.accentSoft : tokens.fieldBg,
       borderRadius: BorderRadius.circular(6),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
+      child: FocusOutline(
+          radius: 6,
+          child: InkWell(
+            onTap: onTap,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color:
-                  active ? accent.withValues(alpha: 0.5) : tokens.panelBorder,
-            ),
-          ),
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: active ? accent : tokens.ink,
-                  fontWeight: FontWeight.w600,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: active
+                      ? accent.withValues(alpha: 0.5)
+                      : tokens.panelBorder,
                 ),
-          ),
-        ),
-      ),
+              ),
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: active ? accent : tokens.ink,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ),
+          )),
     );
   }
 }
@@ -465,39 +490,48 @@ class _PlayBar extends ConsumerWidget {
       PlaybackPhase.reconnecting => '重连中',
     };
 
-    return Material(
+    return FocusOutline(
+        child: Material(
       color: tokens.fieldBg,
       borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onToggle,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: tokens.panelBorder),
-          ),
-          child: Row(
-            children: [
-              const SizedBox(
-                width: 52,
-                child: _ListeningClock(),
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: AudioStrip(playing: playing, busy: busy)),
-              const SizedBox(width: 12),
-              Text(
-                label,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: playing ? scheme.primary : tokens.mutedInk,
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-            ],
+      child: Semantics(
+        label: busy
+            ? '取消连接'
+            : playing
+                ? '暂停播放'
+                : '播放',
+        button: true,
+        child: InkWell(
+          onTap: onToggle,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: tokens.panelBorder),
+            ),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 52,
+                  child: _ListeningClock(),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: AudioStrip(playing: playing, busy: busy)),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: playing ? scheme.primary : tokens.mutedInk,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -549,6 +583,7 @@ class _AudioStripState extends State<AudioStrip>
   bool _unavailable = false;
 
   bool get _canAnimate {
+    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) return false;
     final state = WidgetsBinding.instance.lifecycleState;
     if (state == null || state == AppLifecycleState.resumed) return true;
     // Desktop windows remain visible when another window takes input focus.
@@ -572,7 +607,7 @@ class _AudioStripState extends State<AudioStrip>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (widget.playing && TickerMode.valuesOf(context).enabled) {
+    if (widget.playing && _canAnimate && TickerMode.valuesOf(context).enabled) {
       _begin();
     } else {
       _stopCapture();
@@ -797,7 +832,9 @@ class _PlaybackError extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final error = ref.watch(playbackProvider.select((s) => s.error));
+    final failure =
+        ref.watch(playbackProvider.select((s) => (s.error, s.phase)));
+    final error = failure.$2 == PlaybackPhase.idle ? failure.$1 : null;
     if (error == null) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 8),
@@ -834,7 +871,8 @@ class _VolumeControlState extends ConsumerState<_VolumeControl> {
         child: VolumeWheelControl(
           value: volume,
           onChanged: (v) => ref.read(playbackProvider.notifier).setVolume(v),
-          child: InkWell(
+          child: FocusOutline(
+              child: InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: () => showModalBottomSheet<void>(
               context: context,
@@ -865,7 +903,7 @@ class _VolumeControlState extends ConsumerState<_VolumeControl> {
                 ],
               ),
             ),
-          ),
+          )),
         ),
       );
     }

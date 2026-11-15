@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/widgets/focus_outline.dart';
 import '../../../core/config.dart';
 import '../../../core/models/models.dart';
 import '../../../core/state/channel_provider.dart';
@@ -64,7 +65,8 @@ class ChannelSwitcher extends ConsumerWidget {
         onTap: onTap,
         height: _menuRowHeight,
         padding: EdgeInsets.zero,
-        child: Semantics(
+        child: AncestorFocusOutline(
+            child: Semantics(
           selected: selected,
           child: Container(
             constraints: const BoxConstraints(minHeight: _menuRowHeight),
@@ -99,7 +101,7 @@ class ChannelSwitcher extends ConsumerWidget {
               ],
             ),
           ),
-        ),
+        )),
       );
     }
 
@@ -182,46 +184,48 @@ class ChannelSwitcher extends ConsumerWidget {
       );
       if (!canOpen) return trigger;
 
-      return PopupMenuButton<String>(
-        tooltip: '切换频道',
-        position: PopupMenuPosition.under,
-        offset: const Offset(0, 4),
-        constraints: _menuWidth,
-        menuPadding: const EdgeInsets.all(4),
-        borderRadius: radius,
-        shape: RoundedRectangleBorder(
-          borderRadius: radius,
-          side: BorderSide(color: tokens.panelBorder),
-        ),
-        color: tokens.solidPanel,
-        elevation: 3,
-        shadowColor: Colors.black.withValues(alpha: 0.32),
-        surfaceTintColor: Colors.transparent,
-        clipBehavior: Clip.antiAlias,
-        requestFocus: true,
-        onSelected: select,
-        itemBuilder: (context) => [
-          for (final channel in channels)
-            menuItem(
-              value: channel.id,
-              selected: channel.id == stationId,
-              label: channel.name,
+      return FocusOutline(
+          radius: 7,
+          child: PopupMenuButton<String>(
+            tooltip: '切换频道',
+            position: PopupMenuPosition.under,
+            offset: const Offset(0, 4),
+            constraints: _menuWidth,
+            menuPadding: const EdgeInsets.all(4),
+            borderRadius: radius,
+            shape: RoundedRectangleBorder(
+              borderRadius: radius,
+              side: BorderSide(color: tokens.panelBorder),
             ),
-          if (canReset)
-            menuItem(
-              value: appConfig.stationId,
-              label: '恢复默认频道',
-              icon: Icons.restore_rounded,
-            ),
-          if (catalog.hasError)
-            menuItem(
-              onTap: () => ref.invalidate(channelCatalogProvider),
-              label: '重新加载频道',
-              icon: Icons.refresh_rounded,
-            ),
-        ],
-        child: trigger,
-      );
+            color: tokens.solidPanel,
+            elevation: 3,
+            shadowColor: Colors.black.withValues(alpha: 0.32),
+            surfaceTintColor: Colors.transparent,
+            clipBehavior: Clip.antiAlias,
+            requestFocus: true,
+            onSelected: select,
+            itemBuilder: (context) => [
+              for (final channel in channels)
+                menuItem(
+                  value: channel.id,
+                  selected: channel.id == stationId,
+                  label: channel.name,
+                ),
+              if (canReset)
+                menuItem(
+                  value: appConfig.stationId,
+                  label: '恢复默认频道',
+                  icon: Icons.restore_rounded,
+                ),
+              if (catalog.hasError)
+                menuItem(
+                  onTap: () => ref.invalidate(channelCatalogProvider),
+                  label: '重新加载频道',
+                  icon: Icons.refresh_rounded,
+                ),
+            ],
+            child: trigger,
+          ));
     });
   }
 

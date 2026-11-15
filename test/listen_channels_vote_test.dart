@@ -259,6 +259,11 @@ void main() {
       expect(find.text('精选曲目'), findsOneWidget);
       expect(find.text('综合曲目'), findsNothing);
 
+      final actionRect =
+          tester.getRect(find.widgetWithText(FilledButton, '投一票'));
+      final progress = find.descendant(
+          of: vote, matching: find.byType(LinearProgressIndicator));
+      final progressRect = tester.getRect(progress);
       api.pendingMutation = Completer<void>();
       await tester.tap(find.text('投一票'));
       await tester.pumpAndSettle();
@@ -268,10 +273,16 @@ void main() {
               .onPressed,
           isNull);
       expect(find.text('已投票'), findsNothing);
+      expect(tester.getRect(find.widgetWithText(FilledButton, '投票中…')),
+          actionRect);
+      expect(tester.getRect(progress), progressRect);
       api.pendingMutation!.complete();
       await tester.pumpAndSettle();
       expect(find.text('1 / 3 票'), findsOneWidget);
       expect(find.text('已投票'), findsOneWidget);
+      expect(
+          tester.getRect(find.widgetWithText(FilledButton, '撤回')), actionRect);
+      expect(tester.getRect(progress), progressRect);
 
       api.pendingMutation = Completer<void>();
       await tester.tap(find.text('撤回'));
@@ -284,6 +295,9 @@ void main() {
       api.pendingMutation!.complete();
       await tester.pumpAndSettle();
       expect(find.text('0 / 3 票'), findsOneWidget);
+      expect(
+          tester.getRect(find.widgetWithText(FilledButton, '投一票')), actionRect);
+      expect(tester.getRect(progress), progressRect);
       expect(find.text('已撤回投票'), findsOneWidget);
       expect(api.mutations, [('cast', _curated), ('cancel', _curated)]);
 

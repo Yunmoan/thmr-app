@@ -10,6 +10,7 @@ import '../../core/state/station_provider.dart';
 import '../../core/theme/thmr_theme.dart';
 import 'track_cover.dart';
 import 'volume_slider.dart';
+import 'focus_outline.dart';
 import 'volume_wheel_control.dart';
 
 /// 非收听页时的窗口底部播放条(参照 Web 端 dock bar)。
@@ -103,35 +104,48 @@ class _DockPlayButton extends ConsumerWidget {
     final playing =
         phase == PlaybackPhase.online || phase == PlaybackPhase.buffering;
 
-    return SizedBox(
-      width: 36,
-      height: 36,
-      child: Material(
-        color: accent,
-        borderRadius: BorderRadius.circular(999),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(999),
-          onTap: () {
-            final url = ref.read(streamUrlProvider);
-            ref.read(playbackProvider.notifier).toggle(url);
-          },
-          child: Center(
-            child: busy
-                ? SizedBox(
-                    width: 15,
-                    height: 15,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: onAccent),
-                  )
-                : Icon(
-                    playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                    size: 22,
-                    color: onAccent,
-                  ),
+    return FocusOutline(
+        radius: 999,
+        child: SizedBox(
+          width: 36,
+          height: 36,
+          child: Material(
+            color: accent,
+            borderRadius: BorderRadius.circular(999),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(999),
+              onTap: () {
+                final url = ref.read(streamUrlProvider);
+                ref.read(playbackProvider.notifier).toggle(url);
+              },
+              child: Semantics(
+                label: busy
+                    ? '取消连接'
+                    : playing
+                        ? '暂停播放'
+                        : '播放',
+                button: true,
+                excludeSemantics: true,
+                child: Center(
+                  child: busy
+                      ? SizedBox(
+                          width: 15,
+                          height: 15,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: onAccent),
+                        )
+                      : Icon(
+                          playing
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                          size: 22,
+                          color: onAccent,
+                        ),
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
-    );
+        ));
   }
 }
 
@@ -158,6 +172,7 @@ class _DockVolumeState extends ConsumerState<_DockVolume> {
           value: shown,
           onChanged: (v) => ref.read(playbackProvider.notifier).setVolume(v),
           child: IconButton(
+            tooltip: muted ? '取消静音' : '静音',
             visualDensity: VisualDensity.compact,
             icon: Icon(
               muted
@@ -204,44 +219,48 @@ class _DockBitrate extends ConsumerWidget {
     final stationId = info!.id;
     final selected = station.selectedProfile(settings.bitrateFor(stationId));
 
-    return PopupMenuButton<String>(
-      position: PopupMenuPosition.over,
-      onSelected: (id) =>
-          ref.read(settingsProvider.notifier).setBitrate(stationId, id),
-      itemBuilder: (menuContext) => [
-        for (final p in profiles)
-          PopupMenuItem(
-            value: p.id,
-            child: Text(
-              p.label,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: p.id == selected.id ? accent : tokens.ink,
-                    fontWeight: p.id == selected.id ? FontWeight.w700 : null,
-                  ),
+    return FocusOutline(
+        radius: 6,
+        child: PopupMenuButton<String>(
+          position: PopupMenuPosition.over,
+          onSelected: (id) =>
+              ref.read(settingsProvider.notifier).setBitrate(stationId, id),
+          itemBuilder: (menuContext) => [
+            for (final p in profiles)
+              PopupMenuItem(
+                value: p.id,
+                child: AncestorFocusOutline(
+                    child: Text(
+                  p.label,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: p.id == selected.id ? accent : tokens.ink,
+                        fontWeight:
+                            p.id == selected.id ? FontWeight.w700 : null,
+                      ),
+                )),
+              ),
+          ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: tokens.fieldBg,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: tokens.panelBorder),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  selected.label,
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const Icon(Icons.arrow_drop_down_rounded, size: 16),
+              ],
             ),
           ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: tokens.fieldBg,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: tokens.panelBorder),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              selected.label,
-              style: Theme.of(context)
-                  .textTheme
-                  .labelMedium
-                  ?.copyWith(fontWeight: FontWeight.w600),
-            ),
-            const Icon(Icons.arrow_drop_down_rounded, size: 16),
-          ],
-        ),
-      ),
-    );
+        ));
   }
 }

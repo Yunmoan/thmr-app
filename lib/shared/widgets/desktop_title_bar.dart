@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/theme/thmr_theme.dart';
+import 'focus_outline.dart';
 
 class DesktopTitleBar extends StatelessWidget {
   const DesktopTitleBar({super.key, this.onMini});
@@ -48,14 +49,17 @@ class DesktopTitleBar extends StatelessWidget {
           if (onMini != null)
             _CaptionButton(
               icon: Icons.picture_in_picture_alt_rounded,
+              label: '切换到迷你播放器',
               onTap: onMini,
             ),
           _CaptionButton(
             icon: Icons.remove_rounded,
+            label: '最小化窗口',
             onTap: () => windowManager.minimize(),
           ),
           _CaptionButton(
             icon: Icons.crop_square_rounded,
+            label: '最大化或还原窗口',
             onTap: () async {
               if (await windowManager.isMaximized()) {
                 await windowManager.unmaximize();
@@ -66,6 +70,7 @@ class DesktopTitleBar extends StatelessWidget {
           ),
           _CaptionButton(
             icon: Icons.close_rounded,
+            label: '关闭窗口',
             danger: true,
             onTap: () => windowManager.close(),
           ),
@@ -78,11 +83,13 @@ class DesktopTitleBar extends StatelessWidget {
 class _CaptionButton extends StatelessWidget {
   const _CaptionButton({
     required this.icon,
+    required this.label,
     required this.onTap,
     this.danger = false,
   });
 
   final IconData icon;
+  final String label;
   final VoidCallback? onTap;
   final bool danger;
 
@@ -91,7 +98,8 @@ class _CaptionButton extends StatelessWidget {
     final tokens = Theme.of(context).thmr;
     // 注意:标题栏位于 MaterialApp.builder 层(Navigator/Overlay 之外),
     // 不能使用 Tooltip(需要 Overlay 祖先),否则运行时报错。
-    return SizedBox(
+    return FocusOutline(
+        child: SizedBox(
       width: 44,
       height: 38,
       child: Material(
@@ -101,9 +109,13 @@ class _CaptionButton extends StatelessWidget {
           hoverColor: danger
               ? const Color(0xFFC42B1C)
               : tokens.ink.withValues(alpha: 0.06),
-          child: Icon(icon, size: 16, color: tokens.mutedInk),
+          child: Semantics(
+            label: label,
+            button: true,
+            child: Icon(icon, size: 16, color: tokens.mutedInk),
+          ),
         ),
       ),
-    );
+    ));
   }
 }

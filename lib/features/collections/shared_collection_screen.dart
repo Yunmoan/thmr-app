@@ -4,6 +4,8 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+
+import '../../shared/widgets/loading_skeleton.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -144,7 +146,7 @@ class _SharedCollectionScreenState
 
   Widget _buildBody(BuildContext context, ThmrTokens tokens) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const TrackListSkeleton(padding: EdgeInsets.all(18));
     }
     if (_error != null) {
       if (isNetworkFailure(_error!)) {

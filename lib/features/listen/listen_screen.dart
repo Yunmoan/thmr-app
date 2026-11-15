@@ -6,12 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/radio_api.dart';
 import '../../core/models/models.dart';
+import '../../core/player/playback_controller.dart';
 import '../../core/state/app_providers.dart';
 import '../../core/state/channel_provider.dart';
 import '../../core/state/station_provider.dart';
 import '../../core/state/radio_source_provider.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/thmr_panel.dart';
+import '../../shared/widgets/status_notice.dart';
 import 'widgets/bitrate_row.dart';
 import 'widgets/channel_loading_skeleton.dart';
 import 'widgets/channel_switcher.dart';
@@ -30,49 +32,63 @@ class ListenScreen extends ConsumerStatefulWidget {
 }
 
 class _ListenScreenState extends ConsumerState<ListenScreen> {
-  StationInfo? _lastStation;
+  StationUiState? _lastLoaded;
 
   @override
   Widget build(BuildContext context) {
     final station = ref.watch(stationProvider);
-    final channel = ref.watch(activeStationIdProvider);
     final info = station.status?.station;
-    final switching = info == null &&
-        station.initialLoading &&
-        _lastStation != null &&
-        _lastStation?.id != channel;
-    if (info != null) _lastStation = info;
-    // Keep the heading in place until the new channel supplies its metadata.
-    final heading = info ?? (station.initialLoading ? _lastStation : null);
-    final selecting = ref.watch(radioSourceProvider
-        .select((source) => source.testing && !source.tested));
+    final switching =
+        info == null && station.initialLoading && _lastLoaded != null;
+    if (info != null) _lastLoaded = station;
+    // A channel switch keeps the existing surface and its scroll positions.
+    // The real provider stays unchanged, so playback still waits for new data.
+    final display = switching
+        ? StationUiState(
+            status: _lastLoaded!.status, updatedAt: _lastLoaded!.updatedAt)
+        : station;
+    final heading = display.status?.station;
+    final source = ref.watch(radioSourceProvider);
+    final selecting = source.testing && !source.tested;
+    final failure = ref
+        .watch(playbackProvider.select((state) => (state.error, state.phase)));
+    final playbackError = failure.$2 == PlaybackPhase.idle ? null : failure.$1;
+    final temporaryError = station.status != null &&
+        station.error != null &&
+        !_persistentStationError(station.error!);
+    final message = temporaryError
+        ? _stationErrorMessage(station.error!)
+        : playbackError ??
+            (switching
+                ? '正在切换频道…'
+                : selecting
+                    ? '正在比较最优播放源，完成后即可收听…'
+                    : source.notice);
+    final busy =
+        (switching || selecting) && !temporaryError && playbackError == null;
 
     return SafeArea(
       bottom: false,
-      child: Column(children: [
-        if (selecting)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-            child: Row(children: [
-              const SizedBox(
-                  width: 15,
-                  height: 15,
-                  child: CircularProgressIndicator(strokeWidth: 2)),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: Text('正在比较最优播放源，完成后即可收听…',
-                      style: Theme.of(context).textTheme.bodySmall)),
-            ]),
-          ),
-        Expanded(child: LayoutBuilder(builder: (context, c) {
-          final wide = c.maxWidth >= 980;
-          if (wide) {
+      child: Stack(fit: StackFit.expand, children: [
+        LayoutBuilder(builder: (context, c) {
+          if (c.maxWidth >= 980) {
             return _WideLayout(
-                station: station, heading: heading, switching: switching);
+                station: display, heading: heading, switching: switching);
           }
           return _NarrowLayout(
-              station: station, heading: heading, switching: switching);
-        })),
+              station: display, heading: heading, switching: switching);
+        }),
+        Positioned(
+            bottom: 16,
+            left: 16,
+            right: 16,
+            child: StatusNotice(
+                message: message,
+                busy: busy,
+                duration: busy ? null : const Duration(seconds: 6),
+                onRetry: temporaryError
+                    ? () => ref.read(stationProvider.notifier).refresh()
+                    : null)),
       ]),
     );
   }
@@ -101,19 +117,24 @@ class _WideLayout extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _Hero(status: status, heading: heading, switching: switching),
-          if (error != null)
+          if (error != null &&
+              (status == null || _persistentStationError(error)))
             _ErrorCard(
               error: error,
               onRetry: () => ref.read(stationProvider.notifier).refresh(),
             ),
           const SizedBox(height: 16),
           Expanded(
-            child: _ChannelTransition(
+            child: _ChannelSurface(
+              switching: switching,
               child: status == null
                   ? _ChannelPlaceholder(
-                      loading: station.initialLoading, switching: switching)
+                      loading: station.initialLoading,
+                      switching: switching,
+                      wide: true,
+                      showVote: _showVote(ref))
                   : Row(
-                      key: ValueKey(status.station.id),
+                      key: const ValueKey('wide-channel-content'),
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
@@ -126,9 +147,11 @@ class _WideLayout extends ConsumerWidget {
                                 NowPlayingPanel(
                                   status: status,
                                   inlineBitrate: false,
+                                  switching: switching,
                                 ),
                                 const SizedBox(height: 12),
-                                _DesktopControls(status: status),
+                                _DesktopControls(
+                                    status: status, switching: switching),
                               ],
                             ),
                           ),
@@ -155,37 +178,46 @@ bool _showVote(WidgetRef ref) => ref
     .watch(voteEnabledProvider.select((value) => value.asData?.value == true));
 
 class _DesktopControls extends ConsumerWidget {
-  const _DesktopControls({required this.status});
+  const _DesktopControls({required this.status, required this.switching});
 
   final StationStatus status;
+  final bool switching;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final showVote = _showVote(ref);
     final showBitrate = status.station.enabledBitrates.isNotEmpty;
-    const quality = ThmrPanel(
-      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    final quality = ThmrPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Align(
         alignment: Alignment.centerLeft,
         widthFactor: 1,
         heightFactor: 1,
-        child: BitrateRow(),
+        child: BitrateRow(status: status),
       ),
     );
 
     if (!showVote) return showBitrate ? quality : const SizedBox.shrink();
-    final vote = VotePanel(status: status);
+    final vote = VotePanel(
+        key: ValueKey(status.station.id), status: status, switching: switching);
     if (!showBitrate) return vote;
-    return IntrinsicHeight(
-      child: Row(
+    return LayoutBuilder(builder: (context, constraints) {
+      final voteWidth = (constraints.maxWidth - 8) / 2;
+      return IntrinsicHeight(
+          child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Expanded(child: quality),
+          Expanded(child: quality),
           const SizedBox(width: 8),
-          Expanded(child: vote),
+          Expanded(
+              child: VotePanel(
+                  key: ValueKey(status.station.id),
+                  status: status,
+                  switching: switching,
+                  availableWidth: voteWidth)),
         ],
-      ),
-    );
+      ));
+    });
   }
 }
 
@@ -208,7 +240,7 @@ class _Hero extends StatelessWidget {
     final title = heading?.public?.title ?? heading?.name ?? '东方音乐电台 THMR';
     final description = heading?.public?.description ?? '';
 
-    return ThmrPanel(
+    final panel = ThmrPanel(
       padding: const EdgeInsets.fromLTRB(22, 18, 22, 18),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -260,6 +292,12 @@ class _Hero extends StatelessWidget {
         ],
       ),
     );
+    return MediaQuery.disableAnimationsOf(context)
+        ? panel
+        : AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            alignment: Alignment.topLeft,
+            child: panel);
   }
 }
 
@@ -301,24 +339,31 @@ class _NarrowLayout extends ConsumerWidget {
             alignment: Alignment.centerLeft,
             child: ChannelSwitcher(station: st?.station),
           ),
-          if (error != null)
+          if (error != null && (st == null || _persistentStationError(error)))
             _ErrorCard(
               error: error,
               onRetry: () => ref.read(stationProvider.notifier).refresh(),
             ),
           const SizedBox(height: 14),
-          _ChannelTransition(
+          _ChannelSurface(
+            switching: switching,
             child: st == null
                 ? _ChannelPlaceholder(
-                    loading: station.initialLoading, switching: switching)
+                    loading: station.initialLoading,
+                    switching: switching,
+                    wide: false,
+                    showVote: _showVote(ref))
                 : Column(
-                    key: ValueKey(st.station.id),
+                    key: const ValueKey('narrow-channel-content'),
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      NowPlayingPanel(status: st),
+                      NowPlayingPanel(status: st, switching: switching),
                       if (showVote) ...[
                         const SizedBox(height: 12),
-                        VotePanel(status: st),
+                        VotePanel(
+                            key: ValueKey(st.station.id),
+                            status: st,
+                            switching: switching),
                       ],
                       const SizedBox(height: 18),
                       SectionHeader(
@@ -405,6 +450,27 @@ class _TopBar extends StatelessWidget {
   }
 }
 
+/// Keep pending channel data out of focus, hit testing and announcements while
+/// retaining the same rendered subtree until the new status is ready.
+class _ChannelSurface extends StatelessWidget {
+  const _ChannelSurface({required this.switching, required this.child});
+
+  final bool switching;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+        ignoring: switching,
+        child: ExcludeFocus(
+            excluding: switching,
+            child: ExcludeSemantics(
+                excluding: switching,
+                child: TickerMode(
+                    enabled: !switching,
+                    child: _ChannelTransition(child: child)))),
+      );
+}
+
 class _ChannelTransition extends StatelessWidget {
   const _ChannelTransition({required this.child});
 
@@ -445,11 +511,7 @@ class _ChannelTransition extends StatelessWidget {
       ),
       transitionBuilder: (child, animation) => FadeTransition(
         opacity: animation,
-        child: SlideTransition(
-          position: Tween(begin: const Offset(0, 0.01), end: Offset.zero)
-              .animate(animation),
-          child: child,
-        ),
+        child: child,
       ),
       child: child,
     );
@@ -457,15 +519,22 @@ class _ChannelTransition extends StatelessWidget {
 }
 
 class _ChannelPlaceholder extends StatelessWidget {
-  const _ChannelPlaceholder({required this.loading, required this.switching});
+  const _ChannelPlaceholder(
+      {required this.loading,
+      required this.switching,
+      required this.wide,
+      required this.showVote});
 
   final bool loading;
   final bool switching;
+  final bool wide;
+  final bool showVote;
 
   @override
   Widget build(BuildContext context) {
     if (!loading) return const SizedBox.shrink();
-    return ChannelLoadingSkeleton(switching: switching);
+    return ChannelLoadingSkeleton(
+        switching: switching, wide: wide, showVote: showVote);
   }
 }
 
@@ -477,21 +546,6 @@ class _ErrorCard extends StatelessWidget {
 
   final Object error;
   final VoidCallback onRetry;
-
-  String get _friendly {
-    if (error is ApiException) {
-      final e = error as ApiException;
-      switch (e.statusCode) {
-        case 503:
-          return '电台暂未开放放送(维护或休眠中),稍后自动重试。';
-        case 404:
-          return '未找到该电台,请检查频道 ID 配置。';
-        default:
-          return '服务返回异常(${e.statusCode}),正在自动重试。';
-      }
-    }
-    return '网络连接失败,正在自动重试…';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -506,7 +560,7 @@ class _ErrorCard extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                _friendly,
+                _stationErrorMessage(error),
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
@@ -524,3 +578,21 @@ class _ErrorCard extends StatelessWidget {
     );
   }
 }
+
+String _stationErrorMessage(Object error) {
+  if (error is ApiException) {
+    final e = error;
+    switch (e.statusCode) {
+      case 503:
+        return '电台暂未开放放送(维护或休眠中),稍后自动重试。';
+      case 404:
+        return '未找到该电台,请检查频道 ID 配置。';
+      default:
+        return '服务返回异常(${e.statusCode}),正在自动重试。';
+    }
+  }
+  return '网络连接失败,正在自动重试…';
+}
+
+bool _persistentStationError(Object error) =>
+    error is ApiException && [400, 401, 403, 404].contains(error.statusCode);

@@ -24,6 +24,39 @@ class ThmrColors {
 
   /// Logo 中的深绿(神社注连绳),仅作点缀。
   static const Color shrineGreen = Color(0xFF3D6B4F);
+
+  static double contrast(Color a, Color b) {
+    final first = a.computeLuminance();
+    final second = b.computeLuminance();
+    return first > second
+        ? (first + 0.05) / (second + 0.05)
+        : (second + 0.05) / (first + 0.05);
+  }
+
+  static Color readableOn(Color background, Color preferred) {
+    if (contrast(background, preferred) >= 4.5) return preferred;
+    return contrast(background, Colors.black) >=
+            contrast(background, Colors.white)
+        ? Colors.black
+        : Colors.white;
+  }
+
+  /// Preserve the character hue while making small accent text legible.
+  static Color textAccent(Color accent, Color surface) {
+    if (contrast(accent, surface) >= 4.5) return accent;
+    final target = readableOn(surface, Colors.black);
+    var low = 0.0;
+    var high = 1.0;
+    for (var i = 0; i < 16; i++) {
+      final middle = (low + high) / 2;
+      if (contrast(Color.lerp(accent, target, middle)!, surface) < 4.6) {
+        low = middle;
+      } else {
+        high = middle;
+      }
+    }
+    return Color.lerp(accent, target, high)!;
+  }
 }
 
 /// Per-theme token bundle. Fields mirror the web tokens.css but are
@@ -603,7 +636,33 @@ class ThmrTokens extends ThemeExtension<ThmrTokens> {
   }
 
   @override
-  ThmrTokens copyWith({Color? accent}) => this; // 语义色为静态令牌,不做运行时插值
+  ThmrTokens copyWith({Color? accent, Color? onAccent}) => ThmrTokens(
+        accent: accent ?? this.accent,
+        onAccent: onAccent ?? this.onAccent,
+        pageBg: pageBg,
+        ink: ink,
+        mutedInk: mutedInk,
+        supportInk: supportInk,
+        panelBg: panelBg,
+        panelBorder: panelBorder,
+        panelSoft: panelSoft,
+        accentSoft: accentSoft,
+        fieldBg: fieldBg,
+        secondaryButtonBg: secondaryButtonBg,
+        pageGradient: pageGradient,
+        shadow: shadow,
+        solidPanel: solidPanel,
+        codeInk: codeInk,
+        illustration: illustration,
+      );
+
+  ThmrTokens accessible() {
+    final color = ThmrColors.textAccent(accent, solidPanel);
+    return copyWith(
+      accent: color,
+      onAccent: ThmrColors.readableOn(color, onAccent),
+    );
+  }
 
   @override
   ThmrTokens lerp(covariant ThmrTokens? other, double t) =>

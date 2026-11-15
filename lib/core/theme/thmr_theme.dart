@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'thmr_colors.dart';
+import 'thmr_focus_ring.dart';
 
 export 'thmr_colors.dart' show AccentTheme;
 
@@ -17,6 +18,7 @@ class ThmrTheme {
       _build(ThmrTokens.resolve(theme, Brightness.dark), Brightness.dark);
 
   static ThemeData _build(ThmrTokens t, Brightness brightness) {
+    t = t.accessible();
     final accent = t.accent;
     final base = GoogleFonts.notoSerifScTextTheme();
     final textTheme = base.apply(bodyColor: t.ink, displayColor: t.ink);
@@ -56,6 +58,7 @@ class ThmrTheme {
       useMaterial3: true,
       brightness: brightness,
       colorScheme: scheme,
+      focusColor: accent.withValues(alpha: 0.12),
       scaffoldBackgroundColor: t.pageBg,
       splashFactory: InkSparkle.splashFactory,
       textTheme: textTheme.copyWith(
@@ -119,7 +122,7 @@ class ThmrTheme {
           textStyle: base.titleSmall?.copyWith(fontWeight: FontWeight.w700),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        ),
+        ).copyWith(backgroundBuilder: ThmrFocusRing.buttonBuilder),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
@@ -128,16 +131,17 @@ class ThmrTheme {
           textStyle: base.titleSmall?.copyWith(fontWeight: FontWeight.w600),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        ),
+        ).copyWith(backgroundBuilder: ThmrFocusRing.buttonBuilder),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: accent,
           textStyle: base.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-        ),
+        ).copyWith(backgroundBuilder: ThmrFocusRing.circularButtonBuilder),
       ),
       iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(foregroundColor: t.ink),
+        style: IconButton.styleFrom(foregroundColor: t.ink)
+            .copyWith(backgroundBuilder: ThmrFocusRing.circularButtonBuilder),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -156,7 +160,11 @@ class ThmrTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: accent, width: 1.4),
+          borderSide: BorderSide(color: t.panelBorder),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: scheme.error),
         ),
       ),
       chipTheme: ChipThemeData(

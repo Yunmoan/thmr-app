@@ -1,7 +1,9 @@
 // Mobile queue strip: horizontal cards; tap opens the detail sheet.
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../../../shared/widgets/focus_outline.dart';
 import '../../../core/models/models.dart';
 import '../../../core/theme/thmr_theme.dart';
 import '../../../shared/widgets/track_cover.dart';
@@ -102,13 +104,60 @@ void showQueueEntryDetail(BuildContext context, QueueEntry entry, int index,
 }
 
 /// 「接下来」队列 — 横向卡片,高度对齐 Web 端 92px 队列卡。
-class QueueStrip extends StatelessWidget {
+double queueStripHeight(BuildContext context) {
+  final text = Theme.of(context).textTheme;
+  var height = 30.0; // Three lines, two gaps, padding and border.
+  for (final style in [text.titleSmall, text.bodySmall, text.labelSmall]) {
+    final painter = TextPainter(
+        text: TextSpan(text: '曲目', style: style),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context))
+      ..layout();
+    height += painter.height;
+    painter.dispose();
+  }
+  return height > 92 ? height : 92;
+}
+
+class QueueStrip extends StatefulWidget {
   const QueueStrip({super.key, required this.status});
 
   final StationStatus status;
 
   @override
+  State<QueueStrip> createState() => _QueueStripState();
+}
+
+class _QueueStripState extends State<QueueStrip> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent ||
+        event.scrollDelta.dy.abs() <= event.scrollDelta.dx.abs() ||
+        !_scrollController.hasClients) {
+      return;
+    }
+    final position = _scrollController.position;
+    final delta = event.scrollDelta.dy;
+    final target = (position.pixels + delta)
+        .clamp(position.minScrollExtent, position.maxScrollExtent);
+    if (target == position.pixels) return;
+    // Resolve once so the enclosing page does not scroll at the same time.
+    // Native horizontal wheel/trackpad events remain owned by the ListView.
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      position.pointerScroll(delta);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final status = widget.status;
     final tokens = Theme.of(context).thmr;
     final queue = status.queue;
     if (queue.isEmpty) {
@@ -132,16 +181,20 @@ class QueueStrip extends StatelessWidget {
     }
     return Column(
       children: [
-        SizedBox(
-          height: 92,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: queue.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
-            itemBuilder: (context, i) {
-              final e = queue[i];
-              return _QueueCard(entry: e, index: i);
-            },
+        Listener(
+          onPointerSignal: _onPointerSignal,
+          child: SizedBox(
+            height: queueStripHeight(context),
+            child: ListView.separated(
+              controller: _scrollController,
+              scrollDirection: Axis.horizontal,
+              itemCount: queue.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, i) {
+                final e = queue[i];
+                return _QueueCard(entry: e, index: i);
+              },
+            ),
           ),
         ),
         const SizedBox(height: 2),
@@ -166,77 +219,86 @@ class _QueueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).thmr;
-    return InkWell(
-      onTap: () => showQueueEntryDetail(context, entry, index),
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        width: 264,
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: tokens.panelBg.withValues(alpha: 0.82),
+    return FocusOutline(
+        radius: 10,
+        child: InkWell(
+          onTap: () => showQueueEntryDetail(context, entry, index),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: tokens.panelBorder),
-        ),
-        child: Row(
-          children: [
-            TrackCover(url: entry.coverUrl, size: 72, radius: 8),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Row(
+          child: Container(
+            width: 264,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: tokens.panelBg.withValues(alpha: 0.82),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: tokens.panelBorder),
+            ),
+            child: Row(
+              children: [
+                TrackCover(url: entry.coverUrl, size: 72, radius: 8),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        '#${index + 1}',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w800,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            '#${index + 1}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w800,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              entry.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleSmall
+                                  ?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: tokens.ink),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          entry.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleSmall
-                              ?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: tokens.ink),
+                      const SizedBox(height: 4),
+                      Text(
+                        entry.artist,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: tokens.mutedInk),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        plannedLabel(entry, index),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: tokens.mutedInk,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    entry.artist,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: tokens.mutedInk),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    plannedLabel(entry, index),
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: tokens.mutedInk,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    );
+          ),
+        ));
   }
 }
 

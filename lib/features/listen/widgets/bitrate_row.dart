@@ -2,23 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/widgets/focus_outline.dart';
+import '../../../core/models/models.dart';
 import '../../../core/state/settings_provider.dart';
 import '../../../core/state/station_provider.dart';
 import '../../../core/theme/thmr_theme.dart';
 
 /// 码率选择 chips(4.2):换 profileId = 换流地址重连,正在播放则切完继续。
 class BitrateRow extends ConsumerWidget {
-  const BitrateRow({super.key});
+  const BitrateRow({super.key, this.status});
+
+  final StationStatus? status;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final station = ref.watch(stationProvider);
+    final station = status == null
+        ? ref.watch(stationProvider)
+        : StationUiState(status: status);
     final settings = ref.watch(settingsProvider);
-    final status = station.status;
-    final profiles = status?.station.enabledBitrates ?? const [];
+    final displayed = station.status;
+    final profiles = displayed?.station.enabledBitrates ?? const [];
     if (profiles.isEmpty) return const SizedBox.shrink();
 
-    final stationId = status!.station.id;
+    final stationId = displayed!.station.id;
     final selected = station.selectedProfile(settings.bitrateFor(stationId));
 
     return Wrap(
@@ -37,15 +43,20 @@ class BitrateRow extends ConsumerWidget {
           ),
         ),
         for (final p in profiles)
-          ChoiceChip(
-            label: Text(p.label),
-            selected: p.id == selected.id,
-            onSelected: (selected) {
-              if (selected) {
-                ref.read(settingsProvider.notifier).setBitrate(stationId, p.id);
-              }
-            },
-          ),
+          FocusOutline(
+              radius: 999,
+              focusBounds: true,
+              child: ChoiceChip(
+                label: Text(p.label),
+                selected: p.id == selected.id,
+                onSelected: (selected) {
+                  if (selected) {
+                    ref
+                        .read(settingsProvider.notifier)
+                        .setBitrate(stationId, p.id);
+                  }
+                },
+              )),
         // Low-key copy-stream-link action
         IconButton(
           tooltip: '复制收听链接(当前码率的流地址)',

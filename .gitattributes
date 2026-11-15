@@ -1,2 +1,7 @@
 # These scripts run on macOS/Linux even when edited on Windows.
 *.sh text eol=lf
+
+# Preserve vendored prompt bytes so provenance hashes survive checkout.
+assets/input_prompts/*.svg -text
+assets/input_prompts/License.txt -text
+assets/input_prompts/manifest.json text eol=lf

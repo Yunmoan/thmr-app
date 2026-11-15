@@ -1,8 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import '../../shared/widgets/loading_skeleton.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/widgets/focus_outline.dart';
 import '../../core/api/network_failure.dart';
 import '../../core/models/models.dart';
 import '../../core/state/channel_provider.dart';
@@ -55,7 +58,7 @@ class _YesterdayPlaylistState extends ConsumerState<YesterdayPlaylist> {
             ? [RadioChannel(id: activeId, name: activeId)]
             : null);
     if (channels == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const TrackListSkeleton(extraHeight: 20);
     }
     if (channels.isEmpty) {
       return const Center(child: Text('暂无可用频道。'));
@@ -83,21 +86,23 @@ class _YesterdayPlaylistState extends ConsumerState<YesterdayPlaylist> {
             Expanded(
               child: Semantics(
                 label: '频道',
-                child: DropdownButton<String>(
+                child: FocusOutline(
+                    child: DropdownButton<String>(
                   isExpanded: true,
                   value: channel.id,
                   items: [
                     for (final entry in channels)
                       DropdownMenuItem(
                         value: entry.id,
-                        child:
-                            Text(entry.name, overflow: TextOverflow.ellipsis),
+                        child: AncestorFocusOutline(
+                            child: Text(entry.name,
+                                overflow: TextOverflow.ellipsis)),
                       ),
                   ],
                   onChanged: channels.length > 1
                       ? (id) => setState(() => _selectedChannelId = id)
                       : null,
-                ),
+                )),
               ),
             ),
             if (playlist.hasValue && !playlist.hasError)
@@ -118,7 +123,7 @@ class _YesterdayPlaylistState extends ConsumerState<YesterdayPlaylist> {
         Expanded(
           child: playlist.when(
             skipLoadingOnRefresh: false,
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const TrackListSkeleton(extraHeight: 20),
             error: (error, _) => NetworkIssueView(
               networkFailure: isNetworkFailure(error),
               message: '暂时无法读取昨日歌单，请稍后重试。',
@@ -140,7 +145,8 @@ class _YesterdayPlaylistState extends ConsumerState<YesterdayPlaylist> {
                     frost: false,
                     child: Material(
                       color: Colors.transparent,
-                      child: ListTile(
+                      child: FocusOutline(
+                          child: ListTile(
                         contentPadding: EdgeInsets.zero,
                         onTap: () => showQueueEntryDetail(
                           context,
@@ -182,7 +188,7 @@ class _YesterdayPlaylistState extends ConsumerState<YesterdayPlaylist> {
                         ),
                         trailing:
                             const Icon(Icons.chevron_right_rounded, size: 18),
-                      ),
+                      )),
                     ),
                   );
                 },

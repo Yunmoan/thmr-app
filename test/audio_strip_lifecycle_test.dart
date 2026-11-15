@@ -24,6 +24,35 @@ class _Spectrum extends SpectrumSource {
 }
 
 void main() {
+  testWidgets('reduced motion suspends live spectrum and can resume it',
+      (tester) async {
+    final source = _Spectrum();
+    final reduced = ValueNotifier(false);
+    addTearDown(reduced.dispose);
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => ValueListenableBuilder<bool>(
+        valueListenable: reduced,
+        builder: (_, value, __) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: value),
+            child: child!),
+      ),
+      home: AudioStrip(playing: true, source: source),
+    ));
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(source.polls, greaterThan(0));
+    reduced.value = true;
+    await tester.pump();
+    final polls = source.polls;
+    await tester.pump(const Duration(seconds: 1));
+    expect(source.polls, polls);
+    expect(tester.binding.hasScheduledFrame, isFalse);
+    reduced.value = false;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(source.polls, greaterThan(polls));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   const desktopPlatforms = TargetPlatformVariant({
     TargetPlatform.windows,
     TargetPlatform.linux,
