@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:thmr_app/app.dart';
 import 'package:thmr_app/core/state/settings_provider.dart';
 import 'package:thmr_app/core/theme/thmr_colors.dart';
+import 'package:thmr_app/core/theme/thmr_theme.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -46,6 +47,25 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMessageHandler('flutter/assets', null);
   });
+
+  for (final brightness in Brightness.values) {
+    test('Reimu preserves its original palette in $brightness', () {
+      final theme = brightness == Brightness.dark
+          ? ThmrTheme.dark()
+          : ThmrTheme.light();
+      const accent = Color(0xFFC65A69);
+      const onAccent = Color(0xFFFFF8FA);
+      expect(theme.colorScheme.primary, accent);
+      expect(theme.colorScheme.onPrimary, onAccent);
+      expect(theme.thmr,
+          same(ThmrTokens.resolve(AccentTheme.reimu, brightness)));
+      expect(theme.filledButtonTheme.style?.backgroundColor?.resolve({}),
+          accent);
+      expect(theme.filledButtonTheme.style?.foregroundColor?.resolve({}),
+          onAccent);
+      expect(theme.textButtonTheme.style?.foregroundColor?.resolve({}), accent);
+    });
+  }
 
   testWidgets('the first app build uses the saved theme and accent',
       (tester) async {

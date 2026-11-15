@@ -14,12 +14,14 @@ class ThmrTheme {
   const ThmrTheme._();
 
   static ThemeData light([AccentTheme theme = AccentTheme.reimu]) =>
-      _build(ThmrTokens.resolve(theme, Brightness.light), Brightness.light);
+      _build(theme, Brightness.light);
   static ThemeData dark([AccentTheme theme = AccentTheme.reimu]) =>
-      _build(ThmrTokens.resolve(theme, Brightness.dark), Brightness.dark);
+      _build(theme, Brightness.dark);
 
-  static ThemeData _build(ThmrTokens t, Brightness brightness) {
-    t = t.accessible();
+  static ThemeData _build(AccentTheme theme, Brightness brightness) {
+    final preset = ThmrTokens.resolve(theme, brightness);
+    // Preserve Reimu's original crimson and pale button labels in both modes.
+    final t = theme == AccentTheme.reimu ? preset : preset.accessible();
     final accent = t.accent;
     final base = GoogleFonts.notoSerifScTextTheme();
     final textTheme = base.apply(bodyColor: t.ink, displayColor: t.ink);

@@ -126,7 +126,8 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  for (final preset in AccentTheme.values) {
+  for (final preset
+      in AccentTheme.values.where((theme) => theme != AccentTheme.reimu)) {
     for (final brightness in Brightness.values) {
       test('small accent and button text meet contrast in $preset $brightness',
           () {
