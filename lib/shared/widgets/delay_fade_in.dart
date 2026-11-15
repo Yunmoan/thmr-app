@@ -3,9 +3,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../core/theme/thmr_motion.dart';
 
 class DelayFadeIn extends StatefulWidget {
-  const DelayFadeIn({super.key, this.delay = Duration.zero, required this.child});
+  const DelayFadeIn(
+      {super.key, this.delay = Duration.zero, required this.child});
 
   final Duration delay;
   final Widget child;
@@ -40,12 +42,12 @@ class _DelayFadeInState extends State<DelayFadeIn> {
   Widget build(BuildContext context) {
     return AnimatedOpacity(
       opacity: _shown ? 1 : 0,
-      duration: const Duration(milliseconds: 320),
-      curve: Curves.easeOutCubic,
+      duration: ThmrMotion.of(context),
+      curve: ThmrMotion.enterCurve,
       child: AnimatedSlide(
         offset: _shown ? Offset.zero : const Offset(0, 0.02),
-        duration: const Duration(milliseconds: 360),
-        curve: Curves.easeOutCubic,
+        duration: ThmrMotion.of(context),
+        curve: ThmrMotion.enterCurve,
         child: widget.child,
       ),
     );

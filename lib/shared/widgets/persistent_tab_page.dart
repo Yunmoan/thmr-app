@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/thmr_motion.dart';
 
 /// Keeps tabs ready before selection and retains state while hidden and muted.
 class PersistentTabPage extends StatefulWidget {
@@ -20,7 +21,7 @@ class _PersistentTabPageState extends State<PersistentTabPage>
   final _backdropKey = BackdropKey();
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 240),
+    duration: ThmrMotion.duration,
     value: widget.active ? 0 : 1,
   );
 
@@ -50,18 +51,7 @@ class _PersistentTabPageState extends State<PersistentTabPage>
       backdropKey: _backdropKey,
       child: widget.child,
     );
-    final animation = MediaQuery.disableAnimationsOf(context)
-        ? content
-        : FadeTransition(
-            opacity: _controller.drive(CurveTween(curve: Curves.easeOutCubic)),
-            child: SlideTransition(
-              position: _controller.drive(Tween<Offset>(
-                begin: const Offset(0, 0.014),
-                end: Offset.zero,
-              ).chain(CurveTween(curve: Curves.easeOutCubic))),
-              child: content,
-            ),
-          );
+    final animation = ThmrFadeSlide(animation: _controller, child: content);
     return Offstage(
       offstage: !widget.active,
       child: ExcludeFocus(

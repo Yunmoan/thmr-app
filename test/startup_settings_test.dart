@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +11,41 @@ import 'package:thmr_app/core/theme/thmr_colors.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    // These assertions cover theme identity, not glyph rendering. Use bundled
+    // font bytes so deferred font loading never relies on network or disk cache.
+    final font = await rootBundle.load('fonts/MaterialIcons-Regular.otf');
+    final assets = <String, Object>{
+      for (final weight in [
+        'Thin',
+        'ExtraLight',
+        'Light',
+        'Regular',
+        'Medium',
+        'SemiBold',
+        'Bold',
+        'ExtraBold',
+        'Black'
+      ])
+        'test-fonts/NotoSerifSC-$weight.ttf': [
+          <String, Object>{'asset': 'test-fonts/NotoSerifSC-$weight.ttf'}
+        ],
+    };
+    final manifest = const StandardMessageCodec().encodeMessage(assets);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMessageHandler('flutter/assets', (message) async {
+      final path = utf8.decode(message!.buffer
+          .asUint8List(message.offsetInBytes, message.lengthInBytes));
+      if (path == 'AssetManifest.bin') return manifest;
+      if (path.startsWith('test-fonts/NotoSerifSC-')) return font;
+      return null;
+    });
+  });
+  tearDownAll(() async {
+    await GoogleFonts.pendingFonts();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMessageHandler('flutter/assets', null);
+  });
 
   testWidgets('the first app build uses the saved theme and accent',
       (tester) async {

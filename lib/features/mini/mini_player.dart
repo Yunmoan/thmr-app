@@ -8,6 +8,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
+import '../../core/theme/thmr_motion.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:screen_retriever/screen_retriever.dart';
@@ -211,10 +212,10 @@ class _MiniPlayerTransitionState extends ConsumerState<MiniPlayerTransition>
   Future<void> _animate(bool visible) async {
     _animation.duration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
-        : const Duration(milliseconds: 180);
+        : ThmrMotion.exitDuration;
     try {
       await _animation
-          .animateTo(visible ? 1 : 0, curve: Curves.easeOutCubic)
+          .animateTo(visible ? 1 : 0, curve: ThmrMotion.enterCurve)
           .orCancel;
     } on TickerCanceled {
       // Disposal removes the mini surface, which also completes its exit.
@@ -391,7 +392,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     if (_transitioning || _settingPosition || _dragging) return;
     _moveTimer?.cancel();
     final serial = ++_moveSerial;
-    _moveTimer = Timer(const Duration(milliseconds: 180), () {
+    _moveTimer = Timer(ThmrMotion.exitDuration, () {
       unawaited(_snapAfterMove(serial).catchError((Object error) {
         debugPrint('Mini player edge snap failed: $error');
       }));
@@ -491,7 +492,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
       return;
     }
     _pendingPosition = Offset.lerp(_positionStart, _positionTarget,
-        Curves.easeOutCubic.transform(_positionAnimation.value));
+        ThmrMotion.enterCurve.transform(_positionAnimation.value));
     _flushPosition();
   }
 
@@ -626,7 +627,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
         duration: MediaQuery.disableAnimationsOf(context)
             ? Duration.zero
             : Duration(milliseconds: _tucked ? 150 : 90),
-        curve: Curves.easeOutCubic,
+        curve: ThmrMotion.enterCurve,
         child: IgnorePointer(
           ignoring: !_tucked,
           child: ExcludeSemantics(excluding: !_tucked, child: child),
@@ -1116,8 +1117,8 @@ class _MiniRotatingSubtitleState extends State<_MiniRotatingSubtitle> {
         child: AnimatedSwitcher(
           duration:
               reduceMotion ? Duration.zero : const Duration(milliseconds: 260),
-          switchInCurve: Curves.easeOutCubic,
-          switchOutCurve: Curves.easeInCubic,
+          switchInCurve: ThmrMotion.enterCurve,
+          switchOutCurve: ThmrMotion.exitCurve,
           layoutBuilder: (current, previous) => Stack(
             alignment: Alignment.centerLeft,
             children: [...previous, if (current != null) current],

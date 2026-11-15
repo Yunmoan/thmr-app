@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'thmr_colors.dart';
 import 'thmr_focus_ring.dart';
+import 'thmr_motion.dart';
 
 export 'thmr_colors.dart' show AccentTheme;
 
@@ -56,6 +57,11 @@ class ThmrTheme {
 
     return ThemeData(
       useMaterial3: true,
+      pageTransitionsTheme: PageTransitionsTheme(builders: {
+        ...const PageTransitionsTheme().builders,
+        for (final platform in [TargetPlatform.windows, TargetPlatform.macOS, TargetPlatform.linux])
+          platform: const ThmrPageTransitionsBuilder(),
+      }),
       brightness: brightness,
       colorScheme: scheme,
       focusColor: accent.withValues(alpha: 0.12),

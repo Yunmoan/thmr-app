@@ -2,6 +2,7 @@
 // hero banner on top, player column left, history/queue column right.
 
 import 'package:flutter/material.dart';
+import '../../core/theme/thmr_motion.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/radio_api.dart';
@@ -295,7 +296,7 @@ class _Hero extends StatelessWidget {
     return MediaQuery.disableAnimationsOf(context)
         ? panel
         : AnimatedSize(
-            duration: const Duration(milliseconds: 220),
+            duration: ThmrMotion.duration,
             alignment: Alignment.topLeft,
             child: panel);
   }
@@ -498,10 +499,10 @@ class _ChannelTransition extends StatelessWidget {
     }
 
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 230),
-      reverseDuration: const Duration(milliseconds: 180),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
+      duration: ThmrMotion.duration,
+      reverseDuration: ThmrMotion.exitDuration,
+      switchInCurve: ThmrMotion.enterCurve,
+      switchOutCurve: ThmrMotion.exitCurve,
       layoutBuilder: (current, previous) => Stack(
         alignment: AlignmentDirectional.topStart,
         children: [
