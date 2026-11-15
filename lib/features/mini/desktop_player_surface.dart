@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/widgets/desktop_title_bar.dart';
 import '../../shared/widgets/thmr_background.dart';
 import 'mini_player.dart';
+import '../large_screen/large_screen_controller.dart';
 
 /// One native window, with stable slots for the retained main tree and the
 /// animated mini surface. Native presentation controls when this is exposed.
@@ -29,6 +30,7 @@ class _DesktopPlayerSurfaceState extends ConsumerState<DesktopPlayerSurface> {
   Widget build(BuildContext context) {
     final mini = ref.watch(miniPlayerProvider);
     final busy = ref.watch(miniTransitionBusyProvider);
+    final large = ref.watch(largeScreenProvider.select((s) => s.active));
     return ExcludeFocus(
       excluding: busy,
       child: IgnorePointer(
@@ -41,7 +43,9 @@ class _DesktopPlayerSurfaceState extends ConsumerState<DesktopPlayerSurface> {
               child: const ThmrBackground(child: SizedBox.expand()),
             ),
             Padding(
-              padding: mini ? EdgeInsets.zero : const EdgeInsets.only(top: 38),
+              padding: mini || large
+                  ? EdgeInsets.zero
+                  : const EdgeInsets.only(top: 38),
               child: TickerMode(
                 enabled: !mini,
                 child: LayoutBuilder(builder: (context, constraints) {
@@ -67,7 +71,7 @@ class _DesktopPlayerSurfaceState extends ConsumerState<DesktopPlayerSurface> {
             ),
             if (mini)
               MiniPlayerTransition(child: widget.miniPlayer)
-            else
+            else if (!large)
               Align(
                 alignment: Alignment.topCenter,
                 child: DesktopTitleBar(

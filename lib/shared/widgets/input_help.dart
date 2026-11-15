@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../core/theme/thmr_theme.dart';
+import '../../core/platform/desktop_window.dart';
 import 'focus_outline.dart';
 import 'thmr_panel.dart';
 
@@ -221,8 +222,11 @@ class InputHelpLegend extends StatelessWidget {
                   ],
                   'Ctrl 加 Shift 加 M',
                   '切换迷你播放器'),
+            if (hasDesktopWindowControls)
+              const _HelpBinding(
+                  'large-screen', ['F11'], 'F11', '打开大屏模式 / 切换全屏'),
             const _HelpBinding('back', ['keyboard_escape_outline'], 'Esc',
-                '关闭可取消的弹窗或返回；迷你模式下恢复主窗口'),
+                '关闭可取消的弹窗或返回；退出大屏或迷你模式'),
             const _HelpBinding(
                 'limits',
                 ['keyboard_home_outline', '/', 'keyboard_end_outline'],
@@ -323,6 +327,17 @@ class InputPromptGroup extends StatelessWidget {
               for (final glyph in glyphs)
                 if (glyph == '+' || glyph == '/' || glyph == '–')
                   Text(glyph, style: Theme.of(context).textTheme.bodySmall)
+                else if (glyph == 'F11')
+                  Container(
+                    height: size,
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    decoration: BoxDecoration(
+                        border: Border.all(color: color),
+                        borderRadius: BorderRadius.circular(3)),
+                    child: Text('F11',
+                        style: TextStyle(fontSize: size * .55, color: color)),
+                  )
                 else
                   SvgPicture.asset('assets/input_prompts/$glyph.svg',
                       height: size,

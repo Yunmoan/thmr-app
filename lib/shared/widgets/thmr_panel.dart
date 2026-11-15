@@ -16,6 +16,7 @@ class ThmrPanel extends StatelessWidget {
     this.onTap,
     this.blur = 8,
     this.frost = true,
+    this.enabled = true,
   });
 
   final Widget child;
@@ -28,9 +29,11 @@ class ThmrPanel extends StatelessWidget {
   /// BackdropFilter pass (large lists of blurred rows tank the GPU,
   /// which also makes window dragging stutter).
   final bool frost;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
+    if (!enabled) return Padding(padding: padding, child: child);
     final theme = Theme.of(context);
     final tokens = theme.thmr;
     // The page already washes out the artwork. Light paper needs a lighter

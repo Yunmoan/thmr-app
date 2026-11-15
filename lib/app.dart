@@ -10,6 +10,7 @@ import 'core/theme/thmr_theme.dart';
 import 'core/theme/thmr_focus_ring.dart';
 import 'features/mini/desktop_player_surface.dart';
 import 'features/mini/mini_player.dart' show miniPlayerProvider;
+import 'features/large_screen/large_screen_controller.dart';
 import 'features/shell/home_shell.dart';
 import 'features/account/update_panel.dart';
 import 'shared/widgets/thmr_background.dart';
@@ -48,18 +49,21 @@ class ThmrApp extends ConsumerWidget {
           return AppInput(
               navigatorKey: navigatorKey,
               child: ThmrFocusLayer(
+                  reserveEdgeSpace:
+                      !ref.watch(largeScreenProvider.select((s) => s.active)),
                   child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  const ThmrBackground(child: SizedBox.expand()),
-                  child ?? const SizedBox.expand(),
-                ],
-              )));
+                    fit: StackFit.expand,
+                    children: [
+                      const ThmrBackground(child: SizedBox.expand()),
+                      child ?? const SizedBox.expand(),
+                    ],
+                  )));
         }
         return AppInput(
             navigatorKey: navigatorKey,
             child: ThmrFocusLayer(
-                reserveEdgeSpace: !ref.watch(miniPlayerProvider),
+                reserveEdgeSpace: !ref.watch(miniPlayerProvider) &&
+                    !ref.watch(largeScreenProvider.select((s) => s.active)),
                 child: DesktopPlayerSurface(
                     child: child ?? const SizedBox.expand())));
       },

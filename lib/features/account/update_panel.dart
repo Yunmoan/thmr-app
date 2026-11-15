@@ -9,6 +9,7 @@ import '../../shared/widgets/focus_outline.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../core/update/app_update.dart';
 import '../../shared/widgets/thmr_panel.dart';
+import '../large_screen/large_screen_controller.dart';
 
 bool get supportsAppUpdates =>
     !kIsWeb && defaultTargetPlatform != TargetPlatform.iOS;
@@ -55,9 +56,10 @@ class _AppUpdateMonitorState extends ConsumerState<AppUpdateMonitor>
   Widget build(BuildContext context) {
     if (!supportsAppUpdates) return widget.child;
     final update = ref.watch(appUpdateProvider);
+    final large = ref.watch(largeScreenProvider.select((s) => s.active));
     return Stack(fit: StackFit.expand, children: [
       widget.child,
-      if (update.showNotice)
+      if (update.showNotice && !large)
         Positioned(
             top: 0,
             left: 0,

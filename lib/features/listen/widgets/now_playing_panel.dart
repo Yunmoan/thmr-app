@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+import '../../../core/theme/thmr_motion.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +22,8 @@ import '../../../shared/widgets/player_panel_layout.dart';
 import '../../../shared/widgets/volume_slider.dart';
 import '../../../shared/widgets/focus_outline.dart';
 import '../../../shared/widgets/volume_wheel_control.dart';
+import '../../../core/platform/desktop_window.dart';
+import '../../large_screen/large_screen_button.dart';
 import 'bitrate_row.dart';
 import 'feedback_sheet.dart';
 
@@ -189,7 +192,7 @@ class _Cover96 extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 400),
+          duration: ThmrMotion.duration,
           switchInCurve: Curves.easeOut,
           child: KeyedSubtree(
             key: ValueKey(track?.coverUrl ?? 'no-cover'),
@@ -323,7 +326,7 @@ class NowPlayingTrackInfo extends ConsumerWidget {
           ? Duration.zero
           : const Duration(milliseconds: 350),
       layoutBuilder: _trackTextLayout,
-      switchInCurve: Curves.easeOutCubic,
+      switchInCurve: ThmrMotion.enterCurve,
       switchOutCurve: Curves.easeIn,
       transitionBuilder: (child, anim) =>
           FadeTransition(opacity: anim, child: child),
@@ -353,7 +356,7 @@ class NowPlayingTrackInfo extends ConsumerWidget {
         MediaQuery.disableAnimationsOf(context)
             ? title
             : AnimatedSize(
-                duration: const Duration(milliseconds: 220),
+                duration: ThmrMotion.duration,
                 alignment: Alignment.topLeft,
                 child: title,
               ),
@@ -395,6 +398,7 @@ class NowPlayingTrackInfo extends ConsumerWidget {
               label: '复制信息',
               onTap: cur == null ? null : () => _copyTrackInfo(context),
             ),
+            if (hasDesktopWindowControls) const LargeScreenButton(),
           ],
         ),
       ],

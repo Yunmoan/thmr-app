@@ -20,6 +20,7 @@ import 'login_screen.dart';
 import 'update_panel.dart';
 import 'radio_source_panel.dart';
 import '../diagnostics/diagnostics_screen.dart';
+import '../large_screen/large_screen_settings_panel.dart';
 
 /// 「我的」:账号(WebView 登录 M2 接入)+ 偏好设置 + 关于。
 class AccountScreen extends ConsumerStatefulWidget {
@@ -229,6 +230,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               ],
             ),
           ),
+          if (hasDesktopWindowControls) ...[
+            const SizedBox(height: 10),
+            const LargeScreenSettingsEntry(),
+          ],
           if (!kIsWeb && Platform.isWindows) ...[
             const SizedBox(height: 14),
             ThmrPanel(

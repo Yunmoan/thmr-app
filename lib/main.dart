@@ -16,6 +16,7 @@ import 'core/platform/application_exit.dart';
 import 'core/player/audio_engine.dart';
 import 'core/player/shared_radio_stream.dart';
 import 'core/state/settings_provider.dart';
+import 'core/state/large_screen_settings.dart';
 import 'core/theme/thmr_colors.dart';
 import 'core/update/update_packages.dart';
 
@@ -57,7 +58,10 @@ Future<void> main(List<String> args) async {
   }
 
   final container = ProviderContainer();
-  await container.read(settingsProvider.notifier).ready;
+  await Future.wait([
+    container.read(settingsProvider.notifier).ready,
+    container.read(largeScreenSettingsProvider.notifier).ready,
+  ]);
 
   await initializeDesktopWindow();
 

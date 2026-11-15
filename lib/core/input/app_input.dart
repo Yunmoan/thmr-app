@@ -7,7 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gamepads/gamepads.dart';
 
 import '../../features/mini/mini_player.dart';
+import '../../features/large_screen/large_screen_controller.dart';
 import '../../shared/widgets/input_help.dart';
+import '../platform/desktop_window.dart';
 import '../player/playback_controller.dart';
 import '../state/station_provider.dart';
 import 'app_commands.dart';
@@ -87,6 +89,10 @@ class _AppInputState extends ConsumerState<AppInput>
 
   Future<void> _navigate(AppCommand command, int? index) async {
     if (!_mainRoute) return;
+    if (ref.read(largeScreenProvider).active) {
+      await ref.read(largeScreenProvider.notifier).change(false);
+      if (ref.read(largeScreenProvider).active) return;
+    }
     if (ref.read(miniPlayerProvider)) await exitMiniMode(ref);
     if (!mounted || !_mainRoute) return;
     final current = ref.read(appTabProvider);
@@ -109,6 +115,10 @@ class _AppInputState extends ConsumerState<AppInput>
     if (_helpOpen) return;
     _helpOpen = true;
     try {
+      if (ref.read(largeScreenProvider).active) {
+        await ref.read(largeScreenProvider.notifier).change(false);
+        if (ref.read(largeScreenProvider).active) return;
+      }
       if (ref.read(miniPlayerProvider)) await exitMiniMode(ref);
       if (!mounted) return;
       final context = widget.navigatorKey.currentState?.overlay?.context;
@@ -150,11 +160,34 @@ class _AppInputState extends ConsumerState<AppInput>
     }
   }
 
+  Future<void> _toggleMini() async {
+    if (ref.read(largeScreenProvider).active) {
+      await ref.read(largeScreenProvider.notifier).change(false);
+      if (!mounted || ref.read(largeScreenProvider).active) return;
+    }
+    if (ref.read(miniPlayerProvider)) {
+      await exitMiniMode(ref);
+    } else if (mounted) {
+      await enterMiniMode(ref, MediaQuery.textScalerOf(context));
+    }
+  }
+
+  Future<void> _toggleLargeScreen() async {
+    if (ref.read(miniPlayerProvider)) await exitMiniMode(ref);
+    if (!mounted || ref.read(miniPlayerProvider)) return;
+    await ref.read(largeScreenProvider.notifier).toggleFullScreen();
+  }
+
   void _run(AppCommand command, [int? index]) {
-    if (!mounted || !_foreground || ref.read(miniTransitionBusyProvider)) {
+    if (!mounted ||
+        !_foreground ||
+        ref.read(miniTransitionBusyProvider) ||
+        ref.read(largeScreenProvider).busy) {
       return;
     }
     final mini = ref.read(miniPlayerProvider);
+    final large = ref.read(largeScreenProvider).active;
+    if (large) largeScreenRevealRequests.value++;
     switch (command) {
       case AppCommand.back:
         final context = FocusManager.instance.primaryFocus?.context;
@@ -169,6 +202,8 @@ class _AppInputState extends ConsumerState<AppInput>
           unawaited(widget.navigatorKey.currentState?.maybePop());
         } else if (mini) {
           unawaited(exitMiniMode(ref));
+        } else if (ref.read(largeScreenProvider).active) {
+          unawaited(ref.read(largeScreenProvider.notifier).change(false));
         }
       case AppCommand.help:
         unawaited(_help());
@@ -194,11 +229,18 @@ class _AppInputState extends ConsumerState<AppInput>
             defaultTargetPlatform != TargetPlatform.windows) {
           return;
         }
-        unawaited(mini
-            ? exitMiniMode(ref)
-            : enterMiniMode(ref, MediaQuery.textScalerOf(context)));
+        unawaited(_toggleMini());
+      case AppCommand.largeScreen:
+        if (!_mainRoute || !hasDesktopWindowControls) return;
+        unawaited(_toggleLargeScreen());
       default:
-        if (mini) {
+        if (large) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && ref.read(largeScreenProvider).active) {
+              _focusCommand(command);
+            }
+          });
+        } else if (mini) {
           miniRevealRequests.value++;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && ref.read(miniPlayerProvider)) _focusCommand(command);
@@ -216,6 +258,9 @@ class _AppInputState extends ConsumerState<AppInput>
           const AppCommandIntent(AppCommand.help),
       const SingleActivator(LogicalKeyboardKey.escape):
           const AppCommandIntent(AppCommand.back),
+      if (hasDesktopWindowControls)
+        const SingleActivator(LogicalKeyboardKey.f11, includeRepeats: false):
+            const AppCommandIntent(AppCommand.largeScreen),
     };
     final mac = defaultTargetPlatform == TargetPlatform.macOS;
     for (final meta in [false, if (mac) true]) {

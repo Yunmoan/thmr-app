@@ -17,6 +17,7 @@ enum AppCommand {
   volumeUp,
   volumeDown,
   mini,
+  largeScreen,
   help,
   scrollUp,
   scrollDown,

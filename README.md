@@ -19,6 +19,12 @@ flutter run -d linux            # Linux（在 Linux 上运行）
 flutter run -d <android-device> # Android
 ```
 
+## 大屏模式
+
+桌面端（Windows / macOS / Linux）点击收听页「复制信息」旁的显示器图标，或按 F11，打开大屏模式。右上角用符号按钮切换全屏、收起大屏，Esc 直接返回普通界面，保留播放、页面和滚动位置。沿用应用的字体、角色立绘、明暗主题和纸面板；可在「我的 → 外观 → 大屏模式」配置布局、队列、画面范围、封面适应、主题和控制栏。
+
+使用外接投影或显示器时，先把主窗口拖到目标屏幕，再打开大屏模式。更多说明见 [大屏模式](docs/LARGE_SCREEN.md)。
+
 ## 键盘、手柄与无障碍
 
 Tab / Shift+Tab 遍历控件，Enter / 空格操作选中的按钮。Ctrl（macOS 为 ⌘）+ 1–4 切换主页面，+ F 定位曲库搜索，+ P 播放/暂停，+ ↑ / ↓ 调整音量。Ctrl+M 静音（macOS 使用 ⌘+Shift+M，保留 ⌘+M 最小化）；Windows 使用 Ctrl+Shift+M 切换迷你播放器。Esc 关闭可取消的弹窗或返回，迷你模式下恢复主窗口。

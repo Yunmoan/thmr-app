@@ -1,6 +1,7 @@
 import 'dart:async' show unawaited;
 
 import 'package:flutter/material.dart';
+import '../../core/theme/thmr_motion.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -24,6 +25,7 @@ import '../collections/collections_screen.dart';
 import '../library/library_screen.dart';
 import '../listen/listen_screen.dart';
 import '../mini/mini_player.dart' show miniPlayerProvider;
+import '../large_screen/large_screen_surface.dart';
 
 /// 应用主壳:窄屏底部导航,宽屏(≥980px)左侧导航栏。
 /// Offstage 保留各页状态;切换时对新激活页做轻量滑入过渡。
@@ -352,7 +354,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
         for (var i = 0; i < _pages.length; i++) _page(i),
       ],
     );
-    return Stack(children: [
+    return LargeScreenSurface(
+        child: Stack(children: [
       LayoutBuilder(builder: (context, constraints) {
         final wide = constraints.maxWidth >= 980;
         final dock = _dockBar(compact: !wide);
@@ -409,7 +412,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
           ),
         );
       }),
-    ]);
+    ]));
   }
 
   /// 底部常驻播放条:非收听页时出现(AnimatedSize 平滑展开)。
@@ -417,8 +420,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
     return AnimatedSize(
       duration: MediaQuery.disableAnimationsOf(context)
           ? Duration.zero
-          : const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
+          : ThmrMotion.duration,
+      curve: ThmrMotion.enterCurve,
       alignment: Alignment.bottomCenter,
       child: _index == 0
           ? const SizedBox(width: double.infinity)
@@ -474,8 +477,8 @@ class _ThmrNavBar extends StatelessWidget {
                             AnimatedContainer(
                               duration: MediaQuery.disableAnimationsOf(context)
                                   ? Duration.zero
-                                  : const Duration(milliseconds: 220),
-                              curve: Curves.easeOutCubic,
+                                  : ThmrMotion.duration,
+                              curve: ThmrMotion.enterCurve,
                               padding: EdgeInsets.symmetric(
                                 horizontal: index == i ? 18 : 10,
                                 vertical: 5,
