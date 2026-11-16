@@ -42,6 +42,8 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
   Future<void> Function(bool)? animatePresentation;
   Future<void> Function(bool)? animateStandard;
   bool _restoreFullScreen = false;
+  Completer<void>? _nativeFullScreenWaiter;
+  bool? _nativeFullScreenTarget;
   bool get _windows => defaultTargetPlatform == TargetPlatform.windows;
 
   Future<void> change(bool active) => _request(active: active);
@@ -118,6 +120,23 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
     await (state.active ? animatePresentation : animateStandard)?.call(visible);
   }
 
+  Future<void> _setFullScreen(bool fullScreen) async {
+    // AppKit replies when starting its Space transition. GTK is asynchronous
+    // too. Wait for the completion event before restoring normal-page metrics.
+    final completed = _windows ? null : Completer<void>();
+    _nativeFullScreenWaiter = completed;
+    _nativeFullScreenTarget = fullScreen;
+    try {
+      await windowManager.setFullScreen(fullScreen);
+      if (completed != null) {
+        await completed.future.timeout(const Duration(seconds: 5));
+      }
+    } finally {
+      _nativeFullScreenWaiter = null;
+      _nativeFullScreenTarget = null;
+    }
+  }
+
   Future<void> _change(_PresentationTarget target) async {
     final previous = state;
     var previousFullScreen = previous.fullScreen;
@@ -150,7 +169,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
         await WidgetsBinding.instance.endOfFrame;
       }
       if (previousFullScreen != targetFullScreen) {
-        await windowManager.setFullScreen(targetFullScreen);
+        await _setFullScreen(targetFullScreen);
         // Consume restored native metrics while the normal shell is still
         // retained at its old extent. Reflow it only after this raster fence.
         await _paint(concealed: concealed);
@@ -164,7 +183,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
       errorMessage = !target.active ? '无法收起大屏模式，请重试。' : '无法切换显示模式，请重试。';
       try {
         if (await windowManager.isFullScreen() != previousFullScreen) {
-          await windowManager.setFullScreen(previousFullScreen);
+          await _setFullScreen(previousFullScreen);
           await _paint(concealed: concealed);
         }
       } catch (rollbackError) {
@@ -224,8 +243,25 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
   }
 
   void nativeFullScreenChanged(bool fullScreen) {
-    if (_inFlight == null && state.active) {
-      state = LargeScreenState(active: true, fullScreen: fullScreen);
+    final waiter = _nativeFullScreenWaiter;
+    if (waiter != null &&
+        !waiter.isCompleted &&
+        _nativeFullScreenTarget == fullScreen) {
+      waiter.complete();
     }
+    if (mounted && state.fullScreen != fullScreen) {
+      state = LargeScreenState(
+          active: state.active,
+          fullScreen: fullScreen,
+          busy: state.busy,
+          error: state.error);
+    }
+  }
+
+  @override
+  void dispose() {
+    final waiter = _nativeFullScreenWaiter;
+    if (waiter != null && !waiter.isCompleted) waiter.complete();
+    super.dispose();
   }
 }

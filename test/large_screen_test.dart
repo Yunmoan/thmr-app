@@ -104,6 +104,7 @@ class _Harness {
   bool failEnter = false;
   bool failExit = false;
   bool resizeOnTransition = false;
+  bool deferFullScreenEvent = false;
   Completer<void>? enterGate;
   Completer<void>? frameGate;
   bool concealed = false;
@@ -140,6 +141,7 @@ class _Harness {
         if (resizeOnTransition) {
           tester.view.physicalSize = active ? const Size(1920, 1080) : size;
         }
+        if (!deferFullScreenEvent) controller.nativeFullScreenChanged(active);
       }
       return null;
     });
@@ -211,6 +213,31 @@ class _Harness {
 }
 
 void main() {
+  testWidgets('asynchronous native fullscreen waits for the completion event',
+      (tester) async {
+    final h = _Harness(tester)..deferFullScreenEvent = true;
+    await h.mount();
+    final entering = h.controller.change(true);
+    for (var i = 0; i < 30 && h.calls.isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(h.container.read(largeScreenProvider).busy, isTrue);
+    h.controller.nativeFullScreenChanged(true);
+    await tester.pumpAndSettle();
+    await entering;
+    final exiting = h.controller.change(false);
+    for (var i = 0; i < 30 && h.calls.length < 2; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(h.container.read(largeScreenProvider).active, isTrue);
+    expect(h.container.read(largeScreenProvider).busy, isTrue);
+    h.controller.nativeFullScreenChanged(false);
+    await tester.pumpAndSettle();
+    await exiting;
+    expect(h.container.read(largeScreenProvider).active, isFalse);
+    expect(h.container.read(largeScreenProvider).busy, isFalse);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
   testWidgets('Escape during a native entrance completes the queued exit',
       (tester) async {
     final h = _Harness(tester)..frameGate = Completer<void>();
