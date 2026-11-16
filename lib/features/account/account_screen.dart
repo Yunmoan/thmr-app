@@ -680,6 +680,7 @@ Color _accentDot(AccentTheme t) => switch (t) {
       AccentTheme.satori => const Color(0xFFA86492),
       AccentTheme.hearn => const Color(0xFF7C5AB4),
       AccentTheme.renko => const Color(0xFFBE6B4A),
+      AccentTheme.yuka => const Color(0xFF5F7A3A),
     };
 
 String _accentLabel(AccentTheme t) => switch (t) {
@@ -693,6 +694,7 @@ String _accentLabel(AccentTheme t) => switch (t) {
       AccentTheme.satori => '觉 · 藕荷',
       AccentTheme.hearn => '梅莉 · 梦紫',
       AccentTheme.renko => '莲子 · 星轨',
+      AccentTheme.yuka => '幽香 · 苔绿',
     };
 
 /// Nickname editor dialog shared by settings & first-login gate.

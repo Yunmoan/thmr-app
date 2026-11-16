@@ -13,6 +13,7 @@ enum AccentTheme {
   satori,
   hearn,
   renko,
+  yuka,
 }
 
 /// Static brand constants (default Reimu crimson kept for compatibility).
@@ -610,6 +611,58 @@ class ThmrTokens extends ThemeExtension<ThmrTokens> {
     illustration: 'assets/brand/renko_background_alt.png',
   );
 
+  /// Yuka — 苔绿(风见幽香的绿发与四季花田,取叶茎的苔绿,与早苗的
+  /// 翠绿区分)。
+  static const ThmrTokens yukaLight = ThmrTokens(
+    accent: Color(0xFF5F7A3A),
+    onAccent: Color(0xFFFBF8EA),
+    pageBg: Color(0xFFF4F3E6),
+    ink: Color(0xFF1E2416),
+    mutedInk: Color(0xFF656B52),
+    supportInk: Color(0xFF5C6250),
+    panelBg: Color(0xEBFFFDF4),
+    panelBorder: Color(0x29383E22),
+    panelSoft: Color(0x125F7A3A),
+    accentSoft: Color(0x215F7A3A),
+    fieldBg: Color(0xE6FFFFFF),
+    secondaryButtonBg: Color(0x141E2416),
+    pageGradient: LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [Color(0xD0F4F3E6), Color(0x92EAE9D5), Color(0x9CDDDECC)],
+      stops: [0.0, 0.54, 1.0],
+    ),
+    shadow: Color(0x1A383E22),
+    solidPanel: Color(0xFFFFFDF4),
+    codeInk: Color(0xFF2C3320),
+    illustration: 'assets/brand/yuka_background_alt.png',
+  );
+
+  static const ThmrTokens yukaDark = ThmrTokens(
+    accent: Color(0xFF5F7A3A),
+    onAccent: Color(0xFFFBF8EA),
+    pageBg: Color(0xFF0F120A),
+    ink: Color(0xFFF2F4E8),
+    mutedInk: Color(0xFFCFD5BE),
+    supportInk: Color(0xFFBAC2AC),
+    panelBg: Color(0xE6171C12),
+    panelBorder: Color(0x21E6ECD8),
+    panelSoft: Color(0x12E6ECD8),
+    accentSoft: Color(0x385F7A3A),
+    fieldBg: Color(0x14EEF2E4),
+    secondaryButtonBg: Color(0x17E6ECD8),
+    pageGradient: LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [Color(0xD8171C12), Color(0xA80F120A), Color(0xB40A0D06)],
+      stops: [0.0, 0.54, 1.0],
+    ),
+    shadow: Color(0x52000000),
+    solidPanel: Color(0xFF171C12),
+    codeInk: Color(0xFFE6ECD8),
+    illustration: 'assets/brand/yuka_background_alt.png',
+  );
+
   static ThmrTokens resolve(AccentTheme theme, Brightness brightness) {
     switch (theme) {
       case AccentTheme.tenshi:
@@ -632,6 +685,8 @@ class ThmrTokens extends ThemeExtension<ThmrTokens> {
         return brightness == Brightness.dark ? hearnDark : hearnLight;
       case AccentTheme.renko:
         return brightness == Brightness.dark ? renkoDark : renkoLight;
+      case AccentTheme.yuka:
+        return brightness == Brightness.dark ? yukaDark : yukaLight;
     }
   }
 
