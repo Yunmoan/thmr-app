@@ -43,12 +43,14 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
   final _controlsFocus = FocusNode(debugLabel: '大屏播放控制');
   late final LargeScreenController _mode;
   late final AnimationController _presentation;
+  bool _presentationVisible = true;
   StationUiState? _lastLoaded;
 
   @override
   void initState() {
     super.initState();
     _mode = ref.read(largeScreenProvider.notifier);
+    _presentationVisible = !ref.read(largeScreenProvider).busy;
     _presentation = AnimationController(
         vsync: this,
         duration: ThmrMotion.duration,
@@ -59,12 +61,23 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
   }
 
   Future<void> _animatePresentation(bool visible) async {
+    _presentationVisible = visible;
+    if (visible) _reveal();
     _presentation.duration = ThmrMotion.of(context, exiting: !visible);
     try {
       await (visible ? _presentation.forward() : _presentation.reverse())
           .orCancel;
     } on TickerCanceled {
       // Removing the surface also completes its native mode transition.
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context) ||
+        !TickerMode.valuesOf(context).enabled) {
+      _presentation.value = _presentationVisible ? 1 : 0;
     }
   }
 
@@ -132,24 +145,19 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                 ),
               ));
           final content = ThmrFadeSlide(
-              animation: _presentation,
-              child: SafeArea(
-                  child: ThmrAnimatedContent(
-                      child: KeyedSubtree(
-                          key: ValueKey((
-                            settings.layout,
-                            settings.queue,
-                            settings.framing,
-                            settings.cardLayout
-                          )),
-                          child: LargeScreenContent(
-                            settings: settings,
-                            station: station,
-                            phase: phase,
-                            playbackError: error,
-                            header: const _Header(),
-                            controls: controls,
-                          )))));
+            key: const ValueKey('large-mode-transition'),
+            animation: _presentation,
+            child: SafeArea(
+              child: LargeScreenContent(
+                settings: settings,
+                station: station,
+                phase: phase,
+                playbackError: error,
+                header: const _Header(),
+                controls: controls,
+              ),
+            ),
+          );
           return MouseRegion(
             cursor: _controlsVisible
                 ? SystemMouseCursors.basic
@@ -167,18 +175,14 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                 child: Scaffold(
                   backgroundColor: theme.thmr.pageBg,
                   body: Stack(fit: StackFit.expand, children: [
-                    settings.showIllustration
-                        ? ThmrBackground(
-                            alignment: settings.illustrationPosition ==
-                                    LargeScreenIllustrationPosition.right
-                                ? Alignment.bottomRight
-                                : Alignment.bottomLeft,
-                            child: content)
-                        : DecoratedBox(
-                            decoration: BoxDecoration(
-                                color: theme.thmr.pageBg,
-                                gradient: theme.thmr.pageGradient),
-                            child: content),
+                    ThmrBackground(
+                      showIllustration: settings.showIllustration,
+                      alignment: settings.illustrationPosition ==
+                              LargeScreenIllustrationPosition.right
+                          ? Alignment.bottomRight
+                          : Alignment.bottomLeft,
+                      child: content,
+                    ),
                     Positioned(
                         bottom: 16,
                         left: 16,

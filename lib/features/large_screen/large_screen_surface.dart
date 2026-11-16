@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/platform/desktop_window.dart';
+import '../../core/theme/thmr_motion.dart';
 import 'large_screen_controller.dart';
 import 'large_screen_player.dart';
 
@@ -18,20 +19,53 @@ class LargeScreenSurface extends ConsumerStatefulWidget {
 }
 
 class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
-    with WindowListener {
+    with SingleTickerProviderStateMixin, WindowListener {
   Size? _mainSize;
+  MediaQueryData? _mainMetrics;
   FocusNode? _previousFocus;
   final _stageFocus = FocusScopeNode(debugLabel: '大屏模式');
+  late final LargeScreenController _mode;
+  late final AnimationController _standard;
+  bool _standardVisible = true;
 
   @override
   void initState() {
     super.initState();
+    _mode = ref.read(largeScreenProvider.notifier);
+    _standardVisible = !ref.read(largeScreenProvider).active;
+    _standard = AnimationController(
+        vsync: this,
+        duration: ThmrMotion.duration,
+        value: _standardVisible ? 1 : 0);
+    _mode.animateStandard = _animateStandard;
     if (hasDesktopWindowControls) windowManager.addListener(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context) ||
+        !TickerMode.valuesOf(context).enabled) {
+      _standard.value = _standardVisible ? 1 : 0;
+    }
+  }
+
+  Future<void> _animateStandard(bool visible) async {
+    if (!visible) _previousFocus = FocusManager.instance.primaryFocus;
+    _standardVisible = visible;
+    _standard.duration = ThmrMotion.of(context, exiting: !visible);
+    try {
+      await (visible ? _standard.forward() : _standard.reverse()).orCancel;
+    } on TickerCanceled {
+      // Disposal or enabling reduced motion completes the visible transition.
+    }
   }
 
   @override
   void dispose() {
     if (hasDesktopWindowControls) windowManager.removeListener(this);
+    _mode.animateStandard = null;
+    _standard.dispose();
     _stageFocus.dispose();
     super.dispose();
   }
@@ -46,14 +80,23 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
 
   @override
   Widget build(BuildContext context) {
-    final active = ref.watch(largeScreenProvider.select((s) => s.active));
-    ref.listen(largeScreenProvider.select((s) => s.active), (_, next) {
-      if (next) _previousFocus = FocusManager.instance.primaryFocus;
+    final mode = ref.watch(largeScreenProvider);
+    final active = mode.active;
+    ref.listen(largeScreenProvider, (previous, next) {
+      if (next.active &&
+          previous?.active != true &&
+          _previousFocus?.context == null) {
+        _previousFocus = FocusManager.instance.primaryFocus;
+      }
+      if (next.busy) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || ref.read(largeScreenProvider).active != next) return;
-        if (next) {
+        if (!mounted || ref.read(largeScreenProvider).active != next.active) {
+          return;
+        }
+        if (next.active) {
           _stageFocus.requestFocus();
-        } else if (_previousFocus?.canRequestFocus == true) {
+        } else if (_previousFocus?.context != null &&
+            _previousFocus?.canRequestFocus == true) {
           _previousFocus!.requestFocus();
         }
       });
@@ -65,7 +108,18 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
       }
     });
     return LayoutBuilder(builder: (context, constraints) {
-      if (!active) _mainSize = constraints.biggest;
+      final metrics = MediaQuery.of(context);
+      if (!active) {
+        _mainSize = constraints.biggest;
+        _mainMetrics = metrics;
+      }
+      final retainedMetrics = metrics.copyWith(
+        size: _mainMetrics?.size,
+        padding: _mainMetrics?.padding,
+        viewPadding: _mainMetrics?.viewPadding,
+        viewInsets: _mainMetrics?.viewInsets,
+        systemGestureInsets: _mainMetrics?.systemGestureInsets,
+      );
       return Stack(fit: StackFit.expand, children: [
         Offstage(
           offstage: active,
@@ -81,7 +135,14 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
                 maxHeight: double.infinity,
                 child: SizedBox.fromSize(
                     size: _mainSize ?? constraints.biggest,
-                    child: widget.child),
+                    child: MediaQuery(
+                        data: retainedMetrics,
+                        child: IgnorePointer(
+                            ignoring: mode.busy,
+                            child: ThmrFadeSlide(
+                                key: const ValueKey('standard-mode-transition'),
+                                animation: _standard,
+                                child: widget.child)))),
               ),
             ),
           ),

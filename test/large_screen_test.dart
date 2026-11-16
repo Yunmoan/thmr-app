@@ -13,6 +13,7 @@ import 'package:thmr_app/core/player/playback_controller.dart';
 import 'package:thmr_app/core/state/station_provider.dart';
 import 'package:thmr_app/core/state/large_screen_settings.dart';
 import 'package:thmr_app/core/state/channel_provider.dart';
+import 'package:thmr_app/features/listen/widgets/channel_switcher.dart';
 import 'package:thmr_app/shared/widgets/thmr_background.dart';
 import 'package:thmr_app/features/large_screen/large_screen_button.dart';
 import 'package:thmr_app/features/large_screen/large_screen_controller.dart';
@@ -107,6 +108,7 @@ class _Harness {
   Completer<void>? frameGate;
   bool concealed = false;
   final revealed = <LargeScreenState>[];
+  final flushed = <LargeScreenState>[];
 
   Future<void> mount(
       {Size size = const Size(1280, 720),
@@ -145,6 +147,9 @@ class _Harness {
         const MethodChannel('thmr/window_presentation'), (call) async {
       if (call.method == 'conceal') concealed = true;
       if (call.method == 'waitForFrame') await frameGate?.future;
+      if (call.method == 'flushFrame') {
+        flushed.add(container.read(largeScreenProvider));
+      }
       if (call.method == 'reveal') {
         concealed = false;
         revealed.add(container.read(largeScreenProvider));
@@ -206,6 +211,109 @@ class _Harness {
 }
 
 void main() {
+  testWidgets('Escape during a native entrance completes the queued exit',
+      (tester) async {
+    final h = _Harness(tester)..frameGate = Completer<void>();
+    await h.mount();
+    final entering = h.controller.change(true);
+    for (var i = 0; i < 30 && !h.concealed; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    h.frameGate!.complete();
+    await tester.pumpAndSettle();
+    await entering;
+    expect(h.container.read(largeScreenProvider).active, isFalse);
+    expect(h.container.read(largeScreenProvider).busy, isFalse);
+    expect(h.calls, [true, false]);
+    expect(h.concealed, isFalse);
+    expect(find.text('main control'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('both presentations animate and preserve the normal page element',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount();
+    final retained =
+        tester.element(find.byKey(const ValueKey('retained-list')));
+    Finder fade(String key) => find
+        .descendant(
+            of: find.byKey(ValueKey(key)),
+            matching: find.byType(FadeTransition))
+        .first;
+    final entering = h.controller.change(true);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 70));
+    expect(
+        tester
+            .widget<FadeTransition>(fade('standard-mode-transition'))
+            .opacity
+            .value,
+        inExclusiveRange(0, 1));
+    expect(h.container.read(largeScreenProvider).busy, isTrue);
+    await tester.pumpAndSettle();
+    await entering;
+    final exiting = h.controller.change(false);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 70));
+    expect(
+        tester
+            .widget<FadeTransition>(fade('large-mode-transition'))
+            .opacity
+            .value,
+        inExclusiveRange(0, 1));
+    await tester.pumpAndSettle();
+    await exiting;
+    expect(tester.element(find.byKey(const ValueKey('retained-list'))),
+        same(retained));
+    expect(
+        tester
+            .widget<FadeTransition>(fade('standard-mode-transition'))
+            .opacity
+            .value,
+        1);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets(
+      'stage layout and illustration settings retain the header and controls',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount();
+    h.station.update(
+        StationUiState(status: _status(queueCount: 50), initialLoading: false));
+    await h.change(true);
+    final header = tester.element(find.byType(ChannelSwitcher));
+    final controls = tester.element(find.byTooltip('暂停播放'));
+    for (final layout in LargeScreenLayout.values) {
+      await h.container.read(largeScreenSettingsProvider.notifier).update(
+          LargeScreenSettings(
+              layout: layout,
+              queue: LargeScreenQueue.list,
+              framing: LargeScreenFraming.fit,
+              cardLayout: true,
+              showIllustration: false));
+      await tester.pump(const Duration(milliseconds: 60));
+      expect(tester.element(find.byType(ChannelSwitcher)), same(header));
+      expect(tester.element(find.byTooltip('暂停播放')), same(controls));
+      expect(tester.takeException(), isNull);
+      await tester.pumpAndSettle();
+    }
+    final queue = tester
+        .widget<ListView>(find.byKey(const ValueKey('large-screen-queue')));
+    final scroll = queue.controller!;
+    scroll.jumpTo(150);
+    await h.container.read(largeScreenSettingsProvider.notifier).update(
+        const LargeScreenSettings(
+            queue: LargeScreenQueue.list, coverFit: LargeScreenCoverFit.cover));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<ListView>(find.byKey(const ValueKey('large-screen-queue')))
+            .controller,
+        same(scroll));
+    expect(scroll.offset, 150);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
   testWidgets('window drag is confined to the brand and title region',
       (tester) async {
     final h = _Harness(tester);
@@ -359,30 +467,32 @@ void main() {
     expect(h.playback.toggles, 0);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
-  testWidgets('final enabled surface is rasterized before native reveal',
+  testWidgets('native reveal follows raster and input unlocks after entrance',
       (tester) async {
     final h = _Harness(tester);
     await h.mount();
     h.frameGate = Completer<void>();
     final entering = h.controller.change(true);
-    for (var i = 0; i < 5; i++) {
+    for (var i = 0; i < 30 && !h.concealed; i++) {
       await tester.pump(const Duration(milliseconds: 20));
     }
     expect(h.concealed, isTrue);
     expect(h.revealed, isEmpty);
-    expect(h.controller.change(false), same(entering));
+    expect(h.controller.change(true), same(entering));
     final collapse = tester.widget<IconButton>(find.byWidgetPredicate(
         (widget) => widget is IconButton && widget.tooltip == '收起大屏模式'));
-    expect(collapse.onPressed, isNotNull);
+    expect(collapse.onPressed, isNull);
     h.frameGate!.complete();
     await tester.pumpAndSettle();
     await entering;
     expect(h.revealed.single.active, isTrue);
-    expect(h.revealed.single.busy, isFalse);
+    expect(h.revealed.single.busy, isTrue);
+    expect(h.flushed.last.busy, isFalse);
     h.frameGate = null;
     await h.change(false);
     expect(h.revealed.last.active, isFalse);
-    expect(h.revealed.last.busy, isFalse);
+    expect(h.revealed.last.busy, isTrue);
+    expect(h.flushed.last.busy, isFalse);
     expect(h.concealed, isFalse);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
@@ -470,7 +580,9 @@ void main() {
     h.enterGate!.complete();
     await tester.pumpAndSettle();
     await entering;
-    expect(h.calls, [true]);
+    expect(h.calls, [true, false]);
+    expect(h.container.read(largeScreenProvider).active, isTrue);
+    expect(h.container.read(largeScreenProvider).fullScreen, isFalse);
     await h.change(false);
     h.failEnter = true;
     await h.change(true);

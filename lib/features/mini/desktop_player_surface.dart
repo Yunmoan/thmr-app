@@ -39,7 +39,7 @@ class _DesktopPlayerSurfaceState extends ConsumerState<DesktopPlayerSurface> {
           fit: StackFit.expand,
           children: [
             Offstage(
-              offstage: mini,
+              offstage: mini || large,
               child: const ThmrBackground(child: SizedBox.expand()),
             ),
             Padding(
@@ -59,6 +59,8 @@ class _DesktopPlayerSurfaceState extends ConsumerState<DesktopPlayerSurface> {
                       excluding: mini,
                       child: OverflowBox(
                         alignment: Alignment.topLeft,
+                        minWidth: 0,
+                        minHeight: 0,
                         maxWidth: double.infinity,
                         maxHeight: double.infinity,
                         child:

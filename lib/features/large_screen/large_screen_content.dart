@@ -35,12 +35,14 @@ class LargeScreenContent extends StatelessWidget {
       final inset = (outer.biggest.shortestSide * .03).clamp(16.0, 36.0);
       final sideQueue =
           settings.queue == LargeScreenQueue.list && outer.maxWidth >= 1040;
-      final hero = _Hero(
-          settings: settings,
-          station: station,
-          phase: phase,
-          playbackError: playbackError,
-          fontSize: (outer.maxWidth * .036).clamp(28, 76));
+      final hero = ThmrAnimatedContent(
+          child: _Hero(
+              key: ValueKey(settings.layout),
+              settings: settings,
+              station: station,
+              phase: phase,
+              playbackError: playbackError,
+              fontSize: (outer.maxWidth * .036).clamp(28, 76)));
       return Padding(
         padding: EdgeInsets.all(inset),
         child: Column(children: [
@@ -76,6 +78,7 @@ class LargeScreenContent extends StatelessWidget {
           if (settings.showControls) ...[
             const SizedBox(height: 12),
             SizedBox(
+                key: const ValueKey('large-screen-controls-slot'),
                 width: math.min(360, outer.maxWidth - inset * 2),
                 child: controls),
           ],
@@ -83,36 +86,38 @@ class LargeScreenContent extends StatelessWidget {
       );
     }
 
-    Widget page = LayoutBuilder(builder: (context, constraints) {
-      final minimumHeight =
-          math.max(440.0, MediaQuery.textScalerOf(context).scale(320));
-      if (constraints.maxHeight < minimumHeight) {
-        return Center(
-            child: FittedBox(
-                fit: BoxFit.contain,
+    // Keep the header, focus nodes and queue alive when framing changes.
+    return BackdropGroup(
+      child: Center(
+        child: ConstrainedBox(
+          key: const ValueKey('large-screen-centered-frame'),
+          constraints: settings.framing == LargeScreenFraming.fit
+              ? const BoxConstraints(maxWidth: 1560, maxHeight: 1000)
+              : const BoxConstraints(),
+          child: SizedBox.expand(
+            child: LayoutBuilder(builder: (context, constraints) {
+              final minimumHeight =
+                  math.max(440.0, MediaQuery.textScalerOf(context).scale(320));
+              return FittedBox(
+                fit: BoxFit.scaleDown,
                 child: SizedBox(
                   width: constraints.maxWidth,
-                  height: minimumHeight,
+                  height: math.max(constraints.maxHeight, minimumHeight),
                   child: LayoutBuilder(builder: canvas),
-                )));
-      }
-      return canvas(context, constraints);
-    });
-    if (settings.framing == LargeScreenFraming.fit) {
-      page = Center(
-          child: ConstrainedBox(
-        key: const ValueKey('large-screen-centered-frame'),
-        constraints: const BoxConstraints(maxWidth: 1560, maxHeight: 1000),
-        child: SizedBox.expand(child: page),
-      ));
-    }
-    return BackdropGroup(child: page);
+                ),
+              );
+            }),
+          ),
+        ),
+      ),
+    );
   }
 }
 
 class _Hero extends StatelessWidget {
   const _Hero(
-      {required this.settings,
+      {super.key,
+      required this.settings,
       required this.station,
       required this.phase,
       required this.playbackError,

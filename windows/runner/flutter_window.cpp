@@ -162,9 +162,10 @@ void FlutterWindow::RegisterWindowPresentation() {
           } else {
             result->Success();
           }
-        } else if (method == "waitForFrame") {
-          if (!presentation_concealed_ || frame_callback_pending_) {
-            result->Error("invalid_presentation", "No concealed presentation or fence busy");
+        } else if (method == "waitForFrame" || method == "flushFrame") {
+          if ((method == "waitForFrame" && !presentation_concealed_) ||
+              frame_callback_pending_) {
+            result->Error("invalid_presentation", "Invalid presentation or fence busy");
             return;
           }
           if (!SetTimer(GetHandle(), kPresentationFrameTimer,

@@ -33,40 +33,39 @@ class ThmrPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!enabled) return Padding(padding: padding, child: child);
     final theme = Theme.of(context);
     final tokens = theme.thmr;
-    // The page already washes out the artwork. Light paper needs a lighter
-    // tint so the blurred silhouette can still show through both layers.
     final frostOpacity = theme.brightness == Brightness.light ? 0.60 : 0.80;
-    final body = Container(
-      decoration: BoxDecoration(
-        color: frost
-            ? tokens.panelBg.withValues(alpha: frostOpacity)
-            : tokens.solidPanel.withValues(alpha: 0.86),
-        borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(color: tokens.panelBorder),
-      ),
-      padding: padding,
-      child: child,
+    final decoration = BoxDecoration(
+      color: frost
+          ? tokens.panelBg.withValues(alpha: frostOpacity)
+          : tokens.solidPanel.withValues(alpha: 0.86),
+      borderRadius: BorderRadius.circular(borderRadius),
+      border: Border.all(color: tokens.panelBorder),
     );
-    final panel = frost
-        ? ClipRRect(
-            borderRadius: BorderRadius.circular(borderRadius),
-            child: BackdropFilter.grouped(
-              filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-              // Keep the destination opaque during tab/channel fades. Using
-              // src replaces it with the partially transparent filtered layer
-              // and punches through the window to the desktop underneath.
-              blendMode: BlendMode.srcOver,
-              // Nested frosted panels must not share their parent's backdrop.
-              child: BackdropGroup(child: body),
-            ),
-          )
-        : ClipRRect(
-            borderRadius: BorderRadius.circular(borderRadius),
-            child: body,
-          );
+    // Keep the foreground in one stable slot when card decoration is toggled.
+    // Background blur never includes the foreground or shares nested panels.
+    final panel = ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      clipBehavior: enabled ? Clip.antiAlias : Clip.none,
+      child: Stack(children: [
+        if (enabled)
+          Positioned.fill(
+            child: frost
+                ? BackdropFilter.grouped(
+                    filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                    blendMode: BlendMode.srcOver,
+                    child: DecoratedBox(decoration: decoration),
+                  )
+                : DecoratedBox(decoration: decoration),
+          ),
+        Padding(
+          key: const ValueKey('panel-foreground'),
+          padding: padding,
+          child: BackdropGroup(child: child),
+        ),
+      ]),
+    );
     if (onTap == null) return panel;
     return FocusOutline(
         radius: borderRadius,

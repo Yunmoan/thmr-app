@@ -10,6 +10,7 @@ class ThmrBackground extends StatelessWidget {
     required this.child,
     this.illustration,
     this.alignment = Alignment.bottomLeft,
+    this.showIllustration = true,
   });
 
   final Widget child;
@@ -17,6 +18,7 @@ class ThmrBackground extends StatelessWidget {
   /// Defaults to the current character theme's illustration.
   final String? illustration;
   final Alignment alignment;
+  final bool showIllustration;
 
   @override
   Widget build(BuildContext context) {
@@ -35,25 +37,28 @@ class ThmrBackground extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           // The illustration stays still while pages and player controls animate.
-          RepaintBoundary(
-            child: Align(
-              alignment: alignment,
-              child: FractionallySizedBox(
-                heightFactor: compact ? 0.8 : 0.9,
+          Offstage(
+            offstage: !showIllustration,
+            child: RepaintBoundary(
+              child: Align(
                 alignment: alignment,
-                child: Opacity(
-                  opacity: 0.9,
-                  child: AnimatedSwitcher(
-                    duration: motionDuration,
-                    switchInCurve: ThmrMotion.enterCurve,
-                    switchOutCurve: ThmrMotion.exitCurve,
-                    child: Image.asset(
-                      asset,
-                      key: ValueKey(asset),
-                      fit: BoxFit.contain,
-                      alignment: alignment,
-                      filterQuality: FilterQuality.low,
-                      excludeFromSemantics: true,
+                child: FractionallySizedBox(
+                  heightFactor: compact ? 0.8 : 0.9,
+                  alignment: alignment,
+                  child: Opacity(
+                    opacity: 0.9,
+                    child: AnimatedSwitcher(
+                      duration: motionDuration,
+                      switchInCurve: ThmrMotion.enterCurve,
+                      switchOutCurve: ThmrMotion.exitCurve,
+                      child: Image.asset(
+                        asset,
+                        key: ValueKey(asset),
+                        fit: BoxFit.contain,
+                        alignment: alignment,
+                        filterQuality: FilterQuality.low,
+                        excludeFromSemantics: true,
+                      ),
                     ),
                   ),
                 ),

@@ -182,7 +182,9 @@ class _AppInputState extends ConsumerState<AppInput>
     if (!mounted ||
         !_foreground ||
         ref.read(miniTransitionBusyProvider) ||
-        ref.read(largeScreenProvider).busy) {
+        (ref.read(largeScreenProvider).busy &&
+            command != AppCommand.back &&
+            command != AppCommand.largeScreen)) {
       return;
     }
     final mini = ref.read(miniPlayerProvider);
@@ -202,7 +204,8 @@ class _AppInputState extends ConsumerState<AppInput>
           unawaited(widget.navigatorKey.currentState?.maybePop());
         } else if (mini) {
           unawaited(exitMiniMode(ref));
-        } else if (ref.read(largeScreenProvider).active) {
+        } else if (ref.read(largeScreenProvider).active ||
+            ref.read(largeScreenProvider).busy) {
           unawaited(ref.read(largeScreenProvider.notifier).change(false));
         }
       case AppCommand.help:

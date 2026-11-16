@@ -20,7 +20,12 @@ class WindowPresentation {
   Future<void> setMaximized(bool maximized) =>
       _channel.invokeMethod<void>('setMaximized', maximized);
 
-  Future<void> waitForFrame() async {
+  Future<void> waitForFrame() => _waitForFrame('waitForFrame');
+
+  /// Also fence the final enabled surface after its visible entrance.
+  Future<void> flushFrame() => _waitForFrame('flushFrame');
+
+  Future<void> _waitForFrame(String method) async {
     // endOfFrame submits the target layer tree; it does not wait for raster.
     // The native fence is queued on the raster thread after that submission,
     // and requests a redraw even when the target UI has no active animations.
@@ -37,7 +42,7 @@ class WindowPresentation {
     // is pending. A static/transparent target has no animation to wake it later.
     // Keep submitting frames from Dart until the raster fence acknowledges one;
     // no elapsed-time guess or persistent animation is involved.
-    final rasterized = _channel.invokeMethod<void>('waitForFrame');
+    final rasterized = _channel.invokeMethod<void>(method);
     requestFrame(Duration.zero);
     try {
       await rasterized;

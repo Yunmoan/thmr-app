@@ -16,7 +16,6 @@ class LargeScreenState {
       this.fullScreen = false,
       this.busy = false,
       this.error});
-
   final bool active;
   final bool fullScreen;
   final bool busy;
@@ -28,83 +27,145 @@ final largeScreenProvider =
         (ref) => LargeScreenController(ref));
 
 final largeScreenRevealRequests = ValueNotifier<int>(0);
+typedef _PresentationTarget = ({bool active, bool? fullScreen});
 
-/// Native fullscreen and the player presentation can change independently.
-/// On Windows, reveal only after the final surface has actually rasterized.
+/// Serialize native changes and keep the latest requested presentation.
+/// Controls stay busy until the incoming surface has finished its entrance.
 class LargeScreenController extends StateNotifier<LargeScreenState> {
   LargeScreenController(this._ref) : super(const LargeScreenState());
 
   final Ref _ref;
   final _presentation = WindowPresentation();
   Future<void>? _inFlight;
+  _PresentationTarget? _pending;
+  _PresentationTarget? _target;
   Future<void> Function(bool)? animatePresentation;
+  Future<void> Function(bool)? animateStandard;
   bool _restoreFullScreen = false;
   bool get _windows => defaultTargetPlatform == TargetPlatform.windows;
 
   Future<void> change(bool active) => _request(active: active);
 
-  Future<void> toggleFullScreen() =>
-      state.active ? _request(fullScreen: !state.fullScreen) : change(true);
+  Future<void> toggleFullScreen() {
+    final desired = _pending ?? _target;
+    if (!(desired?.active ?? state.active)) return change(true);
+    final fullScreen = desired?.fullScreen ??
+        (state.active
+            ? state.fullScreen
+            : _ref.read(largeScreenSettingsProvider).startFullScreen ||
+                state.fullScreen);
+    return _request(fullScreen: !fullScreen);
+  }
 
   Future<void> _request({bool? active, bool? fullScreen}) {
-    if (!hasDesktopWindowControls) return Future.value();
-    if (_inFlight != null) return _inFlight!;
-    if ((active != null && state.active == active) ||
+    if (!hasDesktopWindowControls ||
         _ref.read(miniPlayerProvider) ||
         _ref.read(miniTransitionBusyProvider)) {
       return Future.value();
     }
-    return _inFlight = _change(active: active, fullScreen: fullScreen)
-        .whenComplete(() => _inFlight = null);
+    final base = _pending ??
+        _target ??
+        (active: state.active, fullScreen: state.fullScreen);
+    final next = (
+      active: active ?? base.active,
+      fullScreen: fullScreen ??
+          (active != null && active != base.active ? null : base.fullScreen),
+    );
+    if (_inFlight == null &&
+        next.active == state.active &&
+        (next.fullScreen == null || next.fullScreen == state.fullScreen)) {
+      return Future.value();
+    }
+    _pending = next;
+    if (_inFlight != null) return _inFlight!;
+    final completion = Completer<void>();
+    _inFlight = completion.future;
+    unawaited(_drain(completion));
+    return completion.future;
   }
 
-  Future<void> _paint() async {
+  Future<void> _drain(Completer<void> completion) async {
+    try {
+      while (mounted && _pending != null) {
+        final next = _pending!;
+        _pending = null;
+        _target = next;
+        if (next.active != state.active ||
+            (next.fullScreen != null && next.fullScreen != state.fullScreen)) {
+          await _change(next);
+        }
+      }
+    } finally {
+      _target = null;
+      _inFlight = null;
+      completion.complete();
+    }
+  }
+
+  Future<void> _paint({required bool concealed}) async {
     if (_windows) {
-      await _presentation.waitForFrame();
+      if (concealed) {
+        await _presentation.waitForFrame();
+      } else {
+        await _presentation.flushFrame();
+      }
     } else {
       await WidgetsBinding.instance.endOfFrame;
     }
   }
 
-  Future<void> _change({bool? active, bool? fullScreen}) async {
+  Future<void> _animate(bool visible) async {
+    await (state.active ? animatePresentation : animateStandard)?.call(visible);
+  }
+
+  Future<void> _change(_PresentationTarget target) async {
     final previous = state;
     var previousFullScreen = previous.fullScreen;
     var concealed = false;
+    String? errorMessage;
     state = LargeScreenState(
         active: previous.active, fullScreen: previous.fullScreen, busy: true);
     try {
-      if (active == false) await animatePresentation?.call(false);
       previousFullScreen = await windowManager.isFullScreen();
       if (!mounted) return;
-      if (active == true) _restoreFullScreen = previousFullScreen;
-      final targetFullScreen = fullScreen ??
-          (active == true
+      if (!previous.active && target.active) {
+        _restoreFullScreen = previousFullScreen;
+      }
+      final targetFullScreen = target.fullScreen ??
+          (target.active
               ? _ref.read(largeScreenSettingsProvider).startFullScreen ||
                   previousFullScreen
               : _restoreFullScreen);
+      _target = (active: target.active, fullScreen: targetFullScreen);
+      await _animate(false);
+      if (!mounted) return;
       if (_windows) {
         await _presentation.conceal();
         concealed = true;
       }
-      if (active == true) {
-        // Retain the shell's old extent before native metrics change.
+      if (target.active && !previous.active) {
+        // Freeze the normal shell before any native metrics arrive.
         state = LargeScreenState(
             active: true, fullScreen: targetFullScreen, busy: true);
         await WidgetsBinding.instance.endOfFrame;
       }
       if (previousFullScreen != targetFullScreen) {
         await windowManager.setFullScreen(targetFullScreen);
+        // Consume restored native metrics while the normal shell is still
+        // retained at its old extent. Reflow it only after this raster fence.
+        await _paint(concealed: concealed);
       }
       if (!mounted) return;
-      // Paint enabled controls and the final page before revealing the HWND.
       state = LargeScreenState(
-          active: active ?? previous.active, fullScreen: targetFullScreen);
-      await _paint();
+          active: target.active, fullScreen: targetFullScreen, busy: true);
+      await _paint(concealed: concealed);
     } catch (error, stack) {
       debugPrint('Large screen transition failed: $error\n$stack');
+      errorMessage = !target.active ? '无法收起大屏模式，请重试。' : '无法切换显示模式，请重试。';
       try {
         if (await windowManager.isFullScreen() != previousFullScreen) {
           await windowManager.setFullScreen(previousFullScreen);
+          await _paint(concealed: concealed);
         }
       } catch (rollbackError) {
         debugPrint('Fullscreen rollback failed: $rollbackError');
@@ -113,18 +174,51 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
         state = LargeScreenState(
             active: previous.active,
             fullScreen: previousFullScreen,
-            error: active == false ? '无法收起大屏模式，请重试。' : '无法切换显示模式，请重试。');
+            busy: true);
         try {
-          await _paint();
+          await _paint(concealed: concealed);
         } catch (paintError) {
           debugPrint('Presentation recovery failed: $paintError');
         }
       }
     } finally {
-      if (concealed) await _presentation.reveal();
+      if (concealed) {
+        try {
+          await _presentation.reveal();
+        } catch (error) {
+          // A transient reveal failure must not leave a permanently hidden HWND.
+          debugPrint('Presentation reveal failed: $error');
+          try {
+            await _presentation.reveal();
+          } catch (retryError) {
+            debugPrint('Presentation reveal retry failed: $retryError');
+          }
+          errorMessage ??= '无法恢复窗口显示，请重试。';
+        }
+      }
       if (mounted) {
-        await windowManager.focus();
-        if (state.active) await animatePresentation?.call(true);
+        try {
+          await windowManager.focus();
+        } catch (error) {
+          debugPrint('Window focus failed: $error');
+        }
+        try {
+          await _animate(true);
+        } catch (error) {
+          debugPrint('Presentation entrance failed: $error');
+          errorMessage ??= '无法完成显示切换，请重试。';
+        }
+        if (mounted) {
+          state = LargeScreenState(
+              active: state.active,
+              fullScreen: state.fullScreen,
+              error: errorMessage);
+          try {
+            await _paint(concealed: false);
+          } catch (error) {
+            debugPrint('Final presentation frame failed: $error');
+          }
+        }
       }
     }
   }
