@@ -42,6 +42,7 @@ class _ThmrFocusLayerState extends State<ThmrFocusLayer> {
               ColoredBox(color: Theme.of(context).scaffoldBackgroundColor),
             // Keep room for a full outward ring even at the window edge.
             Padding(
+              key: const ValueKey('app-content'),
               padding: widget.reserveEdgeSpace
                   ? const EdgeInsets.all(ThmrFocusRing.extent)
                   : EdgeInsets.zero,

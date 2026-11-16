@@ -15,10 +15,14 @@ class LargeScreenState {
       {this.active = false,
       this.fullScreen = false,
       this.busy = false,
+      this.contentVisible = true,
       this.error});
   final bool active;
   final bool fullScreen;
   final bool busy;
+
+  /// Survives a widget remount while a native change or entrance is in flight.
+  final bool contentVisible;
   final String? error;
 }
 
@@ -117,6 +121,12 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
   }
 
   Future<void> _animate(bool visible) async {
+    state = LargeScreenState(
+        active: state.active,
+        fullScreen: state.fullScreen,
+        busy: state.busy,
+        contentVisible: visible,
+        error: state.error);
     await (state.active ? animatePresentation : animateStandard)?.call(visible);
   }
 
@@ -165,7 +175,10 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
       if (target.active && !previous.active) {
         // Freeze the normal shell before any native metrics arrive.
         state = LargeScreenState(
-            active: true, fullScreen: targetFullScreen, busy: true);
+            active: true,
+            fullScreen: targetFullScreen,
+            busy: true,
+            contentVisible: false);
         await WidgetsBinding.instance.endOfFrame;
       }
       if (previousFullScreen != targetFullScreen) {
@@ -176,7 +189,10 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
       }
       if (!mounted) return;
       state = LargeScreenState(
-          active: target.active, fullScreen: targetFullScreen, busy: true);
+          active: target.active,
+          fullScreen: targetFullScreen,
+          busy: true,
+          contentVisible: false);
       await _paint(concealed: concealed);
     } catch (error, stack) {
       debugPrint('Large screen transition failed: $error\n$stack');
@@ -193,6 +209,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
         state = LargeScreenState(
             active: previous.active,
             fullScreen: previousFullScreen,
+            contentVisible: false,
             busy: true);
         try {
           await _paint(concealed: concealed);
@@ -218,6 +235,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
       if (mounted) {
         try {
           await windowManager.focus();
+          if (_windows) await _presentation.fullscreenHint(state.fullScreen);
         } catch (error) {
           debugPrint('Window focus failed: $error');
         }
@@ -253,6 +271,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
       state = LargeScreenState(
           active: state.active,
           fullScreen: fullScreen,
+          contentVisible: state.contentVisible,
           busy: state.busy,
           error: state.error);
     }

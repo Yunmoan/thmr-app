@@ -20,6 +20,8 @@ import 'package:thmr_app/features/large_screen/large_screen_controller.dart';
 import 'package:thmr_app/features/large_screen/large_screen_player.dart';
 import 'package:thmr_app/features/large_screen/large_screen_surface.dart';
 import 'package:thmr_app/features/mini/mini_player.dart';
+import 'package:thmr_app/features/mini/desktop_player_surface.dart';
+import 'package:thmr_app/core/theme/thmr_focus_ring.dart';
 
 StationStatus _status({String title = '幽雅に咲かせ、墨染の桜', int queueCount = 1}) =>
     StationStatus.fromJson({
@@ -83,6 +85,7 @@ class _Harness {
   final navigator = GlobalKey<NavigatorState>();
   final scroll = ScrollController();
   final mainFocus = FocusNode();
+  final surfaceRevision = ValueNotifier(0);
   final station = _Station();
   final playback = _Playback();
   final calls = <bool>[];
@@ -105,6 +108,7 @@ class _Harness {
   bool failExit = false;
   bool resizeOnTransition = false;
   bool deferFullScreenEvent = false;
+  EdgeInsets workAreaInsets = EdgeInsets.zero;
   Completer<void>? enterGate;
   Completer<void>? frameGate;
   bool concealed = false;
@@ -114,6 +118,7 @@ class _Harness {
   Future<void> mount(
       {Size size = const Size(1280, 720),
       double scale = 1,
+      bool desktopRoot = false,
       bool reducedMotion = false}) async {
     SharedPreferences.setMockInitialValues({});
     tester.view.devicePixelRatio = 1;
@@ -147,6 +152,14 @@ class _Harness {
     });
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         const MethodChannel('thmr/window_presentation'), (call) async {
+      if (call.method == 'workAreaInsets') {
+        return {
+          'left': workAreaInsets.left,
+          'top': workAreaInsets.top,
+          'right': workAreaInsets.right,
+          'bottom': workAreaInsets.bottom
+        };
+      }
       if (call.method == 'conceal') concealed = true;
       if (call.method == 'waitForFrame') await frameGate?.future;
       if (call.method == 'flushFrame') {
@@ -163,6 +176,7 @@ class _Harness {
       container.dispose();
       scroll.dispose();
       mainFocus.dispose();
+      surfaceRevision.dispose();
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -173,32 +187,54 @@ class _Harness {
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
+        theme: ThemeData(
+          textButtonTheme: TextButtonThemeData(
+              style: ButtonStyle(
+                  backgroundBuilder:
+                      desktopRoot ? ThmrFocusRing.buttonBuilder : null)),
+          iconButtonTheme: IconButtonThemeData(
+              style: ButtonStyle(
+                  backgroundBuilder: desktopRoot
+                      ? ThmrFocusRing.circularButtonBuilder
+                      : null)),
+        ),
         navigatorKey: navigator,
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
               textScaler: TextScaler.linear(scale),
               disableAnimations: reducedMotion),
-          child: AppInput(navigatorKey: navigator, child: child!),
+          child: AppInput(
+              navigatorKey: navigator,
+              child: desktopRoot
+                  ? Consumer(
+                      builder: (context, ref, _) => ThmrFocusLayer(
+                          reserveEdgeSpace: !ref.watch(
+                              largeScreenProvider.select((s) => s.active)),
+                          child: DesktopPlayerSurface(child: child!)))
+                  : child!),
         ),
-        home: LargeScreenSurface(
-          child: Scaffold(
-            body: Column(children: [
-              TextButton(
-                  focusNode: mainFocus,
-                  onPressed: () {},
-                  child: const Text('main control')),
-              const LargeScreenButton(),
-              Expanded(
-                child: ListView.builder(
-                    key: const ValueKey('retained-list'),
-                    controller: scroll,
-                    itemCount: 100,
-                    itemExtent: 50,
-                    itemBuilder: (_, i) => Text('row $i')),
-              ),
-            ]),
-          ),
-        ),
+        home: ValueListenableBuilder(
+            valueListenable: surfaceRevision,
+            builder: (_, revision, __) => LargeScreenSurface(
+                  key: ValueKey(revision),
+                  child: Scaffold(
+                    body: Column(children: [
+                      TextButton(
+                          focusNode: mainFocus,
+                          onPressed: () {},
+                          child: const Text('main control')),
+                      const LargeScreenButton(),
+                      Expanded(
+                        child: ListView.builder(
+                            key: const ValueKey('retained-list'),
+                            controller: scroll,
+                            itemCount: 100,
+                            itemExtent: 50,
+                            itemBuilder: (_, i) => Text('row $i')),
+                      ),
+                    ]),
+                  ),
+                )),
       ),
     ));
     await tester.pumpAndSettle();
@@ -213,6 +249,86 @@ class _Harness {
 }
 
 void main() {
+  testWidgets('all stage controls stay inside the Windows taskbar work area',
+      (tester) async {
+    final h = _Harness(tester)
+      ..workAreaInsets = const EdgeInsets.only(bottom: 54, left: 40);
+    await h.mount(size: const Size(1920, 1080), desktopRoot: true);
+    await h.change(true);
+    final controls =
+        tester.getRect(find.byKey(const ValueKey('large-screen-controls')));
+    expect(controls.bottom, lessThanOrEqualTo(1080 - 54));
+    expect(
+        tester
+            .getRect(find.byKey(const ValueKey('large-screen-window-drag')))
+            .left,
+        greaterThanOrEqualTo(40));
+    expect(find.byTooltip('收起大屏模式').hitTestable(), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  for (final duringEntrance in [false, true]) {
+    testWidgets(
+        'remounting during stage entry never strands opacity at zero: entrance=$duringEntrance',
+        (tester) async {
+      final h = _Harness(tester)..frameGate = Completer<void>();
+      await h.mount();
+      final entering = h.controller.change(true);
+      for (var i = 0; i < 40 && !h.concealed; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      await tester.pump();
+      if (duringEntrance) {
+        h.frameGate!.complete();
+        for (var i = 0; i < 12 && h.revealed.isEmpty; i++) {
+          await tester.pump(const Duration(milliseconds: 10));
+        }
+        await tester.pump(const Duration(milliseconds: 40));
+      }
+      h.surfaceRevision.value++;
+      await tester.pump();
+      if (!duringEntrance) h.frameGate!.complete();
+      await tester.pumpAndSettle();
+      await entering;
+      final fade = find
+          .descendant(
+              of: find.byKey(const ValueKey('large-mode-transition')),
+              matching: find.byType(FadeTransition))
+          .first;
+      expect(h.container.read(largeScreenProvider).busy, isFalse);
+      expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
+      expect(find.byTooltip('收起大屏模式').hitTestable(), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }
+
+  testWidgets(
+      'production desktop wrappers reveal all stage content after entry',
+      (tester) async {
+    final h = _Harness(tester)..resizeOnTransition = true;
+    await h.mount(desktopRoot: true);
+    final previousHighlight = FocusManager.instance.highlightStrategy;
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(
+        () => FocusManager.instance.highlightStrategy = previousHighlight);
+    final retained =
+        tester.element(find.byKey(const ValueKey('retained-list')));
+    h.mainFocus.requestFocus();
+    await tester.pumpAndSettle();
+    await h.change(true);
+    final fade = find
+        .descendant(
+            of: find.byKey(const ValueKey('large-mode-transition')),
+            matching: find.byType(FadeTransition))
+        .first;
+    expect(h.container.read(largeScreenProvider).busy, isFalse);
+    expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
+    expect(find.byTooltip('收起大屏模式').hitTestable(), findsOneWidget);
+    await h.change(false);
+    expect(tester.element(find.byKey(const ValueKey('retained-list'))),
+        same(retained));
+    expect(h.mainFocus.hasFocus, isTrue);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
   testWidgets('asynchronous native fullscreen waits for the completion event',
       (tester) async {
     final h = _Harness(tester)..deferFullScreenEvent = true;

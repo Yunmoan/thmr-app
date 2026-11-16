@@ -17,6 +17,22 @@ class WindowPresentation {
 
   Future<void> conceal() => _channel.invokeMethod<void>('conceal');
 
+  Future<void> fullscreenHint(bool fullscreen) =>
+      _channel.invokeMethod<void>('fullscreenHint', fullscreen);
+
+  /// Windows does not report taskbar/work-area insets through MediaQuery.
+  Future<EdgeInsets> workAreaInsets() async {
+    final values =
+        await _channel.invokeMapMethod<String, num>('workAreaInsets');
+    double inset(String name) {
+      final value = values?[name]?.toDouble() ?? 0;
+      return value.isFinite ? value.clamp(0, 240) : 0;
+    }
+
+    return EdgeInsets.fromLTRB(
+        inset('left'), inset('top'), inset('right'), inset('bottom'));
+  }
+
   Future<void> setMaximized(bool maximized) =>
       _channel.invokeMethod<void>('setMaximized', maximized);
 

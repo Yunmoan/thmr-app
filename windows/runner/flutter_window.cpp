@@ -1,6 +1,7 @@
 #include "flutter_window.h"
 
 #include <dwmapi.h>
+#include <shobjidl.h>
 #include <flutter/standard_method_codec.h>
 
 #include <optional>
@@ -110,7 +111,45 @@ void FlutterWindow::RegisterWindowPresentation() {
       [this](const flutter::MethodCall<flutter::EncodableValue>& call,
              std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
         const auto& method = call.method_name();
-        if (method == "startupReady") {
+        if (method == "fullscreenHint") {
+          const auto* full_screen = call.arguments() ? std::get_if<bool>(call.arguments()) : nullptr;
+          if (!full_screen) {
+            result->Error("invalid_argument", "Expected a fullscreen bool");
+            return;
+          }
+          ITaskbarList2* taskbar = nullptr;
+          auto hr = CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER,
+                                     IID_PPV_ARGS(&taskbar));
+          if (SUCCEEDED(hr)) {
+            hr = taskbar->HrInit();
+            if (SUCCEEDED(hr)) hr = taskbar->MarkFullscreenWindow(GetHandle(), *full_screen);
+            taskbar->Release();
+          }
+          if (FAILED(hr)) {
+            result->Error("fullscreen_hint_failed", "Cannot notify Windows shell");
+          } else {
+            result->Success();
+          }
+        } else if (method == "workAreaInsets") {
+          auto monitor = MONITORINFO{};
+          monitor.cbSize = sizeof(monitor);
+          RECT client{};
+          if (!GetClientRect(GetHandle(), &client) ||
+              !GetMonitorInfo(MonitorFromWindow(GetHandle(), MONITOR_DEFAULTTONEAREST), &monitor)) {
+            result->Error("display_metrics_failed", "Cannot read window work area");
+            return;
+          }
+          POINT origin{client.left, client.top};
+          ClientToScreen(GetHandle(), &origin);
+          const double scale = static_cast<double>(GetDpiForWindow(GetHandle())) / 96.0;
+          const auto inset = [scale](LONG value) { return value > 0 ? value / scale : 0.0; };
+          result->Success(flutter::EncodableValue(flutter::EncodableMap{
+              {flutter::EncodableValue("left"), flutter::EncodableValue(inset(monitor.rcWork.left - origin.x))},
+              {flutter::EncodableValue("top"), flutter::EncodableValue(inset(monitor.rcWork.top - origin.y))},
+              {flutter::EncodableValue("right"), flutter::EncodableValue(inset(origin.x + client.right - monitor.rcWork.right))},
+              {flutter::EncodableValue("bottom"), flutter::EncodableValue(inset(origin.y + client.bottom - monitor.rcWork.bottom))},
+          }));
+        } else if (method == "startupReady") {
           startup_ready_ = true;
           if (activation_pending_) RequestActivation();
           result->Success();

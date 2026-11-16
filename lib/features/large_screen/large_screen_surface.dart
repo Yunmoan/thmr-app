@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/platform/desktop_window.dart';
 import '../../core/theme/thmr_motion.dart';
+import '../../core/platform/window_presentation.dart';
 import 'large_screen_controller.dart';
 import 'large_screen_player.dart';
 
@@ -27,12 +30,31 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
   late final LargeScreenController _mode;
   late final AnimationController _standard;
   bool _standardVisible = true;
+  EdgeInsets _workAreaInsets = EdgeInsets.zero;
+  int _metricsRevision = 0;
+
+  Future<void> _refreshWorkArea() async {
+    if (!mounted || Theme.of(context).platform != TargetPlatform.windows)
+      return;
+    final revision = ++_metricsRevision;
+    try {
+      final insets = await WindowPresentation().workAreaInsets();
+      if (mounted &&
+          revision == _metricsRevision &&
+          insets != _workAreaInsets) {
+        setState(() => _workAreaInsets = insets);
+      }
+    } catch (error) {
+      debugPrint('Window work-area metrics unavailable: $error');
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _mode = ref.read(largeScreenProvider.notifier);
-    _standardVisible = !ref.read(largeScreenProvider).active;
+    final mode = ref.read(largeScreenProvider);
+    _standardVisible = !mode.active && mode.contentVisible;
     _standard = AnimationController(
         vsync: this,
         duration: ThmrMotion.duration,
@@ -64,25 +86,38 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
   @override
   void dispose() {
     if (hasDesktopWindowControls) windowManager.removeListener(this);
-    _mode.animateStandard = null;
+    if (_mode.animateStandard == _animateStandard) {
+      _mode.animateStandard = null;
+    }
     _standard.dispose();
     _stageFocus.dispose();
     super.dispose();
   }
 
   @override
-  void onWindowLeaveFullScreen() =>
-      ref.read(largeScreenProvider.notifier).nativeFullScreenChanged(false);
+  void onWindowLeaveFullScreen() {
+    ref.read(largeScreenProvider.notifier).nativeFullScreenChanged(false);
+    unawaited(_refreshWorkArea());
+  }
 
   @override
-  void onWindowEnterFullScreen() =>
-      ref.read(largeScreenProvider.notifier).nativeFullScreenChanged(true);
+  void onWindowEnterFullScreen() {
+    ref.read(largeScreenProvider.notifier).nativeFullScreenChanged(true);
+    unawaited(_refreshWorkArea());
+  }
+
+  @override
+  void onWindowResize() => unawaited(_refreshWorkArea());
+  @override
+  void onWindowMoved() => unawaited(_refreshWorkArea());
 
   @override
   Widget build(BuildContext context) {
     final mode = ref.watch(largeScreenProvider);
     final active = mode.active;
     ref.listen(largeScreenProvider, (previous, next) {
+      if (next.active && previous?.active != true)
+        unawaited(_refreshWorkArea());
       if (next.active &&
           previous?.active != true &&
           _previousFocus?.context == null) {
@@ -148,7 +183,9 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
           ),
         ),
         if (active)
-          FocusScope(node: _stageFocus, child: const LargeScreenPlayer()),
+          FocusScope(
+              node: _stageFocus,
+              child: LargeScreenPlayer(safeInsets: _workAreaInsets)),
       ]);
     });
   }

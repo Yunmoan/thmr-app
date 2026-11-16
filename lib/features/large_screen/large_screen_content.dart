@@ -212,6 +212,7 @@ class _Cover extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: tokens.panelBorder)),
       child: ThmrAnimatedContent(
+          alignment: Alignment.center,
           child: RepaintBoundary(
               key: ValueKey(url),
               child: Image(

@@ -30,7 +30,8 @@ final _stageThemeProvider = Provider.family<ThemeData, ThemeMode>((ref, mode) {
 /// The existing THMR paper, character illustration and typography, presented
 /// without navigation. The shared player and station remain mounted throughout.
 class LargeScreenPlayer extends ConsumerStatefulWidget {
-  const LargeScreenPlayer({super.key});
+  const LargeScreenPlayer({super.key, this.safeInsets = EdgeInsets.zero});
+  final EdgeInsets safeInsets;
 
   @override
   ConsumerState<LargeScreenPlayer> createState() => _LargeScreenPlayerState();
@@ -50,11 +51,11 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
   void initState() {
     super.initState();
     _mode = ref.read(largeScreenProvider.notifier);
-    _presentationVisible = !ref.read(largeScreenProvider).busy;
+    _presentationVisible = ref.read(largeScreenProvider).contentVisible;
     _presentation = AnimationController(
         vsync: this,
         duration: ThmrMotion.duration,
-        value: ref.read(largeScreenProvider).busy ? 0 : 1);
+        value: _presentationVisible ? 1 : 0);
     _mode.animatePresentation = _animatePresentation;
     largeScreenRevealRequests.addListener(_reveal);
     _reveal();
@@ -100,7 +101,9 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
   void dispose() {
     _hideTimer?.cancel();
     largeScreenRevealRequests.removeListener(_reveal);
-    _mode.animatePresentation = null;
+    if (_mode.animatePresentation == _animatePresentation) {
+      _mode.animatePresentation = null;
+    }
     _presentation.dispose();
     _controlsFocus.dispose();
     super.dispose();
@@ -148,6 +151,7 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
             key: const ValueKey('large-mode-transition'),
             animation: _presentation,
             child: SafeArea(
+              minimum: widget.safeInsets,
               child: LargeScreenContent(
                 settings: settings,
                 station: station,
