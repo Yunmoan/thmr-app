@@ -4,6 +4,7 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import '../../core/theme/thmr_motion.dart';
 
 import '../../shared/widgets/loading_skeleton.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -120,7 +121,8 @@ class _SharedCollectionScreenState
     } catch (_) {
       if (!mounted) return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context).showThmrSnackBar(
+      context,
       const SnackBar(content: Text('无法打开浏览器，请检查设备是否安装浏览器')),
     );
   }

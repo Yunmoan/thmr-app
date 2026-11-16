@@ -2,6 +2,7 @@
 // Mirrors the web dock bar: cover / title / bitrate / play / volume / open.
 
 import 'package:flutter/material.dart';
+import '../../core/theme/thmr_motion.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/player/playback_controller.dart';
@@ -222,6 +223,7 @@ class _DockBitrate extends ConsumerWidget {
     return FocusOutline(
         radius: 6,
         child: PopupMenuButton<String>(
+          popUpAnimationStyle: ThmrMotion.style(context),
           position: PopupMenuPosition.over,
           onSelected: (id) =>
               ref.read(settingsProvider.notifier).setBitrate(stationId, id),

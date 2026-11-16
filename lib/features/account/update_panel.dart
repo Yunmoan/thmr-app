@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../core/theme/thmr_motion.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -299,6 +300,7 @@ String _formatTime(DateTime time) =>
 
 Future<void> showAppUpdate(BuildContext context, AppRelease release) =>
     showDialog<void>(
+      animationStyle: ThmrMotion.style(context),
       context: context,
       builder: (context) => Consumer(builder: (context, ref, _) {
         final state = ref.watch(appUpdateProvider);
@@ -494,6 +496,6 @@ Future<void> _openUpdateLink(BuildContext context, Uri url) async {
   } catch (_) {/* Report a missing browser handler below. */}
   if (context.mounted) {
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('无法打开系统浏览器')));
+        .showThmrSnackBar(context, const SnackBar(content: Text('无法打开系统浏览器')));
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/thmr_motion.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -67,8 +68,8 @@ class BitrateRow extends ConsumerWidget {
             final url = ref.read(streamUrlProvider);
             if (url == null) return;
             Clipboard.setData(ClipboardData(text: url));
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text('收听链接已复制')));
+            ScaffoldMessenger.of(context).showThmrSnackBar(
+                context, const SnackBar(content: Text('收听链接已复制')));
           },
         ),
       ],

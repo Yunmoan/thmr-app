@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../core/theme/thmr_motion.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/network_probe.dart';
@@ -82,12 +83,13 @@ class _DiagnosticsScreenState extends ConsumerState<DiagnosticsScreen> {
       final saved = await ref.read(diagnosticReportSaverProvider)(
           text, 'thmr-diagnostics-$stamp.txt');
       if (saved != null && mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('诊断报告已保存')));
+        ScaffoldMessenger.of(context).showThmrSnackBar(
+            context, const SnackBar(content: Text('诊断报告已保存')));
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showThmrSnackBar(
+          context,
           const SnackBar(content: Text('报告保存失败，请检查保存位置后重试')),
         );
       }

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../core/theme/thmr_motion.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../core/theme/thmr_theme.dart';
@@ -8,6 +9,7 @@ import 'focus_outline.dart';
 import 'thmr_panel.dart';
 
 Future<void> showInputHelp(BuildContext context) => showDialog<void>(
+      animationStyle: ThmrMotion.style(context),
       context: context,
       builder: (_) => const InputHelpDialog(),
     );

@@ -47,10 +47,8 @@ class ThmrBackground extends StatelessWidget {
                   alignment: alignment,
                   child: Opacity(
                     opacity: 0.9,
-                    child: AnimatedSwitcher(
-                      duration: motionDuration,
-                      switchInCurve: ThmrMotion.enterCurve,
-                      switchOutCurve: ThmrMotion.exitCurve,
+                    child: ThmrAnimatedContent(
+                      alignment: alignment,
                       child: Image.asset(
                         asset,
                         key: ValueKey(asset),

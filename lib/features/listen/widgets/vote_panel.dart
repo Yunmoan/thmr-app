@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../core/theme/thmr_motion.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/radio_api.dart';
@@ -248,6 +249,6 @@ class _VotePanelState extends ConsumerState<VotePanel> {
   void _notify(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showThmrSnackBar(context, SnackBar(content: Text(message)));
   }
 }

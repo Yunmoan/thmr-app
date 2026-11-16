@@ -21,13 +21,20 @@ class LargeScreenProgress extends StatefulWidget {
 class _LargeScreenProgressState extends State<LargeScreenProgress> {
   late final Timer _timer;
   DateTime _receivedAt = DateTime.now();
+  bool _visible = true;
 
   @override
   void initState() {
     super.initState();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (widget.current != null) setState(() {});
+      if (_visible && widget.current != null) setState(() {});
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _visible = TickerMode.valuesOf(context).enabled;
   }
 
   @override

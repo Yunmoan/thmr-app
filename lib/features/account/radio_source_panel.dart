@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/thmr_motion.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/widgets/focus_outline.dart';
@@ -19,10 +20,12 @@ class RadioSourcePanel extends ConsumerWidget {
           !TickerMode.valuesOf(context).enabled) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        behavior: SnackBarBehavior.floating,
-        content: Text(next),
-      ));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context,
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            content: Text(next),
+          ));
     });
     final source = ref.watch(radioSourceProvider);
     final preference =

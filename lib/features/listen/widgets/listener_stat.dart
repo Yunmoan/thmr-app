@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/state/listener_provider.dart';
+import '../../../core/theme/thmr_motion.dart';
 import '../../../core/theme/thmr_theme.dart';
 
 class ListenerStat extends ConsumerStatefulWidget {
@@ -21,19 +22,20 @@ class ListenerStat extends ConsumerStatefulWidget {
 }
 
 class _ListenerStatState extends ConsumerState<ListenerStat> {
-  late final Timer _timer;
+  Timer? _timer;
   bool _showSite = false;
-  bool _visible = true;
+  bool _canRotate = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(milliseconds: 4200), (_) {
-      if (!_visible ||
-          widget.listeners == null ||
-          ref.read(siteListenersProvider) == null) {
-        return;
-      }
+  void _syncTimer() {
+    if (!_canRotate ||
+        widget.listeners == null ||
+        ref.read(siteListenersProvider) == null) {
+      _timer?.cancel();
+      _timer = null;
+      _showSite = false;
+      return;
+    }
+    _timer ??= Timer.periodic(const Duration(milliseconds: 4200), (_) {
       setState(() => _showSite = !_showSite);
     });
   }
@@ -41,18 +43,22 @@ class _ListenerStatState extends ConsumerState<ListenerStat> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _visible = TickerMode.valuesOf(context).enabled;
+    _canRotate = TickerMode.valuesOf(context).enabled &&
+        !MediaQuery.disableAnimationsOf(context) &&
+        !MediaQuery.accessibleNavigationOf(context);
+    _syncTimer();
   }
 
   @override
   void didUpdateWidget(covariant ListenerStat oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.listeners == null) _showSite = false;
+    _syncTimer();
   }
 
   @override
   void dispose() {
-    _timer.cancel();
+    _timer?.cancel();
     super.dispose();
   }
 
@@ -60,16 +66,14 @@ class _ListenerStatState extends ConsumerState<ListenerStat> {
   Widget build(BuildContext context) {
     final site = ref.watch(siteListenersProvider);
     ref.listen(siteListenersProvider, (_, total) {
-      if (total == null && _showSite) setState(() => _showSite = false);
+      setState(_syncTimer);
     });
 
     final showSite = _showSite && site != null && widget.listeners != null;
     final theme = Theme.of(context);
     final labelStyle =
         theme.textTheme.labelSmall?.copyWith(color: theme.thmr.mutedInk);
-    final duration = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : const Duration(milliseconds: 520);
+    final duration = ThmrMotion.of(context);
     final channelCount = '${widget.listeners ?? '—'}';
     final siteCount = '${site ?? '—'}';
 
@@ -133,7 +137,7 @@ class _ListenerLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const curve = Cubic(0.22, 0.8, 0.22, 1);
+    const curve = ThmrMotion.enterCurve;
     return ClipRect(
       child: Stack(
         alignment: AlignmentDirectional.centerEnd,

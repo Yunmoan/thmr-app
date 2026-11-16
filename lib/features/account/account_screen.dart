@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
+import '../../core/theme/thmr_motion.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/widgets/focus_outline.dart';
 import '../../core/platform/desktop_window.dart';
@@ -68,11 +69,12 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     try {
       await ref.read(authProvider.notifier).signInWithToken(token);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('登录成功,欢迎回到幻想乡')));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context, const SnackBar(content: Text('登录成功,欢迎回到幻想乡')));
       final user = ref.read(authProvider).user;
       if (user?.needsNickname == true) {
         await showDialog<void>(
+          animationStyle: ThmrMotion.style(context),
           context: context,
           barrierDismissible: false,
           builder: (dialogContext) => AlertDialog(
@@ -92,8 +94,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       }
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('登录状态校验失败,请重试')));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context, const SnackBar(content: Text('登录状态校验失败,请重试')));
     }
   }
 
@@ -574,7 +576,8 @@ class _MiniEdgeChoice extends StatelessWidget {
             onTap: onTap,
             borderRadius: BorderRadius.circular(9),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
+              duration: ThmrMotion.of(context),
+              curve: ThmrMotion.enterCurve,
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 9),
               decoration: BoxDecoration(
                 color: selected ? tokens.accentSoft : tokens.panelSoft,
@@ -700,6 +703,7 @@ Future<void> _editNickname(
   while (true) {
     if (!context.mounted) return;
     final submitted = await showDialog<bool>(
+      animationStyle: ThmrMotion.style(context),
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
@@ -731,8 +735,8 @@ Future<void> _editNickname(
     final name = controller.text.trim();
     if (name.length < 2) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('昵称至少 2 个字符')));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context, const SnackBar(content: Text('昵称至少 2 个字符')));
       continue;
     }
     try {
@@ -740,13 +744,13 @@ Future<void> _editNickname(
       ok = true;
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('保存失败,昵称可能包含违规内容')));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context, const SnackBar(content: Text('保存失败,昵称可能包含违规内容')));
       continue;
     }
     if (ok && context.mounted) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('昵称已更新')));
+          .showThmrSnackBar(context, const SnackBar(content: Text('昵称已更新')));
     }
     return;
   }
@@ -811,6 +815,7 @@ class _SignedInBody extends ConsumerWidget {
             TextButton.icon(
               onPressed: () async {
                 final confirmed = await showDialog<bool>(
+                  animationStyle: ThmrMotion.style(context),
                   context: context,
                   builder: (context) => AlertDialog(
                     title: const Text('退出登录'),

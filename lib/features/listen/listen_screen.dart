@@ -293,12 +293,10 @@ class _Hero extends StatelessWidget {
         ],
       ),
     );
-    return MediaQuery.disableAnimationsOf(context)
-        ? panel
-        : AnimatedSize(
-            duration: ThmrMotion.duration,
-            alignment: Alignment.topLeft,
-            child: panel);
+    return ThmrAnimatedSize(
+      alignment: Alignment.topLeft,
+      child: panel,
+    );
   }
 }
 
@@ -474,49 +472,12 @@ class _ChannelSurface extends StatelessWidget {
 
 class _ChannelTransition extends StatelessWidget {
   const _ChannelTransition({required this.child});
-
   final Widget child;
-
   @override
-  Widget build(BuildContext context) {
-    if (MediaQuery.disableAnimationsOf(context)) return child;
-
-    Widget layer(Widget transition, {required bool outgoing}) {
-      return TickerMode(
-        key: transition.key,
-        enabled: !outgoing,
-        child: IgnorePointer(
-          ignoring: outgoing,
-          child: ExcludeFocus(
-            excluding: outgoing,
-            child: ExcludeSemantics(
-              excluding: outgoing,
-              child: BackdropGroup(child: transition),
-            ),
-          ),
-        ),
+  Widget build(BuildContext context) => ThmrAnimatedSize(
+        alignment: Alignment.topLeft,
+        child: ThmrAnimatedContent(child: child),
       );
-    }
-
-    return AnimatedSwitcher(
-      duration: ThmrMotion.duration,
-      reverseDuration: ThmrMotion.exitDuration,
-      switchInCurve: ThmrMotion.enterCurve,
-      switchOutCurve: ThmrMotion.exitCurve,
-      layoutBuilder: (current, previous) => Stack(
-        alignment: AlignmentDirectional.topStart,
-        children: [
-          for (final outgoing in previous) layer(outgoing, outgoing: true),
-          if (current != null) layer(current, outgoing: false),
-        ],
-      ),
-      transitionBuilder: (child, animation) => FadeTransition(
-        opacity: animation,
-        child: child,
-      ),
-      child: child,
-    );
-  }
 }
 
 class _ChannelPlaceholder extends StatelessWidget {

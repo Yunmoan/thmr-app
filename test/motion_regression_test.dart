@@ -36,6 +36,81 @@ class _MotionHostState extends State<_MotionHost>
 }
 
 void main() {
+  testWidgets(
+      'size changes snap without re-layout errors and retain input state',
+      (tester) async {
+    final reduced = ValueNotifier(false);
+    final height = ValueNotifier(100.0);
+    addTearDown(reduced.dispose);
+    addTearDown(height.dispose);
+    await tester.pumpWidget(MaterialApp(
+        home: ValueListenableBuilder(
+            valueListenable: reduced,
+            builder: (_, reduce, __) => MediaQuery(
+                data: MediaQueryData(disableAnimations: reduce),
+                child: Scaffold(
+                    body: Align(
+                        alignment: Alignment.topLeft,
+                        child: ValueListenableBuilder(
+                            valueListenable: height,
+                            builder: (_, value, __) => ThmrAnimatedSize(
+                                child: SizedBox(
+                                    width: 250,
+                                    height: value,
+                                    child: const TextField())))))))));
+    final input = tester.state(find.byType(TextField));
+    await tester.enterText(find.byType(TextField), 'saved');
+    height.value = 150;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    reduced.value = true;
+    await tester.pump();
+    height.value = 75;
+    await tester.pump();
+    expect(tester.getSize(find.byType(ThmrAnimatedSize)).height, 75);
+    expect(tester.state(find.byType(TextField)), same(input));
+    expect(find.text('saved'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    reduced.value = false;
+    await tester.pumpAndSettle();
+    expect(tester.state(find.byType(TextField)), same(input));
+  });
+
+  for (final reduced in [false, true]) {
+    testWidgets('snackbars use shared entrance and exit with reduced=$reduced',
+        (tester) async {
+      late BuildContext pageContext;
+      await tester.pumpWidget(MaterialApp(
+          home: MediaQuery(
+        data: MediaQueryData(disableAnimations: reduced),
+        child: Scaffold(body: Builder(builder: (context) {
+          pageContext = context;
+          return const SizedBox.expand();
+        })),
+      )));
+      final messenger = ScaffoldMessenger.of(pageContext);
+      final shown = messenger.showThmrSnackBar(
+          pageContext, const SnackBar(content: Text('saved')));
+      await tester.pump();
+      final animation =
+          tester.widget<SnackBar>(find.byType(SnackBar)).animation!;
+      expect(animation.value, reduced ? 1 : 0);
+      if (!reduced) {
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(animation.value, inExclusiveRange(0, 1));
+        await tester.pump(ThmrMotion.duration);
+      }
+      shown.close();
+      await tester.pump();
+      if (!reduced) {
+        await tester.pump(const Duration(milliseconds: 80));
+        expect(animation.value, inExclusiveRange(0, 1));
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('saved'), findsNothing);
+    });
+  }
+
   testWidgets('reducing motion during a replacement finishes it immediately',
       (tester) async {
     final reduced = ValueNotifier(false);

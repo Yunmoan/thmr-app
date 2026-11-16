@@ -26,6 +26,7 @@ void main() {
           builder: (_, value, __) => PersistentTabPage(
               active: value, child: TextField(focusNode: focus))),
     )));
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(TextField));
     await tester.pump();
     expect(focus.hasFocus, isTrue);

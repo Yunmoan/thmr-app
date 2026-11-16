@@ -1,6 +1,7 @@
 // Collection detail: items, sorting, share toggle + link bar, export.
 
 import 'package:flutter/material.dart';
+import '../../core/theme/thmr_motion.dart';
 
 import '../../shared/widgets/loading_skeleton.dart';
 import 'package:flutter/services.dart';
@@ -146,8 +147,8 @@ class _CollectionDetailScreenState
     } catch (error) {
       await _markOfflineIfNetwork(error);
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('移除失败,稍后再试')));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context, const SnackBar(content: Text('移除失败,稍后再试')));
     }
   }
 
@@ -172,7 +173,7 @@ class _CollectionDetailScreenState
     );
     if (!mounted) return;
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('歌曲信息已复制')));
+        .showThmrSnackBar(context, const SnackBar(content: Text('歌曲信息已复制')));
   }
 
   void _showFeedback(CollectionItem item) {
@@ -189,6 +190,7 @@ class _CollectionDetailScreenState
       final content = await api.exportContent(widget.collectionId, format);
       if (!context.mounted) return;
       showDialog<void>(
+        animationStyle: ThmrMotion.style(context),
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: Text('导出 ${format.toUpperCase()}'),
@@ -206,8 +208,8 @@ class _CollectionDetailScreenState
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: content));
                 Navigator.of(dialogContext).pop();
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
+                ScaffoldMessenger.of(context).showThmrSnackBar(
+                    context, const SnackBar(content: Text('已复制到剪贴板')));
               },
               child: const Text('复制全部'),
             ),
@@ -220,8 +222,8 @@ class _CollectionDetailScreenState
     } catch (error) {
       await _markOfflineIfNetwork(error);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('导出失败,稍后再试')));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context, const SnackBar(content: Text('导出失败,稍后再试')));
     }
   }
 
@@ -235,6 +237,7 @@ class _CollectionDetailScreenState
         title: Text(widget.name),
         actions: [
           PopupMenuButton<String>(
+            popUpAnimationStyle: ThmrMotion.style(context),
             tooltip: '排序',
             icon: const Icon(Icons.sort_rounded),
             onSelected: (v) {
@@ -260,6 +263,7 @@ class _CollectionDetailScreenState
             ],
           ),
           PopupMenuButton<String>(
+            popUpAnimationStyle: ThmrMotion.style(context),
             tooltip: '导出',
             enabled: !_offline,
             icon: const Icon(Icons.ios_share_rounded),
@@ -304,7 +308,8 @@ class _CollectionDetailScreenState
                         } catch (error) {
                           await _markOfflineIfNetwork(error);
                           if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          ScaffoldMessenger.of(context).showThmrSnackBar(
+                              context,
                               const SnackBar(content: Text('操作失败,稍后再试')));
                         }
                       },
@@ -494,8 +499,8 @@ class _ShareLinkBar extends StatelessWidget {
             icon: const Icon(Icons.copy_rounded, size: 16),
             onPressed: () {
               Clipboard.setData(ClipboardData(text: url));
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(const SnackBar(content: Text('分享链接已复制')));
+              ScaffoldMessenger.of(context).showThmrSnackBar(
+                  context, const SnackBar(content: Text('分享链接已复制')));
             },
           ),
           IconButton(

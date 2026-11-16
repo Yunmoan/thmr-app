@@ -236,6 +236,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
     final trayAvailable = ref.read(desktopTrayAvailableProvider);
     final isMacOS = _tray.platform == TargetPlatform.macOS;
     return showDialog<(CloseAction, bool)>(
+      animationStyle: ThmrMotion.style(context),
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
@@ -417,11 +418,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
 
   /// 底部常驻播放条:非收听页时出现(AnimatedSize 平滑展开)。
   Widget _dockBar({required bool compact}) {
-    return AnimatedSize(
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : ThmrMotion.duration,
-      curve: ThmrMotion.enterCurve,
+    return ThmrAnimatedSize(
       alignment: Alignment.bottomCenter,
       child: _index == 0
           ? const SizedBox(width: double.infinity)

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/thmr_motion.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -30,6 +31,7 @@ Future<void> showFeedbackSheet(
   String? stationId,
 }) {
   return showModalBottomSheet<void>(
+    sheetAnimationStyle: ThmrMotion.style(context),
     context: context,
     isScrollControlled: true,
     builder: (_) => Padding(
@@ -84,7 +86,7 @@ class _FeedbackFormState extends ConsumerState<_FeedbackForm> {
   Future<void> _submit() async {
     if (_contact.text.trim().isEmpty) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('请填写联系方式')));
+          .showThmrSnackBar(context, const SnackBar(content: Text('请填写联系方式')));
       return;
     }
     setState(() => _busy = true);
@@ -101,19 +103,21 @@ class _FeedbackFormState extends ConsumerState<_FeedbackForm> {
           .then((p) => p.setString(_contactKey, _contact.text.trim()));
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(result.autoSkipped
-            ? '感谢反馈!该曲目已累积多次异常反馈,已为你切换曲目'
-            : '反馈已提交,感谢守护幻想乡的放送质量'),
-      ));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context,
+          SnackBar(
+            content: Text(result.autoSkipped
+                ? '感谢反馈!该曲目已累积多次异常反馈,已为你切换曲目'
+                : '反馈已提交,感谢守护幻想乡的放送质量'),
+          ));
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('提交失败:${e.message}')));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context, SnackBar(content: Text('提交失败:${e.message}')));
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('网络异常,稍后再试')));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context, const SnackBar(content: Text('网络异常,稍后再试')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

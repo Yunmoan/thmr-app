@@ -61,8 +61,8 @@ class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
   Future<void> _toggleFavorite(CurrentTrack cur) async {
     final auth = ref.read(authProvider);
     if (!auth.signedIn) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('登录后即可收藏曲目,在「我的」页登录')));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context, const SnackBar(content: Text('登录后即可收藏曲目,在「我的」页登录')));
       return;
     }
     final api = ref.read(authProvider.notifier).api;
@@ -83,7 +83,8 @@ class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
           final cols = await api.collections();
           if (!mounted) return;
           if (cols.isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
+            ScaffoldMessenger.of(context).showThmrSnackBar(
+              context,
               const SnackBar(content: Text('还没有收藏夹,请先在「收藏夹」页新建')),
             );
             return;
@@ -96,19 +97,19 @@ class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
     } on ApiException catch (e) {
       if (!mounted) return;
       if (e.statusCode == 409) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('这首已经在收藏夹里了')));
+        ScaffoldMessenger.of(context).showThmrSnackBar(
+            context, const SnackBar(content: Text('这首已经在收藏夹里了')));
       } else if (e.statusCode == 401) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('登录已过期,请重新登录')));
+        ScaffoldMessenger.of(context).showThmrSnackBar(
+            context, const SnackBar(content: Text('登录已过期,请重新登录')));
       } else {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('操作失败:${e.message}')));
+        ScaffoldMessenger.of(context).showThmrSnackBar(
+            context, SnackBar(content: Text('操作失败:${e.message}')));
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('网络异常,稍后再试')));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context, const SnackBar(content: Text('网络异常,稍后再试')));
     } finally {
       if (mounted) {
         ref.invalidate(favoritesStatusProvider);
@@ -191,9 +192,7 @@ class _Cover96 extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: AnimatedSwitcher(
-          duration: ThmrMotion.duration,
-          switchInCurve: Curves.easeOut,
+        child: ThmrAnimatedContent(
           child: KeyedSubtree(
             key: ValueKey(track?.coverUrl ?? 'no-cover'),
             child: SizedBox(width: 96, height: 96, child: child),
@@ -227,7 +226,7 @@ class NowPlayingTrackInfo extends ConsumerWidget {
     ));
     if (!context.mounted) return;
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('歌曲信息已复制')));
+        .showThmrSnackBar(context, const SnackBar(content: Text('歌曲信息已复制')));
   }
 
   Future<void> _handleFavoriteTap(BuildContext context, WidgetRef ref) async {
@@ -249,6 +248,7 @@ class NowPlayingTrackInfo extends ConsumerWidget {
     final pos = box.localToGlobal(Offset.zero);
     final size = box.size;
     final picked = await showMenu<FavCollectionRef>(
+      popUpAnimationStyle: ThmrMotion.style(context),
       context: context,
       position: RelativeRect.fromLTRB(
         pos.dx,
@@ -308,31 +308,25 @@ class NowPlayingTrackInfo extends ConsumerWidget {
       ref.invalidate(collectionsProvider);
     } on ApiException catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content:
-              Text(e.statusCode == 409 ? '已在该收藏夹中' : '操作失败:${e.message}')));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context,
+          SnackBar(
+              content:
+                  Text(e.statusCode == 409 ? '已在该收藏夹中' : '操作失败:${e.message}')));
     } catch (_) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('网络异常,稍后再试')));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context, const SnackBar(content: Text('网络异常,稍后再试')));
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).thmr;
-    final title = AnimatedSwitcher(
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : const Duration(milliseconds: 350),
-      layoutBuilder: _trackTextLayout,
-      switchInCurve: ThmrMotion.enterCurve,
-      switchOutCurve: Curves.easeIn,
-      transitionBuilder: (child, anim) =>
-          FadeTransition(opacity: anim, child: child),
+    final title = ThmrAnimatedContent(
       child: Text(
         cur?.title ?? '暂无播放',
-        key: ValueKey(cur?.trackId ?? 'none'),
+        key: ValueKey((cur?.trackId, cur?.title)),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: Theme.of(context)
@@ -353,24 +347,15 @@ class NowPlayingTrackInfo extends ConsumerWidget {
               ),
         ),
         const SizedBox(height: 4),
-        MediaQuery.disableAnimationsOf(context)
-            ? title
-            : AnimatedSize(
-                duration: ThmrMotion.duration,
-                alignment: Alignment.topLeft,
-                child: title,
-              ),
+        ThmrAnimatedSize(
+          alignment: Alignment.topLeft,
+          child: title,
+        ),
         const SizedBox(height: 6),
-        AnimatedSwitcher(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 350),
-          layoutBuilder: _trackTextLayout,
-          transitionBuilder: (child, anim) =>
-              FadeTransition(opacity: anim, child: child),
+        ThmrAnimatedContent(
           child: Text(
             cur?.artist ?? '等待下一首',
-            key: ValueKey('a${cur?.trackId ?? 'none'}'),
+            key: ValueKey((cur?.trackId, cur?.artist)),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context)
@@ -408,22 +393,6 @@ class NowPlayingTrackInfo extends ConsumerWidget {
 
 // Only incoming text determines layout; fading text keeps its original width
 // and top-left origin, without pushing the new title or artist to the centre.
-Widget _trackTextLayout(Widget? current, List<Widget> previous) => SizedBox(
-      width: double.infinity,
-      child: Stack(
-          alignment: AlignmentDirectional.topStart,
-          clipBehavior: Clip.none,
-          children: [
-            for (final child in previous)
-              Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: ExcludeSemantics(child: child)),
-            if (current != null) current,
-          ]),
-    );
-
 /// small bordered text button, mirrors web .track-feedback-button.
 class _TextAction extends StatelessWidget {
   const _TextAction({
@@ -664,9 +633,11 @@ class _AudioStripState extends State<AudioStrip>
     if (!mounted) return;
     setState(() {});
     if (!ready) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(source.unavailableReason ?? '实时频谱暂不可用，请重试。'),
-      ));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context,
+          SnackBar(
+            content: Text(source.unavailableReason ?? '实时频谱暂不可用，请重试。'),
+          ));
     }
   }
 
@@ -879,6 +850,7 @@ class _VolumeControlState extends ConsumerState<_VolumeControl> {
               child: InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: () => showModalBottomSheet<void>(
+              sheetAnimationStyle: ThmrMotion.style(context),
               context: context,
               builder: (sheetContext) => const _VolumeSheet(),
             ),

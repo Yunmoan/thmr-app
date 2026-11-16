@@ -104,7 +104,7 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
     ref.listen(largeScreenProvider.select((s) => s.error), (_, error) {
       if (error != null) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error)));
+            .showThmrSnackBar(context, SnackBar(content: Text(error)));
       }
     });
     return LayoutBuilder(builder: (context, constraints) {

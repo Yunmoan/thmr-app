@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/thmr_motion.dart';
 
 import '../../shared/widgets/loading_skeleton.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -120,6 +121,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 ),
                 const SizedBox(width: 8),
                 PopupMenuButton<String>(
+                  popUpAnimationStyle: ThmrMotion.style(context),
                   initialValue: _sort,
                   tooltip: '排序',
                   onSelected: (v) {
@@ -259,6 +261,7 @@ class _LibraryTile extends ConsumerWidget {
 
   void _showAddDialog(BuildContext context, WidgetRef ref) {
     showModalBottomSheet<void>(
+      sheetAnimationStyle: ThmrMotion.style(context),
       context: context,
       builder: (_) => _AddToCollectionSheet(track: track, stationId: stationId),
     );
@@ -309,16 +312,18 @@ class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('已加入「${c.name}」')));
+          .showThmrSnackBar(context, SnackBar(content: Text('已加入「${c.name}」')));
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content:
-              Text(e.statusCode == 409 ? '已在该收藏夹中' : '添加失败:${e.message}')));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context,
+          SnackBar(
+              content:
+                  Text(e.statusCode == 409 ? '已在该收藏夹中' : '添加失败:${e.message}')));
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('网络异常,稍后再试')));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context, const SnackBar(content: Text('网络异常,稍后再试')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

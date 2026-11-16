@@ -2,6 +2,7 @@
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import '../../../core/theme/thmr_motion.dart';
 
 import '../../../shared/widgets/focus_outline.dart';
 import '../../../core/models/models.dart';
@@ -27,6 +28,7 @@ void showQueueEntryDetail(BuildContext context, QueueEntry entry, int index,
   final duration = durationLabel ?? '时长 ${formatDuration(entry.durationSec)}';
   final wide = MediaQuery.of(context).size.width >= 720;
   showModalBottomSheet<void>(
+    sheetAnimationStyle: ThmrMotion.style(context),
     context: context,
     isScrollControlled: true,
     constraints: BoxConstraints(maxWidth: wide ? 480 : double.infinity),

@@ -5,6 +5,7 @@ class ThmrMotion {
   const ThmrMotion._();
   static const duration = Duration(milliseconds: 240);
   static const exitDuration = Duration(milliseconds: 180);
+  static const shortDuration = Duration(milliseconds: 160);
   static const enterCurve = Curves.easeOutCubic;
   static const exitCurve = Curves.easeInCubic;
   static const distance = 8.0;
@@ -15,6 +16,55 @@ class ThmrMotion {
           : exiting
               ? exitDuration
               : duration;
+
+  static AnimationStyle style(BuildContext context) =>
+      MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : const AnimationStyle(
+              duration: duration,
+              reverseDuration: exitDuration,
+              curve: enterCurve,
+              reverseCurve: exitCurve);
+
+  static Duration quickOf(BuildContext context) =>
+      MediaQuery.disableAnimationsOf(context) ? Duration.zero : shortDuration;
+}
+
+extension ThmrMessengerMotion on ScaffoldMessengerState {
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason> showThmrSnackBar(
+          BuildContext motionContext, SnackBar snackBar) =>
+      showSnackBar(snackBar,
+          snackBarAnimationStyle: ThmrMotion.style(motionContext));
+}
+
+/// AnimatedSize with a true, state-preserving reduced-motion path. A zero
+/// duration restarts its render controller during layout on this Flutter SDK.
+class ThmrAnimatedSize extends StatefulWidget {
+  const ThmrAnimatedSize(
+      {super.key, this.alignment = Alignment.center, required this.child});
+  final AlignmentGeometry alignment;
+  final Widget child;
+  @override
+  State<ThmrAnimatedSize> createState() => _ThmrAnimatedSizeState();
+}
+
+class _ThmrAnimatedSizeState extends State<ThmrAnimatedSize> {
+  final _childKey = GlobalKey();
+  @override
+  Widget build(BuildContext context) {
+    final child = KeyedSubtree(key: _childKey, child: widget.child);
+    if (MediaQuery.disableAnimationsOf(context) ||
+        !TickerMode.valuesOf(context).enabled) {
+      return child;
+    }
+    return AnimatedSize(
+      duration: ThmrMotion.duration,
+      reverseDuration: ThmrMotion.exitDuration,
+      curve: ThmrMotion.enterCurve,
+      alignment: widget.alignment,
+      child: child,
+    );
+  }
 }
 
 /// A reversible entrance. Keep both the curve and child alive when interrupted.
@@ -80,8 +130,10 @@ class _ThmrFadeSlideState extends State<ThmrFadeSlide> {
 
 /// Outgoing content retains its dimensions and cannot receive input or focus.
 class ThmrAnimatedContent extends StatefulWidget {
-  const ThmrAnimatedContent({super.key, required this.child});
+  const ThmrAnimatedContent(
+      {super.key, this.alignment = Alignment.topLeft, required this.child});
   final Widget child;
+  final AlignmentGeometry alignment;
   @override
   State<ThmrAnimatedContent> createState() => _ThmrAnimatedContentState();
 }
@@ -186,10 +238,12 @@ class _ThmrAnimatedContentState extends State<ThmrAnimatedContent>
             ),
           ),
         );
-    return _ContentLayers(children: [
-      for (final entry in _previous) layer(entry, outgoing: true),
-      layer(_current, outgoing: false),
-    ]);
+    return _ContentLayers(
+        alignment: widget.alignment.resolve(Directionality.of(context)),
+        children: [
+          for (final entry in _previous) layer(entry, outgoing: true),
+          layer(_current, outgoing: false),
+        ]);
   }
 }
 
@@ -216,10 +270,16 @@ class _ContentLayer extends ParentDataWidget<_ContentParentData> {
 }
 
 class _ContentLayers extends MultiChildRenderObjectWidget {
-  const _ContentLayers({required super.children});
+  const _ContentLayers({required this.alignment, required super.children});
+  final Alignment alignment;
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _RenderContentLayers();
+      _RenderContentLayers(alignment);
+  @override
+  void updateRenderObject(
+      BuildContext context, covariant _RenderContentLayers renderObject) {
+    renderObject.alignment = alignment;
+  }
 }
 
 /// Size follows the current child without squeezing a departing title or card.
@@ -228,6 +288,14 @@ class _RenderContentLayers extends RenderBox
     with
         ContainerRenderObjectMixin<RenderBox, _ContentParentData>,
         RenderBoxContainerDefaultsMixin<RenderBox, _ContentParentData> {
+  _RenderContentLayers(this._alignment);
+  Alignment _alignment;
+  set alignment(Alignment value) {
+    if (value == _alignment) return;
+    _alignment = value;
+    markNeedsLayout();
+  }
+
   @override
   void setupParentData(RenderBox child) {
     if (child.parentData is! _ContentParentData) {
@@ -270,20 +338,27 @@ class _RenderContentLayers extends RenderBox
     while (child != null) {
       final data = child.parentData! as _ContentParentData;
       if (data.outgoing) {
-        child.layout(data.retainedSize == null
-            ? constraints.loosen()
-            : BoxConstraints.tight(data.retainedSize!));
+        child.layout(
+            data.retainedSize == null
+                ? constraints.loosen()
+                : BoxConstraints.tight(data.retainedSize!),
+            parentUsesSize: true);
       } else {
         data.retainedSize = child.size;
       }
-      data.offset = Offset.zero;
+      data.offset = _alignment.alongOffset(Offset(
+          size.width - child.size.width, size.height - child.size.height));
       child = data.nextSibling;
     }
   }
 
   @override
-  double? computeDistanceToActualBaseline(TextBaseline baseline) =>
-      _current?.getDistanceToActualBaseline(baseline);
+  double? computeDistanceToActualBaseline(TextBaseline baseline) {
+    final current = _current;
+    final distance = current?.getDistanceToActualBaseline(baseline);
+    if (current == null || distance == null) return null;
+    return distance + (current.parentData! as _ContentParentData).offset.dy;
+  }
 
   @override
   void paint(PaintingContext context, Offset offset) => context.pushClipRect(
@@ -292,7 +367,13 @@ class _RenderContentLayers extends RenderBox
   @override
   bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
     final current = _current;
-    return current != null && current.hitTest(result, position: position);
+    if (current == null) return false;
+    return result.addWithPaintOffset(
+      offset: (current.parentData! as _ContentParentData).offset,
+      position: position,
+      hitTest: (result, position) =>
+          current.hitTest(result, position: position),
+    );
   }
 }
 

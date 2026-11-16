@@ -199,32 +199,49 @@ class MiniPlayerTransition extends ConsumerStatefulWidget {
 class _MiniPlayerTransitionState extends ConsumerState<MiniPlayerTransition>
     with SingleTickerProviderStateMixin {
   late final AnimationController _animation;
+  late final CurvedAnimation _curve;
   late final MiniModeTransition _transition;
+  bool _visible = false;
 
   @override
   void initState() {
     super.initState();
-    _animation = AnimationController(vsync: this);
+    _animation = AnimationController(
+        vsync: this,
+        duration: ThmrMotion.duration,
+        reverseDuration: ThmrMotion.exitDuration);
+    _curve = CurvedAnimation(
+        parent: _animation,
+        curve: ThmrMotion.enterCurve,
+        reverseCurve: ThmrMotion.exitCurve);
     _transition = ref.read(miniModeTransitionProvider);
     _transition.animateMini = _animate;
   }
 
   Future<void> _animate(bool visible) async {
-    _animation.duration = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : ThmrMotion.exitDuration;
+    _visible = visible;
+    _animation.duration = ThmrMotion.of(context);
+    _animation.reverseDuration = ThmrMotion.of(context, exiting: true);
     try {
-      await _animation
-          .animateTo(visible ? 1 : 0, curve: ThmrMotion.enterCurve)
-          .orCancel;
+      await (visible ? _animation.forward() : _animation.reverse()).orCancel;
     } on TickerCanceled {
       // Disposal removes the mini surface, which also completes its exit.
     }
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context) ||
+        !TickerMode.valuesOf(context).enabled) {
+      _animation.value = _visible ? 1 : 0;
+    }
+  }
+
+  @override
   void dispose() {
     _transition.animateMini = null;
+    _curve.dispose();
     _animation.dispose();
     super.dispose();
   }
@@ -232,9 +249,9 @@ class _MiniPlayerTransitionState extends ConsumerState<MiniPlayerTransition>
   @override
   Widget build(BuildContext context) {
     return FadeTransition(
-      opacity: _animation,
+      opacity: _curve,
       child: ScaleTransition(
-        scale: _animation.drive(Tween(begin: 0.96, end: 1.0)),
+        scale: _curve.drive(Tween(begin: 0.96, end: 1.0)),
         child: widget.child,
       ),
     );
@@ -364,7 +381,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     super.initState();
     _positionAnimation = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 160),
+      duration: ThmrMotion.shortDuration,
     )..addListener(_onPositionTick);
     WindowPresentation.activationRequests.addListener(_onActivationRequested);
     miniRevealRequests.addListener(_onActivationRequested);
@@ -392,7 +409,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     if (_transitioning || _settingPosition || _dragging) return;
     _moveTimer?.cancel();
     final serial = ++_moveSerial;
-    _moveTimer = Timer(ThmrMotion.exitDuration, () {
+    _moveTimer = Timer(const Duration(milliseconds: 180), () {
       unawaited(_snapAfterMove(serial).catchError((Object error) {
         debugPrint('Mini player edge snap failed: $error');
       }));
@@ -465,9 +482,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
       if (!mounted || _transitioning || serial != _positionSerial) return;
       _positionStart = start;
       _positionTarget = position;
-      _positionAnimation.duration = MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : const Duration(milliseconds: 160);
+      _positionAnimation.duration = ThmrMotion.quickOf(context);
       _positionAnimation.forward(from: 0);
       await done.future;
     } catch (error) {
@@ -624,9 +639,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
         // Keep the fade's state when removing the preceding player body.
         key: const ValueKey('mini-edge-tab'),
         tween: Tween(begin: 0, end: _tucked ? 1 : 0),
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : Duration(milliseconds: _tucked ? 150 : 90),
+        duration: ThmrMotion.quickOf(context),
         curve: ThmrMotion.enterCurve,
         child: IgnorePointer(
           ignoring: !_tucked,
@@ -1063,7 +1076,7 @@ class _MiniPlayerBody extends ConsumerWidget {
   }
 }
 
-/// Shows artist and listener count in one line, moving vertically every 4 s.
+/// Shows artist and listener count in one line with the shared short fade.
 class _MiniRotatingSubtitle extends StatefulWidget {
   const _MiniRotatingSubtitle({
     required this.artist,
@@ -1082,18 +1095,33 @@ class _MiniRotatingSubtitle extends StatefulWidget {
 class _MiniRotatingSubtitleState extends State<_MiniRotatingSubtitle> {
   Timer? _timer;
   bool _showListeners = false;
+  bool _canRotate = false;
 
   @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (mounted &&
-          widget.listeners != null &&
-          !MediaQuery.disableAnimationsOf(context) &&
-          !MediaQuery.accessibleNavigationOf(context)) {
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _canRotate = TickerMode.valuesOf(context).enabled &&
+        !MediaQuery.disableAnimationsOf(context) &&
+        !MediaQuery.accessibleNavigationOf(context);
+    _syncTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MiniRotatingSubtitle oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncTimer();
+  }
+
+  void _syncTimer() {
+    if (!_canRotate || widget.listeners == null) {
+      _timer?.cancel();
+      _timer = null;
+      _showListeners = false;
+    } else {
+      _timer ??= Timer.periodic(const Duration(seconds: 4), (_) {
         setState(() => _showListeners = !_showListeners);
-      }
-    });
+      });
+    }
   }
 
   @override
@@ -1114,27 +1142,9 @@ class _MiniRotatingSubtitleState extends State<_MiniRotatingSubtitle> {
     return SizedBox(
       height: widget.height,
       child: ClipRect(
-        child: AnimatedSwitcher(
-          duration:
-              reduceMotion ? Duration.zero : const Duration(milliseconds: 260),
-          switchInCurve: ThmrMotion.enterCurve,
-          switchOutCurve: ThmrMotion.exitCurve,
-          layoutBuilder: (current, previous) => Stack(
-            alignment: Alignment.centerLeft,
-            children: [...previous, if (current != null) current],
-          ),
-          transitionBuilder: (child, animation) {
-            final enteringFromBelow = child.key == const ValueKey('listeners');
-            return SlideTransition(
-              position: Tween<Offset>(
-                begin: Offset(0, enteringFromBelow ? 1 : -1),
-                end: Offset.zero,
-              ).animate(animation),
-              child: FadeTransition(opacity: animation, child: child),
-            );
-          },
+        child: ThmrAnimatedContent(
           child: Align(
-            key: ValueKey(showListeners ? 'listeners' : 'artist'),
+            key: ValueKey((showListeners, label)),
             alignment: Alignment.centerLeft,
             child: Text(
               label,

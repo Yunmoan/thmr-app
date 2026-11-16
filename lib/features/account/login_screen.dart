@@ -19,6 +19,7 @@ import 'dart:io' show ContentType, HttpServer, InternetAddress;
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
+import '../../core/theme/thmr_motion.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -206,7 +207,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           mode: LaunchMode.externalApplication);
                     } catch (_) {}
                     if (!opened && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      ScaffoldMessenger.of(context).showThmrSnackBar(
+                        context,
                         const SnackBar(content: Text('无法打开系统浏览器')),
                       );
                     }

@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../../core/theme/thmr_motion.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../../shared/widgets/focus_outline.dart';
@@ -507,6 +508,7 @@ Future<void> showQueueSheet(BuildContext context,
     {required StationStatus status}) {
   final size = MediaQuery.of(context).size;
   return showModalBottomSheet<void>(
+    sheetAnimationStyle: ThmrMotion.style(context),
     context: context,
     useSafeArea: true,
     isScrollControlled: true,

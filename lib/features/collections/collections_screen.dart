@@ -1,6 +1,7 @@
 // Personal collections, public playback history and shared links.
 
 import 'package:flutter/material.dart';
+import '../../core/theme/thmr_motion.dart';
 
 import '../../shared/widgets/loading_skeleton.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -166,6 +167,7 @@ class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
   Future<void> _openShared(BuildContext context) async {
     final controller = TextEditingController();
     final slug = await showDialog<String>(
+      animationStyle: ThmrMotion.style(context),
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('查看他人分享'),
@@ -195,6 +197,7 @@ class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
   Future<void> _newCollection(BuildContext context) async {
     final controller = TextEditingController();
     final created = await showDialog<bool>(
+      animationStyle: ThmrMotion.style(context),
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('新建收藏夹'),
@@ -222,8 +225,8 @@ class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
     final name = controller.text.trim();
     if (name.length < 2) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('名称至少 2 个字符')));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context, const SnackBar(content: Text('名称至少 2 个字符')));
       return;
     }
     try {
@@ -233,12 +236,13 @@ class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
       ref.invalidate(favoritesStatusProvider);
     } on ApiException catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('创建失败:${e.message}')));
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+          context, SnackBar(content: Text('创建失败:${e.message}')));
     } catch (error) {
       if (!context.mounted) return;
       if (isNetworkFailure(error)) ref.invalidate(collectionsProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+        context,
         const SnackBar(content: Text('创建失败，请检查网络连接后重试')),
       );
     }
@@ -299,6 +303,7 @@ class _CollectionCard extends ConsumerWidget {
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
+      animationStyle: ThmrMotion.style(context),
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('删除收藏夹'),
@@ -322,18 +327,21 @@ class _CollectionCard extends ConsumerWidget {
       if (!context.mounted) return;
       ref.invalidate(collectionsProvider);
       ref.invalidate(favoritesStatusProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+        context,
         SnackBar(content: Text('已删除「${collection.name}」')),
       );
     } on ApiException catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+        context,
         SnackBar(content: Text('删除失败：${e.message}')),
       );
     } catch (error) {
       if (!context.mounted) return;
       if (isNetworkFailure(error)) ref.invalidate(collectionsProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showThmrSnackBar(
+        context,
         const SnackBar(content: Text('删除失败，请检查网络连接后重试')),
       );
     }

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/state/settings_provider.dart';
 import 'core/input/app_input.dart';
 import 'core/theme/thmr_theme.dart';
+import 'core/theme/thmr_motion.dart';
 import 'core/theme/thmr_focus_ring.dart';
 import 'features/mini/desktop_player_surface.dart';
 import 'features/mini/mini_player.dart' show miniPlayerProvider;
@@ -39,6 +40,8 @@ class ThmrApp extends ConsumerWidget {
       themeMode: mode,
       theme: light,
       darkTheme: dark,
+      themeAnimationDuration: ThmrMotion.duration,
+      themeAnimationCurve: ThmrMotion.enterCurve,
       // Single shared background under every route: pages stay transparent
       // and the illustration never jumps between tabs.
       //
