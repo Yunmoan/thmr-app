@@ -246,7 +246,7 @@ class _LargeScreenWidgetEditorState
             preview: LargeScreenWidgetStrip(components: [
               selected.copyWith(
                   enabled: true, position: LargeScreenWidgetPosition.topCenter)
-            ], station: station, atTop: true),
+            ], station: station, atTop: true, singleColumn: true),
             onChanged: (value) => _edit(value),
             onDraft: (value) => _edit(value, deferred: true),
             onCommit: _commit,
@@ -256,7 +256,9 @@ class _LargeScreenWidgetEditorState
                 : () {
                     final current =
                         ref.read(largeScreenSettingsProvider).widgets;
-                    final copy = selected.copyWith(id: _id());
+                    final latest =
+                        current.firstWhere((w) => w.id == selected.id);
+                    final copy = latest.copyWith(id: _id());
                     _select(copy.id);
                     _save([...current]..insert(index + 1, copy));
                   },

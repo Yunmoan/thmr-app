@@ -20,8 +20,10 @@ import 'package:thmr_app/core/state/station_provider.dart';
 import 'package:thmr_app/core/theme/thmr_colors.dart';
 import 'package:thmr_app/core/theme/thmr_motion.dart';
 import 'package:thmr_app/core/theme/thmr_focus_ring.dart';
+import 'package:thmr_app/core/theme/thmr_theme.dart';
 import 'package:thmr_app/features/large_screen/large_screen_controller.dart';
 import 'package:thmr_app/features/large_screen/large_screen_surface.dart';
+import 'package:thmr_app/features/large_screen/large_screen_settings_panel.dart';
 import 'package:thmr_app/features/mini/desktop_player_surface.dart';
 
 class _Station extends StateNotifier<StationUiState> implements StationPoller {
@@ -58,6 +60,9 @@ class _Settings extends LargeScreenSettingsController {
   Future<void> update(LargeScreenSettings next) async {
     state = next;
   }
+
+  @override
+  Future<void> persist() async {}
 }
 
 Future<void> main() async {
@@ -76,7 +81,27 @@ Future<void> main() async {
         (ref) async => const [RadioChannel(id: 'touhou', name: '综合频道')]),
   ]);
   await container.read(largeScreenSettingsProvider.notifier).ready;
+  const editorPreview = bool.fromEnvironment('editorPreview');
+  if (editorPreview) {
+    await container.read(largeScreenSettingsProvider.notifier).update(
+            const LargeScreenSettings(queue: LargeScreenQueue.list, widgets: [
+          LargeScreenWidgetSettings(id: 'clock', format: 'HH:mm:ss'),
+          LargeScreenWidgetSettings(
+              id: 'date',
+              kind: LargeScreenWidgetKind.date,
+              position: LargeScreenWidgetPosition.topLeft,
+              format: 'M月d日 EEEE',
+              fontSize: 20),
+          LargeScreenWidgetSettings(
+              id: 'event',
+              kind: LargeScreenWidgetKind.text,
+              position: LargeScreenWidgetPosition.bottomCenter,
+              text: '河东 THO · 东方音乐电台',
+              fontSize: 24),
+        ]));
+  }
   await initializeDesktopWindow();
+  if (editorPreview) await windowManager.setSize(const Size(1280, 880));
   final retained = GlobalKey();
   final renderedFrame = GlobalKey();
   final inputKey = GlobalKey();
@@ -86,10 +111,12 @@ Future<void> main() async {
   runApp(UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
-        theme: ThemeData(
-            useMaterial3: true,
-            colorScheme: ColorScheme.fromSeed(seedColor: ThmrColors.accent),
-            extensions: [ThmrTokens.reimuLight.accessible()]),
+        theme: editorPreview
+            ? ThmrTheme.dark()
+            : ThemeData(
+                useMaterial3: true,
+                colorScheme: ColorScheme.fromSeed(seedColor: ThmrColors.accent),
+                extensions: [ThmrTokens.reimuLight.accessible()]),
         builder: (context, child) => RepaintBoundary(
             key: renderedFrame,
             child: Consumer(
@@ -101,23 +128,38 @@ Future<void> main() async {
                         reserveEdgeSpace: !ref
                             .watch(largeScreenProvider.select((s) => s.active)),
                         child: DesktopPlayerSurface(child: child!))))),
-        home: LargeScreenSurface(
-            child: Scaffold(
-                key: retained,
-                body: Column(children: [
-                  TextField(
-                      key: inputKey, controller: input, focusNode: mainFocus),
-                  Expanded(
-                      child: ListView.builder(
-                          controller: scroll,
-                          itemCount: 100,
-                          itemExtent: 50,
-                          itemBuilder: (_, i) => Text('普通播放器 $i'))),
-                ]))),
+        home: editorPreview
+            ? const LargeScreenSettingsPage()
+            : LargeScreenSurface(
+                child: Scaffold(
+                    key: retained,
+                    body: Column(children: [
+                      TextField(
+                          key: inputKey,
+                          controller: input,
+                          focusNode: mainFocus),
+                      Expanded(
+                          child: ListView.builder(
+                              controller: scroll,
+                              itemCount: 100,
+                              itemExtent: 50,
+                              itemBuilder: (_, i) => Text('普通播放器 $i'))),
+                    ]))),
       )));
   await binding.endOfFrame;
   binding.allowFirstFrame();
   await binding.waitUntilFirstFrameRasterized;
+  if (editorPreview) {
+    try {
+      await _checkEditor(binding, renderedFrame, errors);
+      debugPrint(
+          'LARGE_SCREEN_EDITOR_PASS: native configuration, text input, format presets, expansion state and live preview; no Flutter errors');
+      _exitProbe(0);
+    } catch (error, stack) {
+      debugPrint('LARGE_SCREEN_EDITOR_FAIL: $error\n$stack');
+      _exitProbe(1);
+    }
+  }
   await windowManager.show();
   await windowManager.focus();
   await WindowPresentation().startupReady();
@@ -183,8 +225,9 @@ Future<void> main() async {
         await File(snapshotFile)
             .writeAsBytes(png!.buffer.asUint8List(), flush: true);
         await controller.change(false);
-        if (errors.isNotEmpty)
+        if (errors.isNotEmpty) {
           throw StateError('${errors.length} Flutter errors');
+        }
         debugPrint('LARGE_SCREEN_SNAPSHOT_PASS: $snapshotFile');
         _exitProbe(0);
       }
@@ -272,6 +315,87 @@ Future<void> main() async {
   } catch (error, stack) {
     debugPrint('LARGE_SCREEN_SMOKE FAIL: $error\n$stack');
     _exitProbe(1);
+  }
+}
+
+Future<void> _checkEditor(WidgetsBinding binding, GlobalKey frame,
+    List<FlutterErrorDetails> errors) async {
+  Element find(bool Function(Widget) matches) {
+    Element? found;
+    void visit(Element element) {
+      if (matches(element.widget)) {
+        found ??= element;
+      } else {
+        element.visitChildElements(visit);
+      }
+    }
+
+    visit(binding.rootElement!);
+    if (found == null) throw StateError('Configuration control not mounted');
+    return found!;
+  }
+
+  Future<void> settle() async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    binding.scheduleFrame();
+    await binding.endOfFrame;
+  }
+
+  (find((w) => w is TabBar).widget as TabBar).controller!.index = 1;
+  await settle();
+  void select(String id) =>
+      (find((w) => w.key == ValueKey('select-$id')).widget as InputChip)
+          .onSelected!(true);
+  select('date');
+  await settle();
+  final advanced = find((w) => w is ExpansionTile);
+  VoidCallback? toggle;
+  void ink(Element element) {
+    final control = element.widget;
+    if (control is InkWell && control.onTap != null) toggle ??= control.onTap;
+    element.visitChildElements(ink);
+  }
+
+  ink(advanced);
+  if (toggle == null) throw StateError('Advanced styles cannot expand');
+  toggle!();
+  await settle();
+  final format = find((w) => w.key == const ValueKey('component-format-date'))
+      .widget as TextField;
+  format.controller!.text = 'yyyy-MM-dd EEEE';
+  format.onChanged!(format.controller!.text);
+  await settle();
+  (find((w) =>
+          w is ChoiceChip &&
+          w.label is Text &&
+          (w.label as Text).data == '月日与星期').widget as ChoiceChip)
+      .onSelected!(true);
+  await settle();
+  toggle!();
+  await settle();
+  toggle!();
+  await settle();
+  select('event');
+  await settle();
+  final text = find((w) => w.key == const ValueKey('component-text-event'))
+      .widget as TextField;
+  text.controller!.value = const TextEditingValue(
+      text: '河东 THO · 东方音乐电台', selection: TextSelection.collapsed(offset: 15));
+  text.onChanged!(text.controller!.text);
+  await settle();
+  if (errors.isNotEmpty) {
+    throw StateError('${errors.length} Flutter errors: ${errors.first}');
+  }
+  const snapshot = String.fromEnvironment('snapshotFile');
+  if (snapshot.isNotEmpty) {
+    final boundary =
+        frame.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final raster = await boundary.toImage(
+        pixelRatio: MediaQuery.devicePixelRatioOf(frame.currentContext!));
+    final data = await raster.toByteData(format: ui.ImageByteFormat.png);
+    raster.dispose();
+    await File(snapshot).writeAsBytes(data!.buffer.asUint8List(), flush: true);
+    debugPrint('LARGE_SCREEN_EDITOR_SNAPSHOT: $snapshot');
   }
 }
 

@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,15 +17,22 @@ import 'package:thmr_app/core/state/large_screen_settings.dart';
 import 'package:thmr_app/core/state/channel_provider.dart';
 import 'package:thmr_app/features/listen/widgets/channel_switcher.dart';
 import 'package:thmr_app/shared/widgets/thmr_background.dart';
+import 'package:thmr_app/shared/widgets/track_cover.dart';
 import 'package:thmr_app/features/large_screen/large_screen_button.dart';
 import 'package:thmr_app/features/large_screen/large_screen_controller.dart';
 import 'package:thmr_app/features/large_screen/large_screen_player.dart';
 import 'package:thmr_app/features/large_screen/large_screen_surface.dart';
+import 'package:thmr_app/features/large_screen/large_screen_settings_panel.dart';
+import 'package:thmr_app/features/large_screen/large_screen_preview.dart';
+import 'package:thmr_app/features/large_screen/large_screen_content.dart';
 import 'package:thmr_app/features/mini/mini_player.dart';
 import 'package:thmr_app/features/mini/desktop_player_surface.dart';
 import 'package:thmr_app/core/theme/thmr_focus_ring.dart';
 
-StationStatus _status({String title = '幽雅に咲かせ、墨染の桜', int queueCount = 1}) =>
+StationStatus _status(
+        {String title = '幽雅に咲かせ、墨染の桜',
+        int queueCount = 1,
+        String coverUrl = ''}) =>
     StationStatus.fromJson({
       'station': {'id': 'touhou', 'name': '东方音乐电台'},
       'current': {
@@ -32,6 +41,7 @@ StationStatus _status({String title = '幽雅に咲かせ、墨染の桜', int q
         'artist': '上海アリス幻樂団',
         'positionSec': 75,
         'durationSec': 240,
+        'coverUrl': coverUrl,
       },
       'queue': [
         for (var i = 0; i < queueCount; i++)
@@ -253,6 +263,146 @@ class _Harness {
 }
 
 void main() {
+  testWidgets(
+      'settings preview follows edits without owning window or playback',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount(size: const Size(1440, 900), desktopRoot: true);
+    Future<void> presentation(bool _) async {}
+    h.controller.animatePresentation = presentation;
+    final before = [...h.nativeMethods];
+    unawaited(h.navigator.currentState!.push(MaterialPageRoute<void>(
+        builder: (_) => const LargeScreenSettingsPage())));
+    await tester.pumpAndSettle();
+    expect(find.byType(LargeScreenPreview), findsOneWidget);
+    expect(h.controller.animatePresentation, presentation);
+    final preview =
+        find.byWidgetPredicate((w) => w is LargeScreenPlayer && w.preview);
+    expect(preview, findsOneWidget);
+    expect(find.descendant(of: preview, matching: find.byType(ChannelSwitcher)),
+        findsNothing);
+    await tester.tap(find.text('封面在右'));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<LargeScreenContent>(find.descendant(
+                of: preview, matching: find.byType(LargeScreenContent)))
+            .settings
+            .layout,
+        LargeScreenLayout.coverRight);
+    await tester.tap(find.widgetWithText(Tab, '小组件'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('添加活动组件'));
+    await tester.pumpAndSettle();
+    expect(h.container.read(largeScreenSettingsProvider).widgets.length, 3);
+    final items = h.container.read(largeScreenSettingsProvider).widgets;
+    await tester.tap(find.byKey(ValueKey('select-${items.last.id}')));
+    await tester.pumpAndSettle();
+    final input = find.byKey(ValueKey('component-text-${items.last.id}'));
+    await tester.ensureVisible(input);
+    await tester.enterText(input, '河东 THO · 东方音乐电台');
+    await tester.pump();
+    final editable = tester.state<EditableTextState>(
+        find.descendant(of: input, matching: find.byType(EditableText)));
+    expect(editable.widget.focusNode.hasFocus, isTrue);
+    expect(find.descendant(of: preview, matching: find.text('河东 THO · 东方音乐电台')),
+        findsOneWidget);
+    expect(h.playback.toggles, 0);
+    expect(h.nativeMethods, before);
+    expect(h.controller.animatePresentation, presentation);
+    await tester.tap(find.byTooltip('放大预览'));
+    await tester.pumpAndSettle();
+    expect(find.byType(LargeScreenPreview), findsNWidgets(2));
+    await tester.tap(find.byTooltip('关闭预览'));
+    await tester.pumpAndSettle();
+    expect(h.controller.animatePresentation, presentation);
+    h.navigator.currentState!.pop();
+    await tester.pumpAndSettle();
+    expect(h.controller.animatePresentation, presentation);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final size in [const Size(280, 800), const Size(1440, 900)]) {
+    testWidgets('preview aspect ratios and modal fit $size', (tester) async {
+      final h = _Harness(tester);
+      await h.mount(size: size, scale: 2);
+      unawaited(h.navigator.currentState!.push(MaterialPageRoute<void>(
+          builder: (_) => const LargeScreenSettingsPage())));
+      await tester.pumpAndSettle();
+      if (size.width < 1100) {
+        await tester.tap(find.text('预览'));
+        await tester.pumpAndSettle();
+      }
+      for (final ratio in ['16:10', '4:3', '9:16', '16:9']) {
+        await tester.tap(find.byTooltip('预览比例'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(ratio).last);
+        await tester.pumpAndSettle();
+        final frame = tester
+            .getSize(find.byKey(const ValueKey('large-screen-preview-frame')));
+        final parts = ratio.split(':').map(double.parse).toList();
+        expect(frame.width / frame.height, closeTo(parts[0] / parts[1], .01));
+        expect(tester.takeException(), isNull);
+      }
+    });
+  }
+
+  testWidgets(
+      'portrait covers center in contain mode and crop to fill in cover mode',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount();
+    await h.container.read(largeScreenSettingsProvider.notifier).update(
+        const LargeScreenSettings(
+            layout: LargeScreenLayout.coverLeft,
+            queue: LargeScreenQueue.hidden));
+    await h.change(true);
+    final cover = find.byKey(const ValueKey('large-screen-cover'));
+    final size = tester.getSize(cover);
+    const url = 'https://cover.test/portrait.png';
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRect(
+        const Rect.fromLTWH(0, 0, 20, 40), Paint()..color = Colors.red);
+    final picture = recorder.endRecording();
+    final portrait = await tester.runAsync(() => picture.toImage(20, 40));
+    picture.dispose();
+    final key =
+        await TrackCover.providerFor(url, cacheWidth: size.width.round())
+            .obtainKey(ImageConfiguration.empty);
+    PaintingBinding.instance.imageCache.putIfAbsent(
+        key,
+        () => OneFrameImageStreamCompleter(
+            Future.value(ImageInfo(image: portrait!))));
+    h.station.update(
+        StationUiState(status: _status(coverUrl: url), initialLoading: false));
+    await tester.pumpAndSettle();
+    Future<int> edgeAlpha() async {
+      final boundary = tester.renderObject<RenderRepaintBoundary>(find
+          .descendant(of: cover, matching: find.byType(RepaintBoundary))
+          .first);
+      final frame = await boundary.toImage();
+      final bytes = await tester
+          .runAsync(() => frame.toByteData(format: ui.ImageByteFormat.rawRgba));
+      final alpha =
+          bytes!.getUint8(((frame.height ~/ 2) * frame.width + 1) * 4 + 3);
+      frame.dispose();
+      return alpha;
+    }
+
+    expect(await edgeAlpha(), 0,
+        reason: 'Contain keeps transparent, centered side margins.');
+    await h.container.read(largeScreenSettingsProvider.notifier).update(
+        const LargeScreenSettings(
+            layout: LargeScreenLayout.coverLeft,
+            queue: LargeScreenQueue.hidden,
+            coverFit: LargeScreenCoverFit.cover));
+    await tester.pumpAndSettle();
+    expect(await edgeAlpha(), 255,
+        reason:
+            'Cover fills the entire square instead of retaining side bars.');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
   testWidgets(
       'native resize without window events refreshes the work area before reveal',
       (tester) async {

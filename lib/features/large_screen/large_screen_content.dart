@@ -237,7 +237,8 @@ class _Cover extends StatelessWidget {
           alignment: Alignment.center,
           child: RepaintBoundary(
               key: ValueKey(url),
-              child: Image(
+              child: SizedBox.expand(
+                  child: Image(
                 image: TrackCover.providerFor(url, cacheWidth: cacheWidth),
                 fit: fit,
                 gaplessPlayback: true,
@@ -245,7 +246,7 @@ class _Cover extends StatelessWidget {
                 frameBuilder: (_, child, frame, synchronous) =>
                     frame != null || synchronous ? child : fallback(),
                 errorBuilder: (_, __, ___) => fallback(),
-              ))),
+              )))),
     );
   }
 }

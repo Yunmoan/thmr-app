@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/player/playback_controller.dart';
+import '../../core/models/models.dart';
 import '../../core/state/large_screen_settings.dart';
 import '../../core/state/settings_provider.dart';
 import '../../core/state/station_provider.dart';
@@ -30,8 +31,10 @@ final _stageThemeProvider = Provider.family<ThemeData, ThemeMode>((ref, mode) {
 /// The existing THMR paper, character illustration and typography, presented
 /// without navigation. The shared player and station remain mounted throughout.
 class LargeScreenPlayer extends ConsumerStatefulWidget {
-  const LargeScreenPlayer({super.key, this.safeInsets = EdgeInsets.zero});
+  const LargeScreenPlayer(
+      {super.key, this.safeInsets = EdgeInsets.zero, this.preview = false});
   final EdgeInsets safeInsets;
+  final bool preview;
 
   @override
   ConsumerState<LargeScreenPlayer> createState() => _LargeScreenPlayerState();
@@ -51,13 +54,16 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
   void initState() {
     super.initState();
     _mode = ref.read(largeScreenProvider.notifier);
-    _presentationVisible = ref.read(largeScreenProvider).contentVisible;
+    _presentationVisible =
+        widget.preview || ref.read(largeScreenProvider).contentVisible;
     _presentation = AnimationController(
         vsync: this,
         duration: ThmrMotion.duration,
         value: _presentationVisible ? 1 : 0);
-    _mode.animatePresentation = _animatePresentation;
-    largeScreenRevealRequests.addListener(_reveal);
+    if (!widget.preview) {
+      _mode.animatePresentation = _animatePresentation;
+      largeScreenRevealRequests.addListener(_reveal);
+    }
     _reveal();
   }
 
@@ -83,6 +89,7 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
   }
 
   void _reveal() {
+    if (widget.preview) return;
     _hideTimer?.cancel();
     if (!_controlsVisible) setState(() => _controlsVisible = true);
     if (!ref.read(largeScreenSettingsProvider).autoHideControls) return;
@@ -100,8 +107,8 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
   @override
   void dispose() {
     _hideTimer?.cancel();
-    largeScreenRevealRequests.removeListener(_reveal);
-    if (_mode.animatePresentation == _animatePresentation) {
+    if (!widget.preview) largeScreenRevealRequests.removeListener(_reveal);
+    if (!widget.preview && _mode.animatePresentation == _animatePresentation) {
       _mode.animatePresentation = null;
     }
     _presentation.dispose();
@@ -124,9 +131,17 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
               currentStation.initialLoading &&
               _lastLoaded != null;
           if (currentStation.status != null) _lastLoaded = currentStation;
-          final station = switching ? _lastLoaded! : currentStation;
-          final phase = ref.watch(playbackProvider.select((s) => s.phase));
-          final error = ref.watch(playbackProvider.select((s) => s.error));
+          final station = widget.preview && currentStation.status == null
+              ? _previewStation
+              : switching
+                  ? _lastLoaded!
+                  : currentStation;
+          final phase = widget.preview
+              ? PlaybackPhase.online
+              : ref.watch(playbackProvider.select((s) => s.phase));
+          final error = widget.preview
+              ? null
+              : ref.watch(playbackProvider.select((s) => s.error));
           final controls = ExcludeFocus(
               excluding: !_controlsVisible,
               child: ExcludeSemantics(
@@ -143,12 +158,14 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                         : ThmrMotion.exitCurve,
                     child: Focus(
                         focusNode: _controlsFocus,
-                        child: const _PlaybackControls()),
+                        child: _PlaybackControls(preview: widget.preview)),
                   ),
                 ),
               ));
           final content = ThmrFadeSlide(
-            key: const ValueKey('large-mode-transition'),
+            key: ValueKey(widget.preview
+                ? 'large-preview-transition'
+                : 'large-mode-transition'),
             animation: _presentation,
             child: SafeArea(
               minimum: widget.safeInsets,
@@ -157,7 +174,7 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                 station: station,
                 phase: phase,
                 playbackError: error,
-                header: const _Header(),
+                header: _Header(preview: widget.preview),
                 controls: controls,
               ),
             ),
@@ -170,7 +187,7 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
             child: Listener(
               onPointerDown: (_) => _reveal(),
               child: Focus(
-                autofocus: true,
+                autofocus: !widget.preview,
                 skipTraversal: true,
                 onKeyEvent: (_, event) {
                   if (event is KeyDownEvent) _reveal();
@@ -206,12 +223,17 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
 }
 
 class _Header extends ConsumerWidget {
-  const _Header();
+  const _Header({this.preview = false});
+  final bool preview;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final state = ref.watch(largeScreenProvider);
+    final state = preview
+        ? LargeScreenState(
+            fullScreen: ref.watch(
+                largeScreenSettingsProvider.select((s) => s.startFullScreen)))
+        : ref.watch(largeScreenProvider);
     final brand = Row(children: [
       ClipRRect(
           borderRadius: BorderRadius.circular(7),
@@ -236,25 +258,43 @@ class _Header extends ConsumerWidget {
     ]);
     final channels = ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 240),
-        child: ChannelSwitcher(
-            station:
-                ref.watch(stationProvider.select((s) => s.status?.station))));
+        child: preview
+            ? Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                    color: theme.thmr.panelSoft,
+                    border: Border.all(color: theme.thmr.panelBorder),
+                    borderRadius: BorderRadius.circular(7)),
+                child: Text(
+                    '频道  ${ref.watch(stationProvider).status?.station.name ?? '东方综合频道'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelMedium))
+            : ChannelSwitcher(
+                station: ref
+                    .watch(stationProvider.select((s) => s.status?.station))));
     final actions = [
       IconButton(
           tooltip: state.fullScreen ? '退出全屏' : '进入全屏',
-          onPressed: state.busy
-              ? null
-              : () => unawaited(
-                  ref.read(largeScreenProvider.notifier).toggleFullScreen()),
+          onPressed: preview
+              ? () {}
+              : state.busy
+                  ? null
+                  : () => unawaited(ref
+                      .read(largeScreenProvider.notifier)
+                      .toggleFullScreen()),
           icon: LargeScreenGlyph(state.fullScreen
               ? LargeScreenSymbol.windowed
               : LargeScreenSymbol.fullscreen)),
       IconButton(
           tooltip: '收起大屏模式',
-          onPressed: state.busy
-              ? null
-              : () => unawaited(
-                  ref.read(largeScreenProvider.notifier).change(false)),
+          onPressed: preview
+              ? () {}
+              : state.busy
+                  ? null
+                  : () => unawaited(
+                      ref.read(largeScreenProvider.notifier).change(false)),
           icon: const LargeScreenGlyph(LargeScreenSymbol.collapse)),
     ];
     return LayoutBuilder(builder: (context, constraints) {
@@ -282,13 +322,41 @@ class _Header extends ConsumerWidget {
   }
 }
 
+final _previewStation = StationUiState(
+    initialLoading: false,
+    status: StationStatus.fromJson({
+      'station': {'id': 'preview', 'name': '东方综合频道'},
+      'current': {
+        'trackId': 'preview-current',
+        'title': '春色小径 ～ Colorful Path',
+        'artist': '上海アリス幻樂団',
+        'durationSec': 214,
+        'positionSec': 82,
+      },
+      'queue': [
+        for (final title in [
+          '少女綺想曲 ～ Dream Battle',
+          '恋色マスタースパーク',
+          '千年幻想郷 ～ History of the Moon'
+        ])
+          {
+            'trackId': title,
+            'title': title,
+            'artist': '上海アリス幻樂団',
+            'durationSec': 240
+          },
+      ],
+    }));
+
 class _PlaybackControls extends ConsumerWidget {
-  const _PlaybackControls();
+  const _PlaybackControls({this.preview = false});
+  final bool preview;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final (phase, volume) =
-        ref.watch(playbackProvider.select((s) => (s.phase, s.volume)));
+    final (phase, volume) = preview
+        ? (PlaybackPhase.online, 60.0)
+        : ref.watch(playbackProvider.select((s) => (s.phase, s.volume)));
     final connecting = phase == PlaybackPhase.connecting ||
         phase == PlaybackPhase.reconnecting;
     final playing =
@@ -305,9 +373,11 @@ class _PlaybackControls extends ConsumerWidget {
                 : playing
                     ? '暂停播放'
                     : '播放',
-            onPressed: () => unawaited(ref
-                .read(playbackProvider.notifier)
-                .toggle(ref.read(streamUrlProvider))),
+            onPressed: preview
+                ? () {}
+                : () => unawaited(ref
+                    .read(playbackProvider.notifier)
+                    .toggle(ref.read(streamUrlProvider))),
             icon: Icon(connecting
                 ? Icons.stop_rounded
                 : playing
@@ -315,16 +385,19 @@ class _PlaybackControls extends ConsumerWidget {
                     : Icons.play_arrow_rounded)),
         IconButton(
             tooltip: volume > 0 ? '静音' : '恢复音量',
-            onPressed: () => ref
-                .read(playbackProvider.notifier)
-                .setVolume(ref.read(playbackProvider).volumeAfterMuteToggle),
+            onPressed: preview
+                ? () {}
+                : () => ref.read(playbackProvider.notifier).setVolume(
+                    ref.read(playbackProvider).volumeAfterMuteToggle),
             icon: Icon(volume > 0
                 ? Icons.volume_up_rounded
                 : Icons.volume_off_rounded)),
         Expanded(
             child: VolumeSlider(
                 value: volume,
-                onChanged: ref.read(playbackProvider.notifier).setVolume)),
+                onChanged: preview
+                    ? (_) {}
+                    : ref.read(playbackProvider.notifier).setVolume)),
         SizedBox(
             width: 42,
             child: Text('${volume.round()}%',

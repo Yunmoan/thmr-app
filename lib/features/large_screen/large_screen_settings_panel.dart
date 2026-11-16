@@ -7,6 +7,7 @@ import '../../shared/widgets/focus_outline.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import 'large_screen_symbols.dart';
 import 'large_screen_widget_editor.dart';
+import 'large_screen_preview.dart';
 
 class LargeScreenSettingsEntry extends StatelessWidget {
   const LargeScreenSettingsEntry({super.key});
@@ -14,14 +15,7 @@ class LargeScreenSettingsEntry extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ThmrPanel(
         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-          builder: (_) => Scaffold(
-            backgroundColor: Colors.transparent,
-            appBar: AppBar(title: const Text('大屏模式')),
-            body: const SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(18, 8, 18, 24),
-              child: LargeScreenSettingsPanel(),
-            ),
-          ),
+          builder: (_) => const LargeScreenSettingsPage(),
         )),
         child: Row(children: [
           LargeScreenGlyph(LargeScreenSymbol.enter,
@@ -37,7 +31,7 @@ class LargeScreenSettingsEntry extends StatelessWidget {
                         .bodyMedium
                         ?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
-                Text('布局、队列、封面与显示方式',
+                Text('布局、小组件与画面预览',
                     style: Theme.of(context)
                         .textTheme
                         .labelSmall
@@ -49,8 +43,85 @@ class LargeScreenSettingsEntry extends StatelessWidget {
       );
 }
 
+class LargeScreenSettingsPage extends StatefulWidget {
+  const LargeScreenSettingsPage({super.key});
+  @override
+  State<LargeScreenSettingsPage> createState() =>
+      _LargeScreenSettingsPageState();
+}
+
+class _LargeScreenSettingsPageState extends State<LargeScreenSettingsPage>
+    with SingleTickerProviderStateMixin {
+  late final _tabs = TabController(length: 2, vsync: this);
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(title: const Text('大屏模式'), actions: [
+        TextButton.icon(
+            onPressed: () => LargeScreenPreview.open(context),
+            icon: const Icon(Icons.preview_outlined, size: 18),
+            label: const Text('预览')),
+        const SizedBox(width: 12),
+      ]),
+      body: LayoutBuilder(builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 1100;
+        return Padding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                  flex: wide ? 5 : 1,
+                  child: Column(children: [
+                    TabBar(
+                        controller: _tabs,
+                        onTap: (_) =>
+                            FocusManager.instance.primaryFocus?.unfocus(),
+                        tabs: const [Tab(text: '布局与显示'), Tab(text: '小组件')]),
+                    const SizedBox(height: 12),
+                    Expanded(
+                        child: AnimatedBuilder(
+                            animation: _tabs,
+                            builder: (_, __) =>
+                                IndexedStack(index: _tabs.index, children: [
+                                  for (var i = 0; i < 2; i++)
+                                    TickerMode(
+                                        enabled: _tabs.index == i,
+                                        child: ExcludeFocus(
+                                            excluding: _tabs.index != i,
+                                            child: SingleChildScrollView(
+                                                key: PageStorageKey(
+                                                    'large-settings-tab-$i'),
+                                                padding: const EdgeInsets.only(
+                                                    bottom: 16),
+                                                child: i == 0
+                                                    ? const LargeScreenSettingsPanel(
+                                                        includeWidgets: false)
+                                                    : const ThmrPanel(
+                                                        child:
+                                                            LargeScreenWidgetEditor())))),
+                                ]))),
+                  ])),
+              if (wide) ...[
+                const SizedBox(width: 24),
+                const Expanded(
+                    flex: 6,
+                    child: Padding(
+                        padding: EdgeInsets.only(top: 12),
+                        child: LargeScreenPreview())),
+              ],
+            ]));
+      }));
+}
+
 class LargeScreenSettingsPanel extends ConsumerWidget {
-  const LargeScreenSettingsPanel({super.key});
+  const LargeScreenSettingsPanel({super.key, this.includeWidgets = true});
+  final bool includeWidgets;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -210,15 +281,19 @@ class LargeScreenSettingsPanel extends ConsumerWidget {
                 value: settings.contentMargin,
                 options: const [(16, '紧凑'), (32, '标准'), (48, '宽松'), (64, '留白')],
                 onChanged: (v) => save(settings.copyWith(contentMargin: v)))),
-        const Divider(height: 32),
-        const LargeScreenWidgetEditor(),
+        if (includeWidgets) ...[
+          const Divider(height: 32),
+          const LargeScreenWidgetEditor(),
+        ],
         const SizedBox(height: 16),
         Align(
           alignment: Alignment.centerRight,
           child: TextButton.icon(
-            onPressed: () => save(const LargeScreenSettings()),
+            onPressed: () => save(includeWidgets
+                ? const LargeScreenSettings()
+                : LargeScreenSettings(widgets: settings.widgets)),
             icon: const Icon(Icons.restart_alt_rounded, size: 18),
-            label: const Text('恢复默认'),
+            label: Text(includeWidgets ? '恢复默认' : '恢复默认布局'),
           ),
         ),
       ]),

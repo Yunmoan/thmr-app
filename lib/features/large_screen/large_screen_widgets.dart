@@ -12,10 +12,12 @@ class LargeScreenWidgetStrip extends StatefulWidget {
       {super.key,
       required this.components,
       required this.station,
-      required this.atTop});
+      required this.atTop,
+      this.singleColumn = false});
   final List<LargeScreenWidgetSettings> components;
   final StationUiState station;
   final bool atTop;
+  final bool singleColumn;
   @override
   State<LargeScreenWidgetStrip> createState() => _LargeScreenWidgetStripState();
 }
@@ -67,20 +69,24 @@ class _LargeScreenWidgetStripState extends State<LargeScreenWidgetStrip> {
               width: constraints.maxWidth,
               child:
                   Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-                for (var column = 0; column < 3; column++)
+                for (var column = 0;
+                    column < (widget.singleColumn ? 1 : 3);
+                    column++)
                   Expanded(
                       child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: Column(
                         mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: [
-                          CrossAxisAlignment.start,
-                          CrossAxisAlignment.center,
-                          CrossAxisAlignment.end
-                        ][column],
+                        crossAxisAlignment: widget.singleColumn
+                            ? CrossAxisAlignment.center
+                            : [
+                                CrossAxisAlignment.start,
+                                CrossAxisAlignment.center,
+                                CrossAxisAlignment.end
+                              ][column],
                         children: [
-                          for (final item
-                              in _items.where((w) => w.column == column))
+                          for (final item in _items.where(
+                              (w) => widget.singleColumn || w.column == column))
                             Padding(
                                 key: ValueKey(item.id),
                                 padding:
