@@ -26,17 +26,25 @@ class _PersistentTabPageState extends State<PersistentTabPage>
   );
 
   @override
-  void initState() {
-    super.initState();
-    if (widget.active) _controller.forward();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _updateAnimation();
+  }
+
+  void _updateAnimation({bool entering = false}) {
+    if (!widget.active ||
+        MediaQuery.disableAnimationsOf(context) ||
+        !TickerMode.valuesOf(context).enabled) {
+      _controller.value = 1;
+    } else if (entering || _controller.value == 0) {
+      _controller.forward(from: 0);
+    }
   }
 
   @override
   void didUpdateWidget(covariant PersistentTabPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.active && !oldWidget.active) {
-      _controller.forward(from: 0);
-    }
+    _updateAnimation(entering: widget.active && !oldWidget.active);
   }
 
   @override
