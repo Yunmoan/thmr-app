@@ -198,7 +198,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
       await _paint(concealed: concealed);
     } catch (error, stack) {
       debugPrint('Large screen transition failed: $error\n$stack');
-      errorMessage = !target.active ? '无法收起大屏模式，请重试。' : '无法切换显示模式，请重试。';
+      errorMessage = !target.active ? '无法收起大屏幕模式，请重试。' : '无法切换显示模式，请重试。';
       try {
         if (await windowManager.isFullScreen() != previousFullScreen) {
           await _setFullScreen(previousFullScreen);
@@ -221,7 +221,18 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
         }
       }
     } finally {
+      // Start the incoming entrance while the window is still concealed, then
+      // fence one rasterized frame before revealing it. Revealing first would
+      // expose a frame with only the backdrop (the content is still at opacity
+      // zero), which is longest on the first entry while the native fullscreen
+      // change and the shell hint are still settling.
+      final entrance = mounted ? _animate(true) : null;
       if (concealed) {
+        try {
+          await _paint(concealed: true);
+        } catch (error) {
+          debugPrint('Entrance frame fence failed: $error');
+        }
         try {
           await _presentation.reveal();
         } catch (error) {
@@ -242,11 +253,13 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
         } catch (error) {
           debugPrint('Window focus failed: $error');
         }
-        try {
-          await _animate(true);
-        } catch (error) {
-          debugPrint('Presentation entrance failed: $error');
-          errorMessage ??= '无法完成显示切换，请重试。';
+        if (entrance != null) {
+          try {
+            await entrance;
+          } catch (error) {
+            debugPrint('Presentation entrance failed: $error');
+            errorMessage ??= '无法完成显示切换，请重试。';
+          }
         }
         if (mounted) {
           state = LargeScreenState(

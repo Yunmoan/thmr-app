@@ -147,7 +147,7 @@ void main() {
         child: MaterialApp(
             theme: ThmrTheme.light(),
             home: const Scaffold(body: LargeScreenSettingsEntry()))));
-    await tester.tap(find.text('大屏模式'));
+    await tester.tap(find.text('大屏幕模式'));
     await tester.pumpAndSettle();
     expect(find.byType(LargeScreenSettingsPanel), findsOneWidget);
     expect(find.text('布局'), findsOneWidget);

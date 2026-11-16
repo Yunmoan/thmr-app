@@ -226,7 +226,7 @@ class InputHelpLegend extends StatelessWidget {
                   '切换迷你播放器'),
             if (hasDesktopWindowControls)
               const _HelpBinding(
-                  'large-screen', ['F11'], 'F11', '打开大屏模式 / 切换全屏'),
+                  'large-screen', ['F11'], 'F11', '打开大屏幕模式 / 切换全屏'),
             const _HelpBinding('back', ['keyboard_escape_outline'], 'Esc',
                 '关闭可取消的弹窗或返回；退出大屏或迷你模式'),
             const _HelpBinding(

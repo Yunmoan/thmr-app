@@ -5,6 +5,7 @@ import '../../core/state/large_screen_settings.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/focus_outline.dart';
 import '../../shared/widgets/thmr_panel.dart';
+import '../../shared/widgets/thmr_slider.dart';
 import 'large_screen_symbols.dart';
 import 'large_screen_widget_editor.dart';
 import 'large_screen_preview.dart';
@@ -25,7 +26,7 @@ class LargeScreenSettingsEntry extends StatelessWidget {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                Text('大屏模式',
+                Text('大屏幕模式Beta 配置',
                     style: Theme.of(context)
                         .textTheme
                         .bodyMedium
@@ -63,7 +64,7 @@ class _LargeScreenSettingsPageState extends State<LargeScreenSettingsPage>
   @override
   Widget build(BuildContext context) => Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: AppBar(title: const Text('大屏模式'), actions: [
+      appBar: AppBar(title: const Text('大屏幕模式Beta 配置'), actions: [
         TextButton.icon(
             onPressed: () => LargeScreenPreview.open(context),
             icon: const Icon(Icons.preview_outlined, size: 18),
@@ -267,12 +268,13 @@ class LargeScreenSettingsPanel extends ConsumerWidget {
               title: '立绘不透明度',
               child: SizedBox(
                   width: 300,
-                  child: Slider(
+                  child: ThmrSlider(
                       value: settings.illustrationOpacity,
                       min: .1,
                       max: 1,
                       divisions: 9,
-                      label: '${(settings.illustrationOpacity * 100).round()}%',
+                      semanticsLabel: '立绘不透明度',
+                      formatValue: (v) => '${(v * 100).round()}%',
                       onChanged: (v) =>
                           save(settings.copyWith(illustrationOpacity: v))))),
         _SettingRow(

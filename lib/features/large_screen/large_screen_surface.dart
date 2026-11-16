@@ -26,7 +26,7 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
   Size? _mainSize;
   MediaQueryData? _mainMetrics;
   FocusNode? _previousFocus;
-  final _stageFocus = FocusScopeNode(debugLabel: '大屏模式');
+  final _stageFocus = FocusScopeNode(debugLabel: '大屏幕模式');
   late final LargeScreenController _mode;
   late final AnimationController _standard;
   bool _standardVisible = true;
@@ -77,9 +77,17 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
   Future<void> _animateStandard(bool visible) async {
     if (!visible) _previousFocus = FocusManager.instance.primaryFocus;
     _standardVisible = visible;
-    _standard.duration = ThmrMotion.of(context, exiting: !visible);
+    final duration = ThmrMotion.of(context, exiting: !visible);
+    _standard.duration = duration;
     try {
-      await (visible ? _standard.forward() : _standard.reverse()).orCancel;
+      await (visible ? _standard.forward() : _standard.reverse())
+          .orCancel
+          .timeout(duration + const Duration(milliseconds: 200), onTimeout: () {
+        // Never strand the retained shell at opacity zero if its ticker is
+        // muted (for example while an opaque route covers this surface).
+        _standard.stop();
+        _standard.value = visible ? 1 : 0;
+      });
     } on TickerCanceled {
       // Disposal or enabling reduced motion completes the visible transition.
     }

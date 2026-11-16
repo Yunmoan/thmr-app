@@ -8,6 +8,7 @@ import '../../core/state/large_screen_settings.dart';
 import '../../core/state/station_provider.dart';
 import '../../core/theme/thmr_motion.dart';
 import '../../core/theme/thmr_theme.dart';
+import '../../shared/widgets/thmr_slider.dart';
 import 'large_screen_symbols.dart';
 import 'large_screen_widgets.dart';
 
@@ -459,12 +460,13 @@ class _ComponentEditorState extends State<_ComponentEditor> {
           (v) => widget.onChanged(item.copyWith(position: v))),
       _Field(
           label: '字号 ${item.fontSize.round()}',
-          child: Slider(
+          child: ThmrSlider(
               value: item.fontSize,
               min: 12,
               max: 96,
               divisions: 42,
-              label: '${item.fontSize.round()}',
+              semanticsLabel: '字号',
+              formatValue: (v) => '${v.round()}',
               onChanged: (v) => widget.onDraft(item.copyWith(fontSize: v)),
               onChangeEnd: (_) => widget.onCommit())),
       choices(
@@ -563,21 +565,25 @@ class _ComponentEditorState extends State<_ComponentEditor> {
                 (v) => widget.onChanged(item.copyWith(decoration: v))),
             _Field(
                 label: '字距 ${item.letterSpacing.round()}',
-                child: Slider(
+                child: ThmrSlider(
                     value: item.letterSpacing,
                     min: 0,
                     max: 12,
                     divisions: 12,
+                    semanticsLabel: '字距',
+                    formatValue: (v) => '${v.round()}',
                     onChanged: (v) =>
                         widget.onDraft(item.copyWith(letterSpacing: v)),
                     onChangeEnd: (_) => widget.onCommit())),
             _Field(
                 label: '不透明度 ${(item.opacity * 100).round()}%',
-                child: Slider(
+                child: ThmrSlider(
                     value: item.opacity,
                     min: .3,
                     max: 1,
                     divisions: 14,
+                    semanticsLabel: '不透明度',
+                    formatValue: (v) => '${(v * 100).round()}%',
                     onChanged: (v) => widget.onDraft(item.copyWith(opacity: v)),
                     onChangeEnd: (_) => widget.onCommit())),
             choices(

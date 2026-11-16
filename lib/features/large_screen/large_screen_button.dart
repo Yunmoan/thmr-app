@@ -15,7 +15,7 @@ class LargeScreenButton extends ConsumerWidget {
     if (!hasDesktopWindowControls) return const SizedBox.shrink();
     final busy = ref.watch(largeScreenProvider.select((s) => s.busy));
     return IconButton(
-      tooltip: '大屏模式',
+      tooltip: '大屏幕模式',
       onPressed: busy
           ? null
           : () =>

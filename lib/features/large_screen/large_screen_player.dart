@@ -70,10 +70,18 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
   Future<void> _animatePresentation(bool visible) async {
     _presentationVisible = visible;
     if (visible) _reveal();
-    _presentation.duration = ThmrMotion.of(context, exiting: !visible);
+    final duration = ThmrMotion.of(context, exiting: !visible);
+    _presentation.duration = duration;
     try {
       await (visible ? _presentation.forward() : _presentation.reverse())
-          .orCancel;
+          .orCancel
+          .timeout(duration + const Duration(milliseconds: 200), onTimeout: () {
+        // A muted ticker (the stage can be entered under an opaque route)
+        // never ticks. Land on the target instead of keeping `busy` set with
+        // the content stranded at opacity zero.
+        _presentation.stop();
+        _presentation.value = visible ? 1 : 0;
+      });
     } on TickerCanceled {
       // Removing the surface also completes its native mode transition.
     }
@@ -118,6 +126,17 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.preview) {
+      // Fallback for a missed controller callback (for example when the stage
+      // remounts during a transition): follow the shared visibility state so
+      // the content can never stay transparent while the stage is visible.
+      ref.listen(largeScreenProvider.select((state) => state.contentVisible),
+          (previous, visible) {
+        if (visible != _presentationVisible) {
+          unawaited(_animatePresentation(visible));
+        }
+      });
+    }
     final settings = ref.watch(largeScreenSettingsProvider);
     ref.listen(largeScreenSettingsProvider, (_, __) => _reveal());
     final theme = settings.themeMode == ThemeMode.system
@@ -288,7 +307,7 @@ class _Header extends ConsumerWidget {
               ? LargeScreenSymbol.windowed
               : LargeScreenSymbol.fullscreen)),
       IconButton(
-          tooltip: '收起大屏模式',
+          tooltip: '收起大屏幕模式',
           onPressed: preview
               ? () {}
               : state.busy

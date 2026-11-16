@@ -17,6 +17,7 @@ import 'package:thmr_app/core/state/large_screen_settings.dart';
 import 'package:thmr_app/core/state/channel_provider.dart';
 import 'package:thmr_app/features/listen/widgets/channel_switcher.dart';
 import 'package:thmr_app/shared/widgets/thmr_background.dart';
+import 'package:thmr_app/shared/widgets/thmr_slider.dart';
 import 'package:thmr_app/shared/widgets/track_cover.dart';
 import 'package:thmr_app/features/large_screen/large_screen_button.dart';
 import 'package:thmr_app/features/large_screen/large_screen_controller.dart';
@@ -462,7 +463,7 @@ void main() {
       final controls =
           tester.getRect(find.byKey(const ValueKey('large-screen-controls')));
       expect(controls.bottom, lessThanOrEqualTo(size.height - 48));
-      expect(find.byTooltip('收起大屏模式').hitTestable(), findsOneWidget);
+      expect(find.byTooltip('收起大屏幕模式').hitTestable(), findsOneWidget);
       expect(tester.takeException(), isNull);
     }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
   }
@@ -481,7 +482,7 @@ void main() {
             .getRect(find.byKey(const ValueKey('large-screen-window-drag')))
             .left,
         greaterThanOrEqualTo(40));
-    expect(find.byTooltip('收起大屏模式').hitTestable(), findsOneWidget);
+    expect(find.byTooltip('收起大屏幕模式').hitTestable(), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   for (final duringEntrance in [false, true]) {
@@ -514,7 +515,7 @@ void main() {
           .first;
       expect(h.container.read(largeScreenProvider).busy, isFalse);
       expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
-      expect(find.byTooltip('收起大屏模式').hitTestable(), findsOneWidget);
+      expect(find.byTooltip('收起大屏幕模式').hitTestable(), findsOneWidget);
     }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
   }
 
@@ -540,7 +541,7 @@ void main() {
         .first;
     expect(h.container.read(largeScreenProvider).busy, isFalse);
     expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
-    expect(find.byTooltip('收起大屏模式').hitTestable(), findsOneWidget);
+    expect(find.byTooltip('收起大屏幕模式').hitTestable(), findsOneWidget);
     await h.change(false);
     expect(tester.element(find.byKey(const ValueKey('retained-list'))),
         same(retained));
@@ -690,7 +691,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(h.nativeMethods, contains('startDragging'));
     h.nativeMethods.clear();
-    await tester.drag(find.byTooltip('收起大屏模式'), const Offset(40, 20),
+    await tester.drag(find.byTooltip('收起大屏幕模式'), const Offset(40, 20),
         kind: PointerDeviceKind.mouse);
     await tester.pumpAndSettle();
     expect(h.nativeMethods, isNot(contains('startDragging')));
@@ -821,7 +822,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.f11);
     await tester.pumpAndSettle();
     expect(h.nativeFullScreen, isTrue);
-    await tester.tap(find.byTooltip('收起大屏模式'));
+    await tester.tap(find.byTooltip('收起大屏幕模式'));
     await tester.pumpAndSettle();
     expect(h.nativeFullScreen, isFalse);
     expect(find.text('main control'), findsOneWidget);
@@ -841,7 +842,7 @@ void main() {
     expect(h.revealed, isEmpty);
     expect(h.controller.change(true), same(entering));
     final collapse = tester.widget<IconButton>(find.byWidgetPredicate(
-        (widget) => widget is IconButton && widget.tooltip == '收起大屏模式'));
+        (widget) => widget is IconButton && widget.tooltip == '收起大屏幕模式'));
     expect(collapse.onPressed, isNull);
     h.frameGate!.complete();
     await tester.pumpAndSettle();
@@ -883,7 +884,7 @@ void main() {
         (tester) async {
       final h = _Harness(tester);
       await h.mount(size: size, scale: size.width == 800 ? 2 : 1);
-      await tester.tap(find.byTooltip('大屏模式'));
+      await tester.tap(find.byTooltip('大屏幕模式'));
       await tester.pumpAndSettle();
       expect(find.byType(LargeScreenPlayer), findsOneWidget);
       expect(find.text('幽雅に咲かせ、墨染の桜'), findsOneWidget);
@@ -982,9 +983,9 @@ void main() {
     await h.change(false);
     expect(h.container.read(largeScreenProvider).active, isTrue);
     expect(h.container.read(largeScreenProvider).busy, isFalse);
-    expect(find.text('无法收起大屏模式，请重试。'), findsOneWidget);
+    expect(find.text('无法收起大屏幕模式，请重试。'), findsOneWidget);
     h.failExit = false;
-    await tester.tap(find.byTooltip('收起大屏模式'));
+    await tester.tap(find.byTooltip('收起大屏幕模式'));
     await tester.pumpAndSettle();
     expect(h.container.read(largeScreenProvider).active, isFalse);
     expect(h.nativeFullScreen, isFalse);
@@ -1068,9 +1069,9 @@ void main() {
                 find.byType(LinearProgressIndicator))
             .value,
         0);
-    await tester.tap(find.byTooltip('收起大屏模式'));
+    await tester.tap(find.byTooltip('收起大屏幕模式'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('大屏模式'), findsOneWidget);
+    expect(find.byTooltip('大屏幕模式'), findsOneWidget);
     expect(tester.takeException(), isNull);
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
@@ -1087,7 +1088,7 @@ void main() {
       (tester) async {
     final h = _Harness(tester);
     await h.mount();
-    expect(find.byTooltip('大屏模式'), findsNothing);
+    expect(find.byTooltip('大屏幕模式'), findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.f11);
     await tester.pumpAndSettle();
     await h.change(true);
@@ -1095,4 +1096,97 @@ void main() {
     expect(h.container.read(appTabProvider), 0);
     expect(find.byType(LargeScreenPlayer), findsNothing);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('window reveals only after the stage entrance has started',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount();
+    await h.change(true);
+    expect(h.revealed, hasLength(1));
+    expect(h.revealed.single.contentVisible, isTrue,
+        reason: 'The incoming entrance must start before the reveal.');
+    final fade = find
+        .descendant(
+            of: find.byKey(const ValueKey('large-mode-transition')),
+            matching: find.byType(FadeTransition))
+        .first;
+    expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
+    expect(h.container.read(largeScreenProvider).busy, isFalse);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('entering from a covered route still reveals the stage',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount(desktopRoot: true);
+    h.navigator.currentState!.push(MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('settings page'))));
+    await tester.pumpAndSettle();
+    final entering = h.controller.change(true);
+    // Tickers under an opaque route are muted; drive frames instead of
+    // waiting for the entrance to settle.
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    h.navigator.currentState!.pop();
+    await tester.pumpAndSettle();
+    await entering;
+    final fade = find
+        .descendant(
+            of: find.byKey(const ValueKey('large-mode-transition')),
+            matching: find.byType(FadeTransition))
+        .first;
+    expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
+    expect(h.container.read(largeScreenProvider).busy, isFalse);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('settings page uses overlay-free sliders for screen readers',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount(size: const Size(1440, 900), desktopRoot: true);
+    unawaited(h.navigator.currentState!.push(MaterialPageRoute<void>(
+        builder: (_) => const LargeScreenSettingsPage())));
+    await tester.pumpAndSettle();
+    // Material Slider's OverlayPortal emits orphaned semantics nodes inside a
+    // pushed route on Windows, freezing the accessibility tree.
+    expect(find.byType(Slider), findsNothing);
+    expect(find.byType(ThmrSlider), findsWidgets);
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('collapsing completes even when the stage ticker is muted',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount(desktopRoot: true);
+    h.navigator.currentState!.push(MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('settings page'))));
+    await tester.pumpAndSettle();
+    final entering = h.controller.change(true);
+    // The opaque route mutes the stage ticker. The entrance watchdog must land
+    // the stage at full opacity and release busy anyway.
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await entering;
+    expect(h.container.read(largeScreenProvider).busy, isFalse);
+    expect(h.container.read(largeScreenProvider).contentVisible, isTrue);
+
+    final exiting = h.controller.change(false);
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await exiting;
+    expect(h.container.read(largeScreenProvider).active, isFalse);
+    expect(h.container.read(largeScreenProvider).busy, isFalse);
+
+    h.navigator.currentState!.pop();
+    await tester.pumpAndSettle();
+    final fade = find
+        .descendant(
+            of: find.byKey(const ValueKey('standard-mode-transition')),
+            matching: find.byType(FadeTransition))
+        .first;
+    expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
+    expect(find.byType(LargeScreenPlayer), findsNothing);
+    expect(find.text('main control').hitTestable(), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 }
