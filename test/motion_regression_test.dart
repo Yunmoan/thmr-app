@@ -37,6 +37,21 @@ class _MotionHostState extends State<_MotionHost>
 
 void main() {
   testWidgets(
+      'portrait content remains centered in a square transition viewport',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+        home: Center(
+            child: SizedBox.square(
+      dimension: 240,
+      child: ThmrAnimatedContent(
+          alignment: Alignment.center,
+          child: SizedBox(key: ValueKey('portrait'), width: 80, height: 160)),
+    ))));
+    expect(tester.getRect(find.byKey(const ValueKey('portrait'))).center,
+        tester.getRect(find.byType(ThmrAnimatedContent)).center);
+  });
+
+  testWidgets(
       'size changes snap without re-layout errors and retain input state',
       (tester) async {
     final reduced = ValueNotifier(false);

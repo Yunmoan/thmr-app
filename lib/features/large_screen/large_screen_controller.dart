@@ -45,6 +45,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
   _PresentationTarget? _target;
   Future<void> Function(bool)? animatePresentation;
   Future<void> Function(bool)? animateStandard;
+  Future<void> Function()? refreshMetrics;
   bool _restoreFullScreen = false;
   Completer<void>? _nativeFullScreenWaiter;
   bool? _nativeFullScreenTarget;
@@ -188,6 +189,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
         await _paint(concealed: concealed);
       }
       if (!mounted) return;
+      await refreshMetrics?.call();
       state = LargeScreenState(
           active: target.active,
           fullScreen: targetFullScreen,
@@ -206,6 +208,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
         debugPrint('Fullscreen rollback failed: $rollbackError');
       }
       if (mounted) {
+        await refreshMetrics?.call();
         state = LargeScreenState(
             active: previous.active,
             fullScreen: previousFullScreen,

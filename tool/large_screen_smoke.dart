@@ -3,8 +3,10 @@
 // flutter run -d windows -t tool/large_screen_smoke.dart --no-pub
 import 'dart:ffi' as ffi;
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -76,6 +78,7 @@ Future<void> main() async {
   await container.read(largeScreenSettingsProvider.notifier).ready;
   await initializeDesktopWindow();
   final retained = GlobalKey();
+  final renderedFrame = GlobalKey();
   final inputKey = GlobalKey();
   final input = TextEditingController(text: 'THMR');
   final mainFocus = FocusNode();
@@ -87,15 +90,17 @@ Future<void> main() async {
             useMaterial3: true,
             colorScheme: ColorScheme.fromSeed(seedColor: ThmrColors.accent),
             extensions: [ThmrTokens.reimuLight.accessible()]),
-        builder: (context, child) => Consumer(
-            builder: (context, ref, _) => MediaQuery(
-                data: MediaQuery.of(context).copyWith(
-                    disableAnimations:
-                        const bool.fromEnvironment('reducedMotion')),
-                child: ThmrFocusLayer(
-                    reserveEdgeSpace:
-                        !ref.watch(largeScreenProvider.select((s) => s.active)),
-                    child: DesktopPlayerSurface(child: child!)))),
+        builder: (context, child) => RepaintBoundary(
+            key: renderedFrame,
+            child: Consumer(
+                builder: (context, ref, _) => MediaQuery(
+                    data: MediaQuery.of(context).copyWith(
+                        disableAnimations:
+                            const bool.fromEnvironment('reducedMotion')),
+                    child: ThmrFocusLayer(
+                        reserveEdgeSpace: !ref
+                            .watch(largeScreenProvider.select((s) => s.active)),
+                        child: DesktopPlayerSurface(child: child!))))),
         home: LargeScreenSurface(
             child: Scaffold(
                 key: retained,
@@ -130,10 +135,13 @@ Future<void> main() async {
     for (var cycle = 0; cycle < 4; cycle++) {
       final profile = LargeScreenSettings(
         layout: LargeScreenLayout.values[cycle],
-        queue: LargeScreenQueue.values[cycle],
+        queue: cycle == 0 && const bool.fromEnvironment('previewPause')
+            ? LargeScreenQueue.list
+            : LargeScreenQueue.values[cycle],
         framing:
             cycle.isEven ? LargeScreenFraming.fill : LargeScreenFraming.fit,
         startFullScreen: cycle.isEven,
+        autoHideControls: false,
         widgets: const [
           LargeScreenWidgetSettings(id: 'time', format: 'HH:mm:ss'),
           LargeScreenWidgetSettings(
@@ -162,8 +170,30 @@ Future<void> main() async {
         throw StateError('Stage did not open');
       }
       await _checkVisibleStage(binding);
+      const snapshotFile = String.fromEnvironment('snapshotFile');
+      if (cycle == 0 && snapshotFile.isNotEmpty) {
+        await binding.endOfFrame;
+        final boundary = renderedFrame.currentContext!.findRenderObject()!
+            as RenderRepaintBoundary;
+        final raster = await boundary.toImage(
+            pixelRatio:
+                MediaQuery.devicePixelRatioOf(renderedFrame.currentContext!));
+        final png = await raster.toByteData(format: ui.ImageByteFormat.png);
+        raster.dispose();
+        await File(snapshotFile)
+            .writeAsBytes(png!.buffer.asUint8List(), flush: true);
+        await controller.change(false);
+        if (errors.isNotEmpty)
+          throw StateError('${errors.length} Flutter errors');
+        debugPrint('LARGE_SCREEN_SNAPSHOT_PASS: $snapshotFile');
+        _exitProbe(0);
+      }
       if (cycle == 0 && const bool.fromEnvironment('previewPause')) {
         debugPrint('LARGE_SCREEN_PREVIEW_READY');
+        const readyFile = String.fromEnvironment('previewReadyFile');
+        if (readyFile.isNotEmpty) {
+          await File(readyFile).writeAsString('ready', flush: true);
+        }
         await Future<void>.delayed(const Duration(seconds: 30));
       }
       if (MediaQuery.sizeOf(retained.currentContext!) != initialMetrics ||
@@ -267,13 +297,40 @@ Future<void> _checkVisibleStage(WidgetsBinding binding) async {
     throw StateError(
         'Stage content is transparent after a completed transition');
   }
+  final fadeElement = find(const ValueKey('large-mode-transition'))!;
+  void inspect(Element element) {
+    if (element.widget is FadeTransition) {
+      if ((element.widget as FadeTransition).opacity.value != 1) {
+        throw StateError('A painted stage layer remains transparent');
+      }
+    }
+    element.visitChildElements(inspect);
+  }
+
+  inspect(fadeElement);
+  for (final key in [
+    'large-screen-window-drag',
+    'large-screen-title',
+    'large-screen-cover',
+    'large-screen-controls'
+  ]) {
+    final element = find(ValueKey(key));
+    if (element == null) continue;
+    final render = element.findRenderObject()! as RenderBox;
+    final rect = MatrixUtils.transformRect(
+        render.getTransformTo(null), Offset.zero & render.size);
+    if (!(Offset.zero & MediaQuery.sizeOf(element)).contains(rect.center)) {
+      throw StateError('Stage content is outside the viewport: $key $rect');
+    }
+  }
   final controls = find(const ValueKey('large-screen-controls'))!;
   final box = controls.findRenderObject()! as RenderBox;
   final bottom = box.localToGlobal(Offset(0, box.size.height)).dy;
   final insets = await WindowPresentation().workAreaInsets();
   final available = MediaQuery.sizeOf(controls).height - insets.bottom;
-  if (bottom > available + 1)
+  if (bottom > available + 1) {
     throw StateError('Controls overlap the taskbar: $bottom > $available');
+  }
 }
 
 Never _exitProbe(int code) {

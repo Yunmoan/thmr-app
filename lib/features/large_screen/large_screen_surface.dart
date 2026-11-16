@@ -61,6 +61,7 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
         duration: ThmrMotion.duration,
         value: _standardVisible ? 1 : 0);
     _mode.animateStandard = _animateStandard;
+    _mode.refreshMetrics = _refreshWorkArea;
     if (hasDesktopWindowControls) windowManager.addListener(this);
   }
 
@@ -89,6 +90,9 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
     if (hasDesktopWindowControls) windowManager.removeListener(this);
     if (_mode.animateStandard == _animateStandard) {
       _mode.animateStandard = null;
+    }
+    if (_mode.refreshMetrics == _refreshWorkArea) {
+      _mode.refreshMetrics = null;
     }
     _standard.dispose();
     _stageFocus.dispose();

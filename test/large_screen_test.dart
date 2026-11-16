@@ -109,6 +109,7 @@ class _Harness {
   bool resizeOnTransition = false;
   bool deferFullScreenEvent = false;
   EdgeInsets workAreaInsets = EdgeInsets.zero;
+  bool workAreaFollowsFullscreen = false;
   Completer<void>? enterGate;
   Completer<void>? frameGate;
   bool concealed = false;
@@ -153,6 +154,9 @@ class _Harness {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         const MethodChannel('thmr/window_presentation'), (call) async {
       if (call.method == 'workAreaInsets') {
+        if (workAreaFollowsFullscreen && !nativeFullScreen) {
+          return {'left': 0.0, 'top': 0.0, 'right': 0.0, 'bottom': 0.0};
+        }
         return {
           'left': workAreaInsets.left,
           'top': workAreaInsets.top,
@@ -249,6 +253,33 @@ class _Harness {
 }
 
 void main() {
+  testWidgets(
+      'native resize without window events refreshes the work area before reveal',
+      (tester) async {
+    final h = _Harness(tester)
+      ..workAreaFollowsFullscreen = true
+      ..workAreaInsets = const EdgeInsets.only(bottom: 54);
+    await h.mount(size: const Size(1920, 1080), desktopRoot: true);
+    await h.change(true);
+    final controls =
+        tester.getRect(find.byKey(const ValueKey('large-screen-controls')));
+    expect(controls.bottom, lessThanOrEqualTo(1080 - 54));
+    expect(
+        tester
+            .widget<LargeScreenPlayer>(find.byType(LargeScreenPlayer))
+            .safeInsets
+            .bottom,
+        54);
+    await h.change(false);
+    await h.change(true);
+    expect(
+        tester
+            .widget<LargeScreenPlayer>(find.byType(LargeScreenPlayer))
+            .safeInsets
+            .bottom,
+        54);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
   for (final size in [
     const Size(2560, 1440),
     const Size(1280, 720),
