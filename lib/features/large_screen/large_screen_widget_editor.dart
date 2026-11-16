@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +18,11 @@ LargeScreenSymbol _symbol(LargeScreenWidgetKind kind) => switch (kind) {
       LargeScreenWidgetKind.text => LargeScreenSymbol.text,
     };
 
+String _componentLabel(LargeScreenWidgetSettings item) =>
+    item.kind == LargeScreenWidgetKind.text && item.text.trim().isNotEmpty
+        ? item.text.replaceAll('\n', ' ')
+        : item.label;
+
 class LargeScreenWidgetEditor extends ConsumerStatefulWidget {
   const LargeScreenWidgetEditor({super.key});
   @override
@@ -25,19 +32,49 @@ class LargeScreenWidgetEditor extends ConsumerStatefulWidget {
 
 class _LargeScreenWidgetEditorState
     extends ConsumerState<LargeScreenWidgetEditor> {
-  String? _lastAdded;
+  late final _settings = ref.read(largeScreenSettingsProvider.notifier);
+  String? _selectedId;
   int _serial = 0;
+  Timer? _saveTimer;
   String _id() =>
       'component-${DateTime.now().microsecondsSinceEpoch}-${_serial++}';
-  void _save(List<LargeScreenWidgetSettings> widgets) => ref
-      .read(largeScreenSettingsProvider.notifier)
-      .update(ref.read(largeScreenSettingsProvider).copyWith(widgets: widgets));
+
+  void _commit() {
+    _saveTimer?.cancel();
+    _saveTimer = null;
+    unawaited(_settings.persist());
+  }
+
+  void _save(List<LargeScreenWidgetSettings> widgets, {bool deferred = false}) {
+    _settings.preview(
+        ref.read(largeScreenSettingsProvider).copyWith(widgets: widgets));
+    _saveTimer?.cancel();
+    if (deferred) {
+      _saveTimer = Timer(const Duration(milliseconds: 400), _commit);
+    } else {
+      _commit();
+    }
+  }
+
+  void _edit(LargeScreenWidgetSettings component, {bool deferred = false}) {
+    final items = [...ref.read(largeScreenSettingsProvider).widgets];
+    final index = items.indexWhere((w) => w.id == component.id);
+    if (index < 0) return;
+    items[index] = component;
+    _save(items, deferred: deferred);
+  }
+
+  void _select(String id) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (_saveTimer != null) _commit();
+    setState(() => _selectedId = id);
+  }
 
   void _add(LargeScreenWidgetKind kind) {
     final items = ref.read(largeScreenSettingsProvider).widgets;
     if (items.length >= 8) return;
     final id = _id();
-    setState(() => _lastAdded = id);
+    _select(id);
     _save([
       ...items,
       LargeScreenWidgetSettings(
@@ -84,25 +121,54 @@ class _LargeScreenWidgetEditorState
     };
     final existing = ref.read(largeScreenSettingsProvider).widgets;
     if (existing.length + chosen.length > 8) return;
-    setState(() => _lastAdded = chosen.first.id);
+    _select(chosen.first.id);
     _save([...existing, ...chosen]);
+  }
+
+  void _move(String id, int delta) {
+    final next = [...ref.read(largeScreenSettingsProvider).widgets];
+    final index = next.indexWhere((w) => w.id == id);
+    if (index < 0 || index + delta < 0 || index + delta >= next.length) return;
+    next.insert(index + delta, next.removeAt(index));
+    _save(next);
+  }
+
+  void _delete(String id) {
+    final items = [...ref.read(largeScreenSettingsProvider).widgets];
+    final index = items.indexWhere((w) => w.id == id);
+    if (index < 0) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    items.removeAt(index);
+    setState(() => _selectedId =
+        items.isEmpty ? null : items[index.clamp(0, items.length - 1)].id);
+    _save(items);
+  }
+
+  @override
+  void dispose() {
+    if (_saveTimer != null) _commit();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final items =
         ref.watch(largeScreenSettingsProvider.select((s) => s.widgets));
-    final needsMetadata = items
-        .any((w) => RegExp(r'\{(title|artist|channel)\}').hasMatch(w.text));
+    final selected = items.where((w) => w.id == _selectedId).firstOrNull ??
+        items.firstOrNull;
+    final index = selected == null ? -1 : items.indexOf(selected);
+    final needsMetadata = selected != null &&
+        RegExp(r'\{(title|artist|channel)\}').hasMatch(selected.text);
     final station =
         needsMetadata ? ref.watch(stationProvider) : const StationUiState();
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    final theme = Theme.of(context);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Wrap(
           alignment: WrapAlignment.spaceBetween,
           crossAxisAlignment: WrapCrossAlignment.center,
           spacing: 12,
           children: [
-            Text('小组件', style: Theme.of(context).textTheme.titleSmall),
+            Text('小组件 ${items.length}/8', style: theme.textTheme.titleSmall),
             PopupMenuButton<LargeScreenWidgetKind>(
               tooltip: '添加小组件',
               enabled: items.length < 8,
@@ -128,8 +194,8 @@ class _LargeScreenWidgetEditorState
                     Icon(Icons.add,
                         size: 18,
                         color: items.length < 8
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).disabledColor),
+                            ? theme.colorScheme.primary
+                            : theme.disabledColor),
                     const SizedBox(width: 6),
                     const Text('添加小组件'),
                   ])),
@@ -148,63 +214,76 @@ class _LargeScreenWidgetEditorState
       ]),
       if (items.isEmpty)
         Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text('添加时间、日期或文本，按位置自动排版。',
-                style: Theme.of(context).textTheme.bodySmall)),
-      for (var i = 0; i < items.length; i++)
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child:
+                Text('添加时间、日期或文本，按位置自动排版。', style: theme.textTheme.bodySmall)),
+      if (items.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          for (var i = 0; i < items.length; i++)
+            InputChip(
+                key: ValueKey('select-${items[i].id}'),
+                avatar: LargeScreenGlyph(_symbol(items[i].kind),
+                    size: 16,
+                    color: items[i].enabled
+                        ? theme.thmr.ink
+                        : theme.thmr.mutedInk),
+                label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 160),
+                    child: Text('${i + 1} · ${_componentLabel(items[i])}',
+                        maxLines: 1, overflow: TextOverflow.ellipsis)),
+                tooltip:
+                    '${items[i].label} · ${_positions[items[i].position.index]}',
+                selected: items[i].id == selected?.id,
+                onSelected: (_) => _select(items[i].id)),
+        ]),
+        const Divider(height: 28),
+      ],
+      if (selected != null)
         _ComponentEditor(
-            key: ValueKey(items[i].id),
-            component: items[i],
-            initiallyExpanded: items[i].id == _lastAdded,
+            key: ValueKey(selected.id),
+            component: selected,
             preview: LargeScreenWidgetStrip(components: [
-              items[i].copyWith(
+              selected.copyWith(
                   enabled: true, position: LargeScreenWidgetPosition.topCenter)
             ], station: station, atTop: true),
-            onChanged: (value) => _save([...items]..[i] = value),
-            onDelete: () => _save([...items]..removeAt(i)),
+            onChanged: (value) => _edit(value),
+            onDraft: (value) => _edit(value, deferred: true),
+            onCommit: _commit,
+            onDelete: () => _delete(selected.id),
             onDuplicate: items.length >= 8
                 ? null
                 : () {
-                    final copy = items[i].copyWith(id: _id());
-                    setState(() => _lastAdded = copy.id);
-                    _save([...items]..insert(i + 1, copy));
+                    final current =
+                        ref.read(largeScreenSettingsProvider).widgets;
+                    final copy = selected.copyWith(id: _id());
+                    _select(copy.id);
+                    _save([...current]..insert(index + 1, copy));
                   },
-            onMoveUp: i == 0
-                ? null
-                : () {
-                    final next = [...items];
-                    final item = next.removeAt(i);
-                    next.insert(i - 1, item);
-                    _save(next);
-                  },
-            onMoveDown: i == items.length - 1
-                ? null
-                : () {
-                    final next = [...items];
-                    final item = next.removeAt(i);
-                    next.insert(i + 1, item);
-                    _save(next);
-                  }),
+            onMoveUp: index == 0 ? null : () => _move(selected.id, -1),
+            onMoveDown:
+                index == items.length - 1 ? null : () => _move(selected.id, 1)),
     ]);
   }
 }
 
 class _ComponentEditor extends StatefulWidget {
-  const _ComponentEditor(
-      {super.key,
-      required this.component,
-      required this.preview,
-      required this.initiallyExpanded,
-      required this.onChanged,
-      required this.onDelete,
-      required this.onDuplicate,
-      required this.onMoveUp,
-      required this.onMoveDown});
+  const _ComponentEditor({
+    super.key,
+    required this.component,
+    required this.preview,
+    required this.onChanged,
+    required this.onDraft,
+    required this.onCommit,
+    required this.onDelete,
+    required this.onDuplicate,
+    required this.onMoveUp,
+    required this.onMoveDown,
+  });
   final LargeScreenWidgetSettings component;
   final Widget preview;
-  final bool initiallyExpanded;
-  final ValueChanged<LargeScreenWidgetSettings> onChanged;
-  final VoidCallback onDelete;
+  final ValueChanged<LargeScreenWidgetSettings> onChanged, onDraft;
+  final VoidCallback onCommit, onDelete;
   final VoidCallback? onDuplicate, onMoveUp, onMoveDown;
   @override
   State<_ComponentEditor> createState() => _ComponentEditorState();
@@ -214,24 +293,44 @@ class _ComponentEditorState extends State<_ComponentEditor> {
   late final _text = TextEditingController(text: widget.component.text);
   late final _format = TextEditingController(text: widget.component.format);
   late final _color = TextEditingController(text: _hex(widget.component.color));
+  // ExpansionTile stores a bool under its PageStorageKey. A nested input's
+  // internal Scrollable must not read that value as its double scroll offset.
+  final _textScroll = ScrollController(keepScrollOffset: false);
+  final _formatScroll = ScrollController(keepScrollOffset: false);
+  final _colorScroll = ScrollController(keepScrollOffset: false);
   String _hex(int color) =>
       (color & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase();
+
   @override
   void didUpdateWidget(covariant _ComponentEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.component.text != widget.component.text &&
-        _text.text != widget.component.text) {
-      _text.text = widget.component.text;
+    if (oldWidget.component.text == widget.component.text &&
+        oldWidget.component.format == widget.component.format &&
+        oldWidget.component.color == widget.component.color) {
+      return;
     }
-    if (oldWidget.component.format != widget.component.format &&
-        _format.text != widget.component.format) {
-      _format.text = widget.component.format;
-    }
-    if (oldWidget.component.color != widget.component.color &&
-        _color.text.toUpperCase().replaceAll('#', '') !=
-            _hex(widget.component.color)) {
-      _color.text = _hex(widget.component.color);
-    }
+    // EditableText owns selection and composing state. Synchronize external
+    // presets after this build, never while its elements are being updated.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      void sync(TextEditingController controller, String value) {
+        if (controller.text == value) return;
+        final selection = controller.selection;
+        controller.value = TextEditingValue(
+            text: value,
+            selection: TextSelection.collapsed(
+                offset: selection.isValid
+                    ? selection.extentOffset.clamp(0, value.length)
+                    : value.length));
+      }
+
+      sync(_text, widget.component.text);
+      sync(_format, widget.component.format);
+      if (_color.text.toUpperCase().replaceAll('#', '') !=
+          _hex(widget.component.color)) {
+        sync(_color, _hex(widget.component.color));
+      }
+    });
   }
 
   @override
@@ -239,6 +338,9 @@ class _ComponentEditorState extends State<_ComponentEditor> {
     _text.dispose();
     _format.dispose();
     _color.dispose();
+    _textScroll.dispose();
+    _formatScroll.dispose();
+    _colorScroll.dispose();
     super.dispose();
   }
 
@@ -257,7 +359,6 @@ class _ComponentEditorState extends State<_ComponentEditor> {
   @override
   Widget build(BuildContext context) {
     final item = widget.component;
-    final theme = Theme.of(context);
     Widget choices<T>(String label, T selected, List<(T, String)> options,
             ValueChanged<T> changed) =>
         _Field(
@@ -269,115 +370,157 @@ class _ComponentEditorState extends State<_ComponentEditor> {
                     selected: selected == option.$1,
                     onSelected: (_) => changed(option.$1)),
             ]));
-    return DecoratedBox(
-        decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: theme.thmr.panelBorder))),
-        child: ExpansionTile(
-          key: PageStorageKey(item.id),
-          initiallyExpanded: widget.initiallyExpanded,
-          expansionAnimationStyle: ThmrMotion.style(context),
+    final hasFormat =
+        item.kind != LargeScreenWidgetKind.text || item.text.contains('{time}');
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              Switch(
+                  value: item.enabled,
+                  onChanged: (v) =>
+                      widget.onChanged(item.copyWith(enabled: v))),
+              const Text('显示'),
+            ]),
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              IconButton(
+                  tooltip: '上移小组件',
+                  onPressed: widget.onMoveUp,
+                  icon: const Icon(Icons.arrow_upward, size: 18)),
+              IconButton(
+                  tooltip: '下移小组件',
+                  onPressed: widget.onMoveDown,
+                  icon: const Icon(Icons.arrow_downward, size: 18)),
+              IconButton(
+                  tooltip: '复制小组件',
+                  onPressed: widget.onDuplicate,
+                  icon: const Icon(Icons.copy, size: 18)),
+              IconButton(
+                  tooltip: '删除小组件',
+                  onPressed: widget.onDelete,
+                  icon: const Icon(Icons.delete_outline, size: 18)),
+            ]),
+          ]),
+      SizedBox(height: 56, child: Center(child: widget.preview)),
+      if (item.kind == LargeScreenWidgetKind.text) ...[
+        _Field(
+            label: '文本内容',
+            child: TextField(
+                key: ValueKey('component-text-${item.id}'),
+                controller: _text,
+                scrollController: _textScroll,
+                minLines: 1,
+                maxLines: 4,
+                maxLength: 500,
+                decoration: const InputDecoration(hintText: '输入要显示的文字'),
+                onChanged: (v) => widget.onDraft(item.copyWith(text: v)))),
+        Wrap(spacing: 6, runSpacing: 4, children: [
+          for (final tag in const [
+            ('曲名', '{title}'),
+            ('社团', '{artist}'),
+            ('频道', '{channel}'),
+            ('时间', '{time}'),
+            ('日期', '{date}'),
+            ('星期', '{weekday}'),
+          ])
+            ActionChip(
+                label: Text('插入${tag.$1}'), onPressed: () => _insert(tag.$2)),
+        ]),
+      ],
+      if (hasFormat)
+        choices(
+            '常用格式',
+            item.format,
+            item.kind == LargeScreenWidgetKind.date
+                ? const [
+                    ('yyyy年M月d日 EEEE', '年月日与星期'),
+                    ('yyyy-MM-dd', '年月日'),
+                    ('M月d日 EEEE', '月日与星期'),
+                    ('EEEE', '星期')
+                  ]
+                : const [
+                    ('HH:mm', '24 小时'),
+                    ('HH:mm:ss', '显示秒'),
+                    ('h:mm a', '12 小时'),
+                    ('HH时mm分', '中文时间')
+                  ],
+            (v) => widget.onChanged(item.copyWith(format: v))),
+      choices(
+          '位置',
+          item.position,
+          [
+            for (final pos in LargeScreenWidgetPosition.values)
+              (pos, _positions[pos.index])
+          ],
+          (v) => widget.onChanged(item.copyWith(position: v))),
+      _Field(
+          label: '字号 ${item.fontSize.round()}',
+          child: Slider(
+              value: item.fontSize,
+              min: 12,
+              max: 96,
+              divisions: 42,
+              label: '${item.fontSize.round()}',
+              onChanged: (v) => widget.onDraft(item.copyWith(fontSize: v)),
+              onChangeEnd: (_) => widget.onCommit())),
+      choices(
+          '颜色',
+          item.tone,
+          const [
+            (LargeScreenWidgetTone.ink, '正文色'),
+            (LargeScreenWidgetTone.muted, '次要色'),
+            (LargeScreenWidgetTone.accent, '主题色'),
+            (LargeScreenWidgetTone.custom, '自定义')
+          ],
+          (v) => widget.onChanged(item.copyWith(tone: v))),
+      if (item.tone == LargeScreenWidgetTone.custom)
+        _Field(
+            label: '自定义颜色',
+            child: TextField(
+                key: ValueKey('component-color-${item.id}'),
+                controller: _color,
+                scrollController: _colorScroll,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp('[0-9a-fA-F#]')),
+                  LengthLimitingTextInputFormatter(7)
+                ],
+                decoration:
+                    const InputDecoration(prefixText: '#', hintText: 'RRGGBB'),
+                onChanged: (v) {
+                  final hex = v.replaceAll('#', '');
+                  if (hex.length != 6) return;
+                  final parsed = int.tryParse(hex, radix: 16);
+                  if (parsed != null) {
+                    widget.onDraft(item.copyWith(color: 0xFF000000 | parsed));
+                  }
+                })),
+      const SizedBox(height: 16),
+      ExpansionTile(
+          key: PageStorageKey('component-advanced-${item.id}'),
+          title: const Text('高级样式'),
           tilePadding: EdgeInsets.zero,
-          childrenPadding: const EdgeInsets.only(bottom: 16),
+          childrenPadding: const EdgeInsets.only(bottom: 12),
+          expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+          expansionAnimationStyle: ThmrMotion.style(context),
           shape: const Border(),
           collapsedShape: const Border(),
-          leading: LargeScreenGlyph(_symbol(item.kind)),
-          title: Text(item.label),
-          subtitle: Text(_positions[item.position.index],
-              style: theme.textTheme.labelSmall),
           children: [
-            SizedBox(height: 96, child: Center(child: widget.preview)),
-            Wrap(
-                alignment: WrapAlignment.end,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Row(mainAxisSize: MainAxisSize.min, children: [
-                    Switch(
-                        value: item.enabled,
-                        onChanged: (v) =>
-                            widget.onChanged(item.copyWith(enabled: v))),
-                    const Text('显示')
-                  ]),
-                  IconButton(
-                      tooltip: '上移小组件',
-                      onPressed: widget.onMoveUp,
-                      icon: const Icon(Icons.arrow_upward, size: 18)),
-                  IconButton(
-                      tooltip: '下移小组件',
-                      onPressed: widget.onMoveDown,
-                      icon: const Icon(Icons.arrow_downward, size: 18)),
-                  IconButton(
-                      tooltip: '复制小组件',
-                      onPressed: widget.onDuplicate,
-                      icon: const Icon(Icons.copy, size: 18)),
-                  IconButton(
-                      tooltip: '删除小组件',
-                      onPressed: widget.onDelete,
-                      icon: const Icon(Icons.delete_outline, size: 18)),
-                ]),
-            choices(
-                '位置',
-                item.position,
-                [
-                  for (final pos in LargeScreenWidgetPosition.values)
-                    (pos, _positions[pos.index])
-                ],
-                (v) => widget.onChanged(item.copyWith(position: v))),
-            if (item.kind == LargeScreenWidgetKind.text) ...[
-              _Field(
-                  label: '文本内容',
-                  child: TextField(
-                      controller: _text,
-                      minLines: 2,
-                      maxLines: 4,
-                      maxLength: 500,
-                      decoration: const InputDecoration(hintText: '输入要显示的文字'),
-                      onChanged: (v) =>
-                          widget.onChanged(item.copyWith(text: v)))),
-              Wrap(spacing: 6, children: [
-                for (final tag in const [
-                  ('曲名', '{title}'),
-                  ('社团', '{artist}'),
-                  ('频道', '{channel}'),
-                  ('时间', '{time}'),
-                  ('日期', '{date}'),
-                  ('星期', '{weekday}'),
-                ])
-                  ActionChip(
-                      label: Text('插入${tag.$1}'),
-                      onPressed: () => _insert(tag.$2))
-              ]),
-            ],
-            if (item.kind != LargeScreenWidgetKind.text ||
-                item.text.contains('{time}')) ...[
-              choices(
-                  '常用格式',
-                  item.format,
-                  item.kind == LargeScreenWidgetKind.date
-                      ? const [
-                          ('yyyy年M月d日 EEEE', '年月日与星期'),
-                          ('yyyy-MM-dd', '2026-11-16'),
-                          ('M月d日 EEEE', '月日与星期'),
-                          ('EEEE', '星期')
-                        ]
-                      : const [
-                          ('HH:mm', '24 小时'),
-                          ('HH:mm:ss', '显示秒'),
-                          ('h:mm a', '12 小时'),
-                          ('HH时mm分', '中文时间')
-                        ],
-                  (v) => widget.onChanged(item.copyWith(format: v))),
+            if (hasFormat)
               _Field(
                   label: '自定义格式',
                   child: TextField(
+                      key: ValueKey('component-format-${item.id}'),
                       controller: _format,
+                      scrollController: _formatScroll,
                       maxLength: 100,
                       decoration: InputDecoration(
                           helperText: item.kind == LargeScreenWidgetKind.date
                               ? 'yyyy 年 · MM 月 · dd 日 · EEEE 星期'
                               : 'HH 24小时 · h 12小时 · mm 分 · ss 秒 · a 上下午'),
                       onChanged: (v) =>
-                          widget.onChanged(item.copyWith(format: v)))),
-            ],
+                          widget.onDraft(item.copyWith(format: v)))),
             if (item.needsClock)
               choices(
                   '时区',
@@ -388,16 +531,6 @@ class _ComponentEditorState extends State<_ComponentEditor> {
                     (LargeScreenWidgetTimezone.utc, 'UTC')
                   ],
                   (v) => widget.onChanged(item.copyWith(timezone: v))),
-            _Field(
-                label: '字号 ${item.fontSize.round()}',
-                child: Slider(
-                    value: item.fontSize,
-                    min: 12,
-                    max: 96,
-                    divisions: 42,
-                    label: '${item.fontSize.round()}',
-                    onChanged: (v) =>
-                        widget.onChanged(item.copyWith(fontSize: v)))),
             choices(
                 '字体',
                 item.font,
@@ -418,44 +551,12 @@ class _ComponentEditorState extends State<_ComponentEditor> {
                 value: item.italic,
                 onChanged: (v) => widget.onChanged(item.copyWith(italic: v))),
             choices(
-                '颜色',
-                item.tone,
-                const [
-                  (LargeScreenWidgetTone.ink, '正文色'),
-                  (LargeScreenWidgetTone.muted, '次要色'),
-                  (LargeScreenWidgetTone.accent, '主题色'),
-                  (LargeScreenWidgetTone.custom, '自定义')
-                ],
-                (v) => widget.onChanged(item.copyWith(tone: v))),
-            if (item.tone == LargeScreenWidgetTone.custom)
-              _Field(
-                  label: '自定义颜色',
-                  child: TextField(
-                      controller: _color,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                            RegExp('[0-9a-fA-F#]')),
-                        LengthLimitingTextInputFormatter(7)
-                      ],
-                      decoration: const InputDecoration(
-                          prefixText: '#', hintText: 'RRGGBB'),
-                      onChanged: (v) {
-                        final hex = v.replaceAll('#', '');
-                        if (hex.length == 6) {
-                          final parsed = int.tryParse(hex, radix: 16);
-                          if (parsed != null) {
-                            widget.onChanged(
-                                item.copyWith(color: parsed | 0xFF000000));
-                          }
-                        }
-                      })),
-            choices(
-                '样式',
+                '装饰',
                 item.decoration,
                 const [
-                  (LargeScreenWidgetDecoration.none, '纯文字'),
+                  (LargeScreenWidgetDecoration.none, '无'),
                   (LargeScreenWidgetDecoration.rule, '竖线'),
-                  (LargeScreenWidgetDecoration.label, '标签')
+                  (LargeScreenWidgetDecoration.label, '底色')
                 ],
                 (v) => widget.onChanged(item.copyWith(decoration: v))),
             _Field(
@@ -466,7 +567,8 @@ class _ComponentEditorState extends State<_ComponentEditor> {
                     max: 12,
                     divisions: 12,
                     onChanged: (v) =>
-                        widget.onChanged(item.copyWith(letterSpacing: v)))),
+                        widget.onDraft(item.copyWith(letterSpacing: v)),
+                    onChangeEnd: (_) => widget.onCommit())),
             _Field(
                 label: '不透明度 ${(item.opacity * 100).round()}%',
                 child: Slider(
@@ -474,15 +576,15 @@ class _ComponentEditorState extends State<_ComponentEditor> {
                     min: .3,
                     max: 1,
                     divisions: 14,
-                    onChanged: (v) =>
-                        widget.onChanged(item.copyWith(opacity: v)))),
+                    onChanged: (v) => widget.onDraft(item.copyWith(opacity: v)),
+                    onChangeEnd: (_) => widget.onCommit())),
             choices(
                 '最多行数',
                 item.maxLines,
                 const [(1, '1 行'), (2, '2 行'), (3, '3 行'), (4, '4 行')],
                 (v) => widget.onChanged(item.copyWith(maxLines: v))),
-          ],
-        ));
+          ]),
+    ]);
   }
 }
 
@@ -492,10 +594,10 @@ class _Field extends StatelessWidget {
   final Widget child;
   @override
   Widget build(BuildContext context) => Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text(label, style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         child,
       ]));
 }

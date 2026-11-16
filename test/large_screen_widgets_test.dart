@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +8,8 @@ import 'package:thmr_app/core/models/models.dart';
 import 'package:thmr_app/core/state/large_screen_settings.dart';
 import 'package:thmr_app/core/state/station_provider.dart';
 import 'package:thmr_app/core/theme/thmr_colors.dart';
+import 'package:thmr_app/core/theme/thmr_theme.dart';
+import 'package:thmr_app/core/theme/thmr_focus_ring.dart';
 import 'package:thmr_app/features/large_screen/large_screen_widget_editor.dart';
 import 'package:thmr_app/features/large_screen/large_screen_widgets.dart';
 
@@ -160,6 +164,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(container.read(largeScreenSettingsProvider).widgets.single.format,
           'HH:mm:ss');
+      await tester.ensureVisible(find.text('高级样式'));
+      await tester.tap(find.text('高级样式'));
+      await tester.pumpAndSettle();
       final formatInput = tester.widget<TextField>(find.byWidgetPredicate(
           (w) => w is TextField && w.controller?.text == 'HH:mm:ss'));
       expect(formatInput.controller!.text, 'HH:mm:ss');
@@ -193,6 +200,95 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }
+
+  testWidgets('one component editor batches text saves and flushes on leaving',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final settings = container.read(largeScreenSettingsProvider.notifier);
+    await settings.ready;
+    await settings.update(const LargeScreenSettings(widgets: [
+      LargeScreenWidgetSettings(
+          id: 'first', kind: LargeScreenWidgetKind.text, text: '一'),
+      LargeScreenWidgetSettings(
+          id: 'second', kind: LargeScreenWidgetKind.text, text: '二'),
+    ]));
+    await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+            theme: ThmrTheme.light(),
+            home: const Scaffold(
+                body:
+                    SingleChildScrollView(child: LargeScreenWidgetEditor())))));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    final input = find.byKey(const ValueKey('component-text-first'));
+    await tester.ensureVisible(input);
+    await tester.enterText(input, '修改一');
+    await tester.enterText(input, '修改二');
+    await tester.pump();
+    expect(
+        container.read(largeScreenSettingsProvider).widgets.first.text, '修改二');
+    final prefs = await SharedPreferences.getInstance();
+    String saved() =>
+        ((jsonDecode(prefs.getString('largeScreen')!) as Map)['widgets']
+                as List)
+            .first['text'] as String;
+    expect(saved(), '一');
+    await tester.pump(const Duration(milliseconds: 399));
+    expect(saved(), '一');
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    expect(saved(), '修改二');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('focused component inputs survive format changes and reordering',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final container = ProviderContainer(
+        overrides: [stationProvider.overrideWith((ref) => _Station())]);
+    addTearDown(container.dispose);
+    await container.read(largeScreenSettingsProvider.notifier).ready;
+    await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+            theme: ThmrTheme.dark(),
+            builder: (_, child) => ThmrFocusLayer(child: child!),
+            home: const Scaffold(
+                body: SingleChildScrollView(
+                    padding: EdgeInsets.all(16),
+                    child: LargeScreenWidgetEditor())))));
+    await tester.tap(find.text('添加时钟日期'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('高级样式'));
+    await tester.tap(find.text('高级样式'));
+    await tester.pumpAndSettle();
+    final format = find.byWidgetPredicate(
+        (w) => w is TextField && w.controller?.text == 'HH:mm');
+    await tester.ensureVisible(format);
+    await tester.tap(format);
+    tester.testTextInput.updateEditingValue(const TextEditingValue(
+        text: 'HH:mm 中文',
+        selection: TextSelection.collapsed(offset: 8),
+        composing: TextRange(start: 6, end: 8)));
+    await tester.pump();
+    final seconds = find.widgetWithText(ChoiceChip, '显示秒');
+    await tester.ensureVisible(seconds);
+    await tester.tap(seconds);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.byTooltip('下移小组件').first);
+    await tester.tap(find.byTooltip('下移小组件').first);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('hidden clocks stop rebuilding and resume with current data',
       (tester) async {

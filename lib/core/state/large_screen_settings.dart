@@ -213,9 +213,20 @@ class LargeScreenSettingsController extends StateNotifier<LargeScreenSettings> {
   }
 
   Future<void> update(LargeScreenSettings next) {
+    preview(next);
+    return persist();
+  }
+
+  /// Apply editing feedback immediately; persistence is batched by the editor.
+  void preview(LargeScreenSettings next) {
+    if (!mounted) return;
     _revision++;
     state = next;
-    final saved = jsonEncode(next.toJson());
+  }
+
+  Future<void> persist() {
+    if (!mounted) return Future.value();
+    final saved = jsonEncode(state.toJson());
     // Preserve the last selection even when the user changes several choices
     // before the platform preference store has finished writing the first one.
     return _pendingSave = _pendingSave.then((_) async {
