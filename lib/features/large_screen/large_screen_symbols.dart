@@ -6,6 +6,9 @@ enum LargeScreenSymbol {
   fullscreen,
   windowed,
   collapse,
+  clock,
+  date,
+  text,
   adaptive,
   left,
   right,
@@ -34,6 +37,11 @@ class LargeScreenGlyph extends StatelessWidget {
       LargeScreenSymbol.windowed =>
         '<path d="M9 4v5H4m16 0h-5V4M4 15h5v5m6 0v-5h5"/>',
       LargeScreenSymbol.collapse => '<path d="m6 9 6 6 6-6"/>',
+      LargeScreenSymbol.clock =>
+        '<circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/>',
+      LargeScreenSymbol.date =>
+        '<rect x="4" y="6" width="16" height="14" rx="2"/><path d="M8 3v6m8-6v6M4 11h16m-12 4h3m3 0h2"/>',
+      LargeScreenSymbol.text => '<path d="M5 8V5h14v3m-7-3v14m-4 0h8"/>',
       LargeScreenSymbol.adaptive =>
         '<rect x="3" y="4" width="44" height="34" rx="2"/><rect x="8" y="10" width="17" height="18" rx="1"/><path d="M30 12h11m-11 6h8m-22 15h25"/><rect x="54" y="4" width="23" height="40" rx="2"/><rect x="59" y="10" width="13" height="13" rx="1"/><path d="M59 29h13m-11 6h9"/>',
       LargeScreenSymbol.left =>

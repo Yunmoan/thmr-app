@@ -249,6 +249,43 @@ class _Harness {
 }
 
 void main() {
+  for (final size in [
+    const Size(2560, 1440),
+    const Size(1280, 720),
+    const Size(800, 400)
+  ]) {
+    testWidgets(
+        'large widgets and playback remain inside the work area at $size',
+        (tester) async {
+      final h = _Harness(tester)
+        ..workAreaInsets = const EdgeInsets.only(bottom: 48);
+      await h.mount(
+          size: size, scale: size.width == 800 ? 2 : 1, desktopRoot: true);
+      await h.container.read(largeScreenSettingsProvider.notifier).update(
+              LargeScreenSettings(
+                  queue: LargeScreenQueue.list,
+                  layout: LargeScreenLayout.centered,
+                  contentMargin: 64,
+                  autoHideControls: false,
+                  widgets: [
+                for (final position in LargeScreenWidgetPosition.values)
+                  LargeScreenWidgetSettings(
+                      id: position.name,
+                      kind: LargeScreenWidgetKind.text,
+                      text: '活动文字 ' * 40,
+                      position: position,
+                      fontSize: 96,
+                      maxLines: 4),
+              ]));
+      await h.change(true);
+      final controls =
+          tester.getRect(find.byKey(const ValueKey('large-screen-controls')));
+      expect(controls.bottom, lessThanOrEqualTo(size.height - 48));
+      expect(find.byTooltip('收起大屏模式').hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }
+
   testWidgets('all stage controls stay inside the Windows taskbar work area',
       (tester) async {
     final h = _Harness(tester)

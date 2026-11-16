@@ -11,6 +11,7 @@ class ThmrBackground extends StatelessWidget {
     this.illustration,
     this.alignment = Alignment.bottomLeft,
     this.showIllustration = true,
+    this.illustrationOpacity = .9,
   });
 
   final Widget child;
@@ -19,6 +20,7 @@ class ThmrBackground extends StatelessWidget {
   final String? illustration;
   final Alignment alignment;
   final bool showIllustration;
+  final double illustrationOpacity;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +48,7 @@ class ThmrBackground extends StatelessWidget {
                   heightFactor: compact ? 0.8 : 0.9,
                   alignment: alignment,
                   child: Opacity(
-                    opacity: 0.9,
+                    opacity: illustrationOpacity,
                     child: ThmrAnimatedContent(
                       alignment: alignment,
                       child: Image.asset(

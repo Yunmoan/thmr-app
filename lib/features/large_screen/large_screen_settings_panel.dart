@@ -6,6 +6,7 @@ import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/focus_outline.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import 'large_screen_symbols.dart';
+import 'large_screen_widget_editor.dart';
 
 class LargeScreenSettingsEntry extends StatelessWidget {
   const LargeScreenSettingsEntry({super.key});
@@ -190,6 +191,27 @@ class LargeScreenSettingsPanel extends ConsumerWidget {
             value: settings.startFullScreen,
             description: '也可在大屏右上角单独切换全屏',
             onChanged: (v) => save(settings.copyWith(startFullScreen: v))),
+        if (settings.showIllustration)
+          _SettingRow(
+              title: '立绘不透明度',
+              child: SizedBox(
+                  width: 300,
+                  child: Slider(
+                      value: settings.illustrationOpacity,
+                      min: .1,
+                      max: 1,
+                      divisions: 9,
+                      label: '${(settings.illustrationOpacity * 100).round()}%',
+                      onChanged: (v) =>
+                          save(settings.copyWith(illustrationOpacity: v))))),
+        _SettingRow(
+            title: '画面边距',
+            child: _Choices<double>(
+                value: settings.contentMargin,
+                options: const [(16, '紧凑'), (32, '标准'), (48, '宽松'), (64, '留白')],
+                onChanged: (v) => save(settings.copyWith(contentMargin: v)))),
+        const Divider(height: 32),
+        const LargeScreenWidgetEditor(),
         const SizedBox(height: 16),
         Align(
           alignment: Alignment.centerRight,

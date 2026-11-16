@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'large_screen_widget_settings.dart';
+export 'large_screen_widget_settings.dart';
 
 enum LargeScreenLayout { adaptive, coverLeft, coverRight, centered }
 
@@ -31,6 +33,9 @@ class LargeScreenSettings {
     this.showControls = true,
     this.autoHideControls = true,
     this.startFullScreen = true,
+    this.widgets = const [],
+    this.illustrationOpacity = .9,
+    this.contentMargin = 32,
   });
 
   final LargeScreenLayout layout;
@@ -50,6 +55,9 @@ class LargeScreenSettings {
   final bool showControls;
   final bool autoHideControls;
   final bool startFullScreen;
+  final List<LargeScreenWidgetSettings> widgets;
+  final double illustrationOpacity;
+  final double contentMargin;
 
   LargeScreenSettings copyWith({
     LargeScreenLayout? layout,
@@ -67,6 +75,9 @@ class LargeScreenSettings {
     bool? showControls,
     bool? autoHideControls,
     bool? startFullScreen,
+    List<LargeScreenWidgetSettings>? widgets,
+    double? illustrationOpacity,
+    double? contentMargin,
   }) =>
       LargeScreenSettings(
         layout: layout ?? this.layout,
@@ -84,6 +95,10 @@ class LargeScreenSettings {
         showControls: showControls ?? this.showControls,
         autoHideControls: autoHideControls ?? this.autoHideControls,
         startFullScreen: startFullScreen ?? this.startFullScreen,
+        widgets: List.unmodifiable((widgets ?? this.widgets).take(8)),
+        illustrationOpacity:
+            (illustrationOpacity ?? this.illustrationOpacity).clamp(.1, 1),
+        contentMargin: (contentMargin ?? this.contentMargin).clamp(16, 80),
       );
 
   factory LargeScreenSettings.fromJson(Map<String, dynamic> json) {
@@ -116,6 +131,15 @@ class LargeScreenSettings {
       showControls: flag('showControls'),
       autoHideControls: flag('autoHideControls'),
       startFullScreen: flag('startFullScreen'),
+      widgets: _widgetsFromJson(json['widgets']),
+      illustrationOpacity: json['illustrationOpacity'] is num &&
+              (json['illustrationOpacity'] as num).isFinite
+          ? (json['illustrationOpacity'] as num).toDouble().clamp(.1, 1)
+          : .9,
+      contentMargin: json['contentMargin'] is num &&
+              (json['contentMargin'] as num).isFinite
+          ? (json['contentMargin'] as num).toDouble().clamp(16, 80)
+          : 32,
     );
   }
 
@@ -135,7 +159,33 @@ class LargeScreenSettings {
         'showControls': showControls,
         'autoHideControls': autoHideControls,
         'startFullScreen': startFullScreen,
+        'widgets': widgets.map((w) => w.toJson()).toList(),
+        'illustrationOpacity': illustrationOpacity,
+        'contentMargin': contentMargin,
       };
+}
+
+List<LargeScreenWidgetSettings> _widgetsFromJson(Object? raw) {
+  if (raw is! List) return const [];
+  final ids = <String>{};
+  final result = <LargeScreenWidgetSettings>[];
+  for (final item in raw.whereType<Map>().take(8)) {
+    if (item.keys.any((k) => k is! String)) continue;
+    var widget = LargeScreenWidgetSettings.fromJson(
+        Map<String, dynamic>.from(item),
+        fallbackId: 'widget-${result.length}');
+    if (widget.id.isEmpty || !ids.add(widget.id)) {
+      var suffix = 0;
+      var id = 'widget-${result.length}-$suffix';
+      while (ids.contains(id)) {
+        id = 'widget-${result.length}-${++suffix}';
+      }
+      widget = widget.copyWith(id: id);
+      ids.add(id);
+    }
+    result.add(widget);
+  }
+  return List.unmodifiable(result);
 }
 
 class LargeScreenSettingsController extends StateNotifier<LargeScreenSettings> {

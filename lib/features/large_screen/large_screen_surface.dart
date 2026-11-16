@@ -34,8 +34,9 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
   int _metricsRevision = 0;
 
   Future<void> _refreshWorkArea() async {
-    if (!mounted || Theme.of(context).platform != TargetPlatform.windows)
+    if (!mounted || Theme.of(context).platform != TargetPlatform.windows) {
       return;
+    }
     final revision = ++_metricsRevision;
     try {
       final insets = await WindowPresentation().workAreaInsets();
@@ -116,8 +117,9 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
     final mode = ref.watch(largeScreenProvider);
     final active = mode.active;
     ref.listen(largeScreenProvider, (previous, next) {
-      if (next.active && previous?.active != true)
+      if (next.active && previous?.active != true) {
         unawaited(_refreshWorkArea());
+      }
       if (next.active &&
           previous?.active != true &&
           _previousFocus?.context == null) {

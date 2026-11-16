@@ -181,6 +181,7 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                   body: Stack(fit: StackFit.expand, children: [
                     ThmrBackground(
                       showIllustration: settings.showIllustration,
+                      illustrationOpacity: settings.illustrationOpacity,
                       alignment: settings.illustrationPosition ==
                               LargeScreenIllustrationPosition.right
                           ? Alignment.bottomRight

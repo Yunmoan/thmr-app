@@ -16,6 +16,8 @@ import 'package:thmr_app/core/state/large_screen_settings.dart';
 import 'package:thmr_app/core/state/channel_provider.dart';
 import 'package:thmr_app/core/state/station_provider.dart';
 import 'package:thmr_app/core/theme/thmr_colors.dart';
+import 'package:thmr_app/core/theme/thmr_motion.dart';
+import 'package:thmr_app/core/theme/thmr_focus_ring.dart';
 import 'package:thmr_app/features/large_screen/large_screen_controller.dart';
 import 'package:thmr_app/features/large_screen/large_screen_surface.dart';
 import 'package:thmr_app/features/mini/desktop_player_surface.dart';
@@ -85,10 +87,15 @@ Future<void> main() async {
             useMaterial3: true,
             colorScheme: ColorScheme.fromSeed(seedColor: ThmrColors.accent),
             extensions: [ThmrTokens.reimuLight.accessible()]),
-        builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-                disableAnimations: const bool.fromEnvironment('reducedMotion')),
-            child: DesktopPlayerSurface(child: child!)),
+        builder: (context, child) => Consumer(
+            builder: (context, ref, _) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                    disableAnimations:
+                        const bool.fromEnvironment('reducedMotion')),
+                child: ThmrFocusLayer(
+                    reserveEdgeSpace:
+                        !ref.watch(largeScreenProvider.select((s) => s.active)),
+                    child: DesktopPlayerSurface(child: child!)))),
         home: LargeScreenSurface(
             child: Scaffold(
                 key: retained,
@@ -127,6 +134,21 @@ Future<void> main() async {
         framing:
             cycle.isEven ? LargeScreenFraming.fill : LargeScreenFraming.fit,
         startFullScreen: cycle.isEven,
+        widgets: const [
+          LargeScreenWidgetSettings(id: 'time', format: 'HH:mm:ss'),
+          LargeScreenWidgetSettings(
+              id: 'date',
+              kind: LargeScreenWidgetKind.date,
+              position: LargeScreenWidgetPosition.topLeft,
+              format: 'M月d日 EEEE',
+              fontSize: 20),
+          LargeScreenWidgetSettings(
+              id: 'event',
+              kind: LargeScreenWidgetKind.text,
+              position: LargeScreenWidgetPosition.bottomCenter,
+              text: '东方音乐交流会',
+              fontSize: 24),
+        ],
       );
       await container
           .read(largeScreenSettingsProvider.notifier)
@@ -138,6 +160,11 @@ Future<void> main() async {
       await entering.timeout(const Duration(seconds: 10));
       if (!container.read(largeScreenProvider).active) {
         throw StateError('Stage did not open');
+      }
+      await _checkVisibleStage(binding);
+      if (cycle == 0 && const bool.fromEnvironment('previewPause')) {
+        debugPrint('LARGE_SCREEN_PREVIEW_READY');
+        await Future<void>.delayed(const Duration(seconds: 30));
       }
       if (MediaQuery.sizeOf(retained.currentContext!) != initialMetrics ||
           scroll.offset != 750) {
@@ -155,6 +182,7 @@ Future<void> main() async {
             await windowManager.isFullScreen() == wasFullScreen) {
           throw StateError('Fullscreen toggle lost the player or failed');
         }
+        await _checkVisibleStage(binding);
       }
       await controller.change(false).timeout(const Duration(seconds: 10));
       if (container.read(largeScreenProvider).active ||
@@ -215,6 +243,37 @@ Future<void> main() async {
     debugPrint('LARGE_SCREEN_SMOKE FAIL: $error\n$stack');
     _exitProbe(1);
   }
+}
+
+Future<void> _checkVisibleStage(WidgetsBinding binding) async {
+  Element? find(Key key) {
+    Element? result;
+    void visit(Element element) {
+      if (element.widget.key == key) {
+        result = element;
+        return;
+      }
+      element.visitChildElements((child) {
+        if (result == null) visit(child);
+      });
+    }
+
+    visit(binding.rootElement!);
+    return result;
+  }
+
+  final fade = find(const ValueKey('large-mode-transition'))?.widget;
+  if (fade is! ThmrFadeSlide || fade.animation.value != 1) {
+    throw StateError(
+        'Stage content is transparent after a completed transition');
+  }
+  final controls = find(const ValueKey('large-screen-controls'))!;
+  final box = controls.findRenderObject()! as RenderBox;
+  final bottom = box.localToGlobal(Offset(0, box.size.height)).dy;
+  final insets = await WindowPresentation().workAreaInsets();
+  final available = MediaQuery.sizeOf(controls).height - insets.bottom;
+  if (bottom > available + 1)
+    throw StateError('Controls overlap the taskbar: $bottom > $available');
 }
 
 Never _exitProbe(int code) {

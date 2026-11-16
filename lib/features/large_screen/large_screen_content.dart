@@ -11,6 +11,7 @@ import '../../core/theme/thmr_motion.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import '../../shared/widgets/track_cover.dart';
 import 'large_screen_progress.dart';
+import 'large_screen_widgets.dart';
 
 class LargeScreenContent extends StatelessWidget {
   const LargeScreenContent(
@@ -32,7 +33,18 @@ class LargeScreenContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget canvas(BuildContext context, BoxConstraints outer) {
-      final inset = (outer.biggest.shortestSide * .03).clamp(16.0, 36.0);
+      final inset = settings.contentMargin;
+      final hasTopWidgets = settings.widgets.any((w) => w.enabled && w.atTop);
+      final hasBottomWidgets =
+          settings.widgets.any((w) => w.enabled && !w.atTop);
+      Widget widgets(bool atTop) => ConstrainedBox(
+          constraints:
+              BoxConstraints(maxHeight: math.max(40, outer.maxHeight * .12)),
+          child: LargeScreenWidgetStrip(
+              key: ValueKey(atTop),
+              components: settings.widgets,
+              station: station,
+              atTop: atTop));
       final sideQueue =
           settings.queue == LargeScreenQueue.list && outer.maxWidth >= 1040;
       final hero = ThmrAnimatedContent(
@@ -48,7 +60,9 @@ class LargeScreenContent extends StatelessWidget {
         child: Column(children: [
           header,
           const SizedBox(height: 18),
+          if (hasTopWidgets) ...[widgets(true), const SizedBox(height: 12)],
           Expanded(
+              key: const ValueKey('large-screen-body'),
               child: sideQueue
                   ? Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -75,6 +89,7 @@ class LargeScreenContent extends StatelessWidget {
                     settings: settings,
                     vertical: settings.queue == LargeScreenQueue.list)),
           ],
+          if (hasBottomWidgets) ...[const SizedBox(height: 12), widgets(false)],
           if (settings.showControls) ...[
             const SizedBox(height: 12),
             SizedBox(
@@ -96,8 +111,12 @@ class LargeScreenContent extends StatelessWidget {
               : const BoxConstraints(),
           child: SizedBox.expand(
             child: LayoutBuilder(builder: (context, constraints) {
-              final minimumHeight =
-                  math.max(440.0, MediaQuery.textScalerOf(context).scale(320));
+              final hasWidgets = settings.widgets.any((w) => w.enabled);
+              final minimumHeight = math.max(
+                      hasWidgets ? 720.0 : 440.0,
+                      MediaQuery.textScalerOf(context)
+                          .scale(hasWidgets ? 520 : 320)) +
+                  math.max(0, settings.contentMargin - 32) * 2;
               return FittedBox(
                 fit: BoxFit.scaleDown,
                 child: SizedBox(
@@ -132,7 +151,8 @@ class _Hero extends StatelessWidget {
   Widget build(BuildContext context) => ThmrPanel(
         enabled: settings.cardLayout,
         padding: const EdgeInsets.all(20),
-        child: LayoutBuilder(builder: (context, constraints) {
+        child: SizedBox.expand(
+            child: LayoutBuilder(builder: (context, constraints) {
           final stacked = switch (settings.layout) {
             LargeScreenLayout.centered => true,
             LargeScreenLayout.adaptive => constraints.maxWidth < 660 ||
@@ -169,11 +189,13 @@ class _Hero extends StatelessWidget {
                   centered: stacked,
                   showProgress: settings.showProgress));
           if (stacked) {
-            return Column(children: [
-              cover,
-              SizedBox(height: gap),
-              Expanded(child: info)
-            ]);
+            return Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  cover,
+                  SizedBox(height: gap),
+                  Flexible(child: info)
+                ]);
           }
           return Row(children: [
             if (settings.layout != LargeScreenLayout.coverRight) ...[
@@ -186,7 +208,7 @@ class _Hero extends StatelessWidget {
               cover
             ],
           ]);
-        }),
+        })),
       );
 }
 
@@ -264,7 +286,8 @@ class _TrackInfo extends StatelessWidget {
               };
     return LayoutBuilder(
         builder: (context, constraints) => Center(
-                child: FittedBox(
+            heightFactor: 1,
+            child: FittedBox(
               fit: BoxFit.scaleDown,
               alignment: centered ? Alignment.center : Alignment.centerLeft,
               child: SizedBox(
