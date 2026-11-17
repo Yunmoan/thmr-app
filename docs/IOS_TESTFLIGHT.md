@@ -4,7 +4,7 @@ THMR 支持 iOS 15 及以上。GitHub Actions 使用 `macos-26` 运行器构建 
 
 ## 在 Apple 后台创建 THMR
 
-1. 在 Apple Developer 选中持有 Apple Developer Program 会员资格的团队，进入 **Identifiers → + → App IDs → App**。Description 可填 `THMR iOS`，Bundle ID 选择 **Explicit**，输入 `cn.yunmoan.thmr.thmrApp`，然后注册。如果团队已有这个标识，直接使用现有标识。注册需要 Account Holder 或 Admin 权限。 [打开 Identifiers](https://developer.apple.com/account/resources/identifiers/list) · [Apple 的 App ID 注册步骤](https://developer.apple.com/help/account/identifiers/register-an-app-id/)
+1. 在 Apple Developer 选中持有 Apple Developer Program 会员资格的团队，进入 **Identifiers → + → App IDs → App**。Description 可填 `THMR iOS`，Bundle ID 选择 **Explicit**，输入 `cn.yunmoan.thmr`，然后注册。如果团队已有这个标识，直接使用现有标识。注册需要 Account Holder 或 Admin 权限。 [打开 Identifiers](https://developer.apple.com/account/resources/identifiers/list) · [Apple 的 App ID 注册步骤](https://developer.apple.com/help/account/identifiers/register-an-app-id/)
 2. 使用同一团队登录 App Store Connect，进入 **Apps → + → New App**。平台选 **iOS**，名称填 `THMR`（若已被占用，填可用的名称），主要语言选简体中文，Bundle ID 选刚注册的标识，SKU 可填 `thmr-ios`。按团队需要设置用户访问范围，点击 **Create**。如界面提示协议待处理，由 Account Holder 在 **Business** 中处理。 [打开 App Store Connect](https://appstoreconnect.apple.com/) · [创建 App 记录](https://developer.apple.com/help/app-store-connect/create-an-app-record/add-a-new-app)
 
 Bundle ID 必须与 `ios/Runner.xcodeproj` 的 Runner target 一致。如果 Apple 提示该 ID 已被另一团队使用，先确定团队拥有的新 ID，再同步修改 Runner 的 Debug、Profile 和 Release 配置。
