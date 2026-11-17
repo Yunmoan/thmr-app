@@ -35,7 +35,9 @@ pbcopy < AuthKey_YOUR_KEY_ID.p8
 
 ## 发版和邀请测试者
 
-PR、`main` 推送和手动运行 **Build iOS** 都只做无签名的 iOS 编译检查。正式发版时，更新 `CHANGELOG.md`，把包含 iOS 配置的提交打上稳定版本标签（例如 `v0.2.0`）并推送。**Build Clients** 成功发布这个 GitHub Release 后，会签名、导出 IPA，再上传到 App Store Connect。构建使用 Release 的版本号和构建号。所有 iOS Secrets 留空时会跳过上传，部分配置时任务会列出缺少的项。上传失败时可在同一次 Actions 运行中重跑失败的任务。 [现有 GitHub 发版流程](AUTO_UPDATE.md#5-发版链路)
+PR、`main` 推送和预发布标签在 **Build Clients** 中执行无签名的 iOS 编译检查。只检查 iOS 时，可以手动运行 **Build Clients** 并勾选 **Run only the unsigned iOS build**。
+
+正式发版时，更新 `CHANGELOG.md`，把包含 iOS 配置的提交打上稳定版本标签（例如 `v0.2.0`）并推送。**Build Clients** 发布 GitHub Release 后，同一次运行使用该 Release 的版本号和构建号签名、导出 IPA 并上传到 App Store Connect。THMR 正式发版缺少签名凭据时，iOS 上传任务会报错。上传失败时可在同一次 Actions 运行中重跑失败的任务。 [现有 GitHub 发版流程](AUTO_UPDATE.md#5-发版链路)
 
 Apple 处理构建后，在 **App Store Connect → Apps → THMR → TestFlight** 添加测试组和构建。团队成员使用内部组，可打开自动分发。团队外的朋友使用外部组，按 Apple 要求填写测试资料并提交首个外测构建审核，通过后可用邮件或测试链接邀请。测试者从 TestFlight 安装，每个构建最多可测试 90 天。 [Apple TestFlight 说明](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview/)
 

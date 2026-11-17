@@ -8,6 +8,10 @@ on:
         description: 'Client version (optional, e.g. 0.2.0; defaults to pubspec.yaml)'
         required: false
         type: string
+      ios_only:
+        description: 'Run only the unsigned iOS build'
+        default: false
+        type: boolean
   pull_request:
   push:
     branches: [main]
@@ -28,6 +32,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       build_number: ${{ steps.version.outputs.build_number }}
       macos_version: ${{ steps.version.outputs.macos_version }}
+      ios_version: ${{ steps.version.outputs.ios_version }}
       release_tag: ${{ steps.version.outputs.release_tag }}
       prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
@@ -56,13 +61,14 @@ jobs:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: node tool/update_release.cjs notes --version "$RELEASE_VERSION"
       - name: Require a pinned update key for official releases
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && !inputs.ios_only
         run: node -e 'if(Buffer.from(process.env.UPDATE_PUBLIC_KEY || "", "base64").length !== 32) throw new Error("Configure repository variable THMR_UPDATE_PUBLIC_KEY before tagging a release")'
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
 
   prepare_release:
+    if: ${{ !inputs.ios_only }}
     needs: validate
     runs-on: ubuntu-latest
     permissions:
@@ -376,6 +382,37 @@ jobs:
           RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
         run: gh release upload "$RELEASE_TAG" thmr-app-android.apk --clobber
 
+  ios:
+    name: iOS (unsigned)
+    if: needs.validate.outputs.prerelease == 'true' || inputs.ios_only
+    needs: validate
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      # file_picker's CocoaPods configuration limits this app to document export.
+      FLUTTER_SWIFT_PACKAGE_MANAGER: 'false'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ needs.validate.outputs.flutter_version }}
+          channel: stable
+          cache: true
+      - name: Check the iOS toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          pod --version
+      - run: flutter pub get --enforce-lockfile
+      - name: Build the unsigned device app
+        env:
+          CLIENT_VERSION: ${{ needs.validate.outputs.version }}
+          IOS_VERSION: ${{ needs.validate.outputs.ios_version }}
+          IOS_BUILD_NUMBER: ${{ needs.validate.outputs.build_number }}
+        run: bash tool/build_ios.sh
+
   release:
     if: github.event_name != 'pull_request'
     needs: [validate, linux, macos, windows, android]
@@ -452,9 +489,75 @@ jobs:
           PY
 
   ios_testflight:
-    if: github.ref_type == 'tag' && needs.validate.outputs.prerelease == 'false'
+    name: iOS (TestFlight)
+    if: github.ref_type == 'tag' && needs.validate.outputs.prerelease == 'false' && !inputs.ios_only
     needs: [validate, release]
-    uses: ./.github/workflows/ios-testflight.yml
-    with:
-      version: ${{ needs.validate.outputs.version }}
-      build_number: ${{ needs.validate.outputs.build_number }}
+    runs-on: macos-26
+    timeout-minutes: 60
+    environment: testflight
+    concurrency:
+      group: testflight-${{ needs.validate.outputs.version }}
+      cancel-in-progress: false
+    env:
+      FLUTTER_SWIFT_PACKAGE_MANAGER: 'false'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Prepare Apple signing
+        id: signing
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          IOS_APP_STORE_CONNECT_KEY_ID: ${{ secrets.IOS_APP_STORE_CONNECT_KEY_ID }}
+          IOS_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.IOS_APP_STORE_CONNECT_ISSUER_ID }}
+          IOS_APP_STORE_CONNECT_KEY_P8: ${{ secrets.IOS_APP_STORE_CONNECT_KEY_P8 }}
+        run: python3 tool/prepare_ios_signing.py
+      - name: Require signing credentials for THMR releases
+        if: github.repository == 'Yunmoan/thmr-app' && steps.signing.outputs.enabled != 'true'
+        run: |
+          echo '::error::The testflight environment did not provide signing credentials.'
+          exit 1
+      - uses: subosito/flutter-action@v2
+        if: steps.signing.outputs.enabled == 'true'
+        with:
+          flutter-version: ${{ needs.validate.outputs.flutter_version }}
+          channel: stable
+          cache: true
+      - name: Install Flutter dependencies
+        if: steps.signing.outputs.enabled == 'true'
+        run: flutter pub get --enforce-lockfile
+      - name: Archive and export the signed IPA
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          CLIENT_VERSION: ${{ needs.validate.outputs.version }}
+          IOS_VERSION: ${{ needs.validate.outputs.ios_version }}
+          IOS_BUILD_NUMBER: ${{ needs.validate.outputs.build_number }}
+          IOS_BUNDLE_ID: ${{ steps.signing.outputs.bundle_id }}
+        run: bash tool/build_ios.sh --testflight
+      - name: Upload the IPA to App Store Connect
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          IOS_APP_STORE_CONNECT_KEY_ID: ${{ secrets.IOS_APP_STORE_CONNECT_KEY_ID }}
+          IOS_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.IOS_APP_STORE_CONNECT_ISSUER_ID }}
+          IOS_APP_STORE_CONNECT_KEY_P8: ${{ secrets.IOS_APP_STORE_CONNECT_KEY_P8 }}
+        run: |
+          shopt -s nullglob
+          packages=("$PWD"/build/ios/ipa/*.ipa)
+          if [[ ${#packages[@]} -ne 1 ]]; then
+            echo '::error::Expected exactly one exported iOS IPA.'
+            exit 1
+          fi
+          if [[ ! "$IOS_APP_STORE_CONNECT_KEY_ID" =~ ^[A-Z0-9]+$ ]]; then
+            echo '::error::Invalid App Store Connect API key ID.'
+            exit 1
+          fi
+          umask 077
+          api_dir=$(mktemp -d "$RUNNER_TEMP/testflight-api.XXXXXX")
+          trap 'rm -rf "$api_dir"' EXIT
+          cd "$api_dir"
+          mkdir private_keys
+          printf '%s\n' "$IOS_APP_STORE_CONNECT_KEY_P8" > "private_keys/AuthKey_$IOS_APP_STORE_CONNECT_KEY_ID.p8"
+          xcrun altool --upload-app --type ios -f "${packages[0]}" \
+            --apiKey "$IOS_APP_STORE_CONNECT_KEY_ID" --apiIssuer "$IOS_APP_STORE_CONNECT_ISSUER_ID"
