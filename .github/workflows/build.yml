@@ -36,7 +36,7 @@ jobs:
         id: flutter
         with:
           # Keep validation and every platform build on the verified SDK.
-          flutter-version: '3.47.5'
+          flutter-version-file: .fvmrc
           channel: stable
           cache: true
       - name: Resolve the version for every client

@@ -11,12 +11,23 @@
 
 ## 快速开始
 
+使用 [`.fvmrc`](.fvmrc) 锁定的 Flutter stable 版本。可以从 [Flutter SDK 归档](https://docs.flutter.dev/install/archive) 下载与开发机架构匹配的安装包，将解压后的 `flutter/bin` 加入 `PATH`。已有 FVM 的开发者可以在仓库根目录执行 `fvm install`，并用 `fvm flutter` 运行下面的命令。
+
 ```bash
+flutter --version
 flutter pub get
+flutter analyze
+flutter test
+```
+
+在对应平台启动开发版：
+
+```bash
 flutter run -d windows          # Windows 桌面
-flutter run -d macos            # macOS（在 macOS 上运行）
-flutter run -d linux            # Linux（在 Linux 上运行）
-flutter run -d <android-device> # Android
+flutter run -d macos            # macOS 桌面
+flutter run -d linux            # Linux 桌面
+flutter devices                 # 查看已连接的 Android 真机和模拟器 ID
+flutter run -d DEVICE_ID        # 将 DEVICE_ID 换成设备 ID
 ```
 
 ## 大屏幕模式
@@ -55,7 +66,7 @@ API 插件单独交付为 OPENAPI-Next-Core 的 Next ZIP 包，也兼容 legacy 
 
 安装包构建完成后会逐个平台上传到同一个 GitHub Release 草稿，仓库所有者可先下载；全部平台完成后自动发布（普通构建为预发布，`v*` 稳定标签为正式发布）。你下载原包上传到镜像后，修改 Next 插件 `apis/updater/index.js` 顶部 `THMR_DOWNLOAD_URLS` 的四个地址，再把 Release 的签名清单放到插件的 `data/`。支持 `thmr-update.json` 和 `thmr-release.json`，后者优先；legacy 使用项目根目录的 `data/updates/`。`/updater/thmr/status` 可检查已验签的版本和故障类型。镜像地址可以单独调整，版本、文件大小与哈希仍经过验签。
 
-CI 自动获取最新 Flutter stable 和 Node.js LTS；同一次构建的四个平台共用解析后的 Flutter SDK。GitHub Actions 跟随最新稳定主版本，Dependabot 每周检查后续主版本升级。Windows 使用 `windows-latest`，Linux 固定 `ubuntu-24.04` 作为兼容基线；macOS 因 arm64 容量不足暂用当前稳定版 Intel 运行器，仓库 Variable `THMR_MACOS_RUNNER` 可覆盖为 `macos-latest`。Java 自动选取当前 Gradle 支持范围内的最新稳定版。
+开发与 CI 使用 `.fvmrc` 中的 Flutter 版本。CI 使用 Node.js LTS，Android 构建使用 Temurin 21。Windows 使用 `windows-latest`，Linux 固定 `ubuntu-24.04`，macOS 使用 `macos-26` 并打包 Intel 和 Apple Silicon 通用产物。
 
 ## 构建与发布
 

@@ -1,4 +1,6 @@
 .dart_tool/
+.fvm/
+.toolchains/
 .packages
 build/
 .flutter-plugins
