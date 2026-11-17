@@ -26,9 +26,11 @@ flutter test
 flutter run -d windows          # Windows 桌面
 flutter run -d macos            # macOS 桌面
 flutter run -d linux            # Linux 桌面
-flutter devices                 # 查看已连接的 Android 真机和模拟器 ID
+flutter devices                 # 查看已连接的手机和模拟器 ID
 flutter run -d DEVICE_ID        # 将 DEVICE_ID 换成设备 ID
 ```
+
+iOS 开发机需要完整的 Xcode 和 CocoaPods。模拟器启动、Apple 后台建 App 和签名步骤见 [iOS 开发与 TestFlight](docs/IOS_TESTFLIGHT.md)。
 
 ## 大屏幕模式
 
@@ -80,6 +82,8 @@ API 插件单独交付为 OPENAPI-Next-Core 的 Next ZIP 包，也兼容 legacy 
 | Android | `thmr-app-android.apk` |
 
 普通构建保存在 Actions Artifacts。所有平台完成后发布 Release；稳定版本同时生成签名更新清单，需要按上述步骤部署到自有更新 API。macOS、Linux 的本地构建必须在对应系统进行。
+
+iOS 在 `Build iOS` 工作流中执行无签名编译检查。配置 Apple 凭据后，`Build Clients` 发布正式版本标签对应的 GitHub Release，再将签名 IPA 上传到 TestFlight。详见 [iOS 开发与 TestFlight](docs/IOS_TESTFLIGHT.md)。
 
 macOS DMG 包含 THMR 应用、Applications 拖拽入口和中英文安装引导背景。先拖入 Applications，再从该目录启动。更新镜像中的 macOS 地址仍填写 ZIP，现有客户端的安装器使用此格式。
 

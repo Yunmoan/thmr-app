@@ -450,3 +450,11 @@ jobs:
           subprocess.run(['gh', 'api', '--method', 'PATCH', f"repos/{repo}/releases/{release['id']}",
               '--input', '-', '--jq', '.html_url'], input=json.dumps(payload), text=True, check=True)
           PY
+
+  ios_testflight:
+    if: github.ref_type == 'tag' && needs.validate.outputs.prerelease == 'false'
+    needs: [validate, release]
+    uses: ./.github/workflows/ios-testflight.yml
+    with:
+      version: ${{ needs.validate.outputs.version }}
+      build_number: ${{ needs.validate.outputs.build_number }}

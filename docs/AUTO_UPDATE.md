@@ -175,7 +175,7 @@ git push origin v0.2.0
 
 普通预览构建（包括 fork）未配置更新签名私钥和公钥时，仍上传安装包、校验和及更新说明，但不生成更新清单。只配置其中一项或密钥不匹配仍会报错；`v*` 标签发布仍要求完整的签名配置。
 
-所有客户端使用同一个版本、构建号、公钥和 API 地址。CI 依次：
+通过更新 API 分发的客户端共用版本、构建号、公钥和 API 地址。CI 依次：
 
 1. 分析与测试，检查正式发布的公钥配置。
 2. 创建一个 Release 草稿，再构建 Windows、macOS、Linux 和 Android；核对版本，使用固定 Android 签名及 macOS 开发签名；可选执行 Apple 公证。
@@ -183,6 +183,8 @@ git push origin v0.2.0
 4. 全部平台成功后计算 SHA-256，生成并签名 `thmr-update.json`，补充上传元数据，再自动发布 Release。
 5. 你下载原包上传到镜像，修改插件顶部四个 URL，把同一 Release 的签名清单放到 `data/updates/thmr-release.json` 并重载插件。
 6. 客户端后续检查发现新版，使用镜像地址下载并校验，用户确认安装后自动替换。
+
+正式 Release 发布后，iOS 复用其版本和构建号上传 TestFlight。签名凭据和测试者配置见 [iOS 开发与 TestFlight](IOS_TESTFLIGHT.md)。
 
 带 `-rc.1` 的预发布标签仅构建和上传预发布包，不覆盖正式更新 API。Mac 原生包版本采用数字核心版本，客户端通过同一 `THMR_CLIENT_VERSION` 保留完整预发布身份。
 
