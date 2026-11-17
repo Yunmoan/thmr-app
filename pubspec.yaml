@@ -89,5 +89,11 @@ flutter:
   assets:
     - assets/brand/
     - assets/icons/
-    - assets/updater/
+    - path: assets/updater/
+      platforms:
+        - android
+        - linux
+        - macos
+        - web
+        - windows
     - assets/input_prompts/

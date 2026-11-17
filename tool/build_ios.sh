@@ -6,6 +6,12 @@ version_args=(
   "--build-number=$IOS_BUILD_NUMBER"
   "--dart-define=THMR_CLIENT_VERSION=$CLIENT_VERSION"
 )
+if [[ -n ${UPDATE_API_URL:-} ]]; then
+  version_args+=("--dart-define=THMR_UPDATE_API_URL=$UPDATE_API_URL")
+fi
+if [[ -n ${UPDATE_PUBLIC_KEY:-} ]]; then
+  version_args+=("--dart-define=THMR_UPDATE_PUBLIC_KEY=$UPDATE_PUBLIC_KEY")
+fi
 
 if [[ ${1:-} == --testflight ]]; then
   flutter build ipa --release --no-pub "${version_args[@]}" \
@@ -22,4 +28,8 @@ plist="$app/Info.plist"
 test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$plist")" = "$IOS_VERSION"
 test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$plist")" = "$IOS_BUILD_NUMBER"
 test "$(/usr/libexec/PlistBuddy -c 'Print ITSAppUsesNonExemptEncryption' "$plist")" = false
-lipo -verify_arch arm64 "$app/Frameworks/Mpv.framework/Mpv"
+if [[ -e "$app/Frameworks/App.framework/flutter_assets/assets/updater" ]]; then
+  echo '::error::The iOS build contains desktop installer scripts.'
+  exit 1
+fi
+lipo "$app/Frameworks/Mpv.framework/Mpv" -verify_arch arm64
