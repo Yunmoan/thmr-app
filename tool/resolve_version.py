@@ -52,8 +52,9 @@ if __name__ == "__main__":
         (root / "pubspec.yaml").read_text(encoding="utf-8"), os.environ
     )
     release_tag, prerelease = release_identity(version, build_number, os.environ)
+    apple_version = version.split('-', 1)[0]
     values = (f"version={version}\nbuild_number={build_number}\n"
-              f"macos_version={version.split('-')[0]}\n"
+              f"macos_version={apple_version}\nios_version={apple_version}\n"
               f"release_tag={release_tag}\nprerelease={prerelease}\n")
     print(values, end="")
     if output := os.environ.get("GITHUB_OUTPUT"):
