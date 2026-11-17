@@ -6,7 +6,8 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import '../../core/theme/thmr_motion.dart';
 import 'package:flutter/services.dart';
@@ -92,7 +93,9 @@ class MiniModeTransition {
   Future<void> Function(bool)? animateMini;
 
   Future<void> change(bool mini, TextScaler textScaler) {
-    if (kIsWeb || !Platform.isWindows) return Future.value();
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) {
+      return Future.value();
+    }
     if (_inFlight != null) return _inFlight!;
     if (_ref.read(miniPlayerProvider) == mini) return Future.value();
     _ref.read(miniTransitionBusyProvider.notifier).state = true;
