@@ -13,6 +13,10 @@ if [[ ${1:-} == --testflight ]]; then
   app=build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
   codesign --verify --deep --strict "$app"
   test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Info.plist")" = "$IOS_BUNDLE_ID"
+  if [[ -e "$app/Frameworks/App.framework/flutter_assets/assets/updater" ]]; then
+    echo '::error::The iOS archive contains desktop installer scripts.'
+    exit 1
+  fi
 else
   flutter build ios --release --no-codesign --no-pub "${version_args[@]}"
   app=build/ios/iphoneos/Runner.app
