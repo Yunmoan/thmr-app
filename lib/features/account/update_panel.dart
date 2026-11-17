@@ -12,8 +12,12 @@ import '../../core/update/app_update.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import '../large_screen/large_screen_controller.dart';
 
-bool get supportsAppUpdates =>
-    !kIsWeb && defaultTargetPlatform != TargetPlatform.iOS;
+bool get supportsAppUpdates => !kIsWeb;
+
+final _thmrTestFlightUrl =
+    Uri.parse('itms-beta://testflight.apple.com/v1/app/6835702209');
+final _testFlightStoreUrl =
+    Uri.parse('https://apps.apple.com/app/testflight/id899247664');
 
 /// Mounted once under the Navigator so update notices work on every tab.
 class AppUpdateMonitor extends ConsumerStatefulWidget {
@@ -182,6 +186,7 @@ class UpdatePanel extends ConsumerWidget {
     if (!supportsAppUpdates) return const SizedBox.shrink();
     final state = ref.watch(appUpdateProvider);
     final controller = ref.read(appUpdateProvider.notifier);
+    final testFlight = updatesViaTestFlight;
     final theme = Theme.of(context);
     final tokens = theme.thmr;
     final titleStyle = theme.textTheme.bodyMedium
@@ -189,7 +194,8 @@ class UpdatePanel extends ConsumerWidget {
     final captionStyle =
         theme.textTheme.labelSmall?.copyWith(color: tokens.mutedInk);
     final message = switch (state.status) {
-      UpdateStatus.idle => '检查并获取最新正式版本',
+      UpdateStatus.idle =>
+        testFlight ? '检查新版本，在 TestFlight 中更新' : '检查并获取最新正式版本',
       UpdateStatus.checking => '正在检查更新…',
       UpdateStatus.available => '发现新版本 v${state.release!.identity}',
       UpdateStatus.current => '当前已是最新版本',
@@ -223,23 +229,25 @@ class UpdatePanel extends ConsumerWidget {
               onChanged: (value) => controller.setAutoCheck(value),
             )),
           ]),
-          const Divider(height: 22),
-          Row(children: [
-            Icon(Icons.download_outlined, size: 20, color: tokens.mutedInk),
-            const SizedBox(width: 12),
-            Expanded(
-                child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('自动下载更新', style: titleStyle),
-                Text('发现新版本后在后台下载并校验，安装前会提示', style: captionStyle),
-              ],
-            )),
-            FocusOutline(
-                child: Switch(
-                    value: state.autoDownload,
-                    onChanged: (value) => controller.setAutoDownload(value))),
-          ]),
+          if (!testFlight) ...[
+            const Divider(height: 22),
+            Row(children: [
+              Icon(Icons.download_outlined, size: 20, color: tokens.mutedInk),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('自动下载更新', style: titleStyle),
+                  Text('发现新版本后在后台下载并校验，安装前会提示', style: captionStyle),
+                ],
+              )),
+              FocusOutline(
+                  child: Switch(
+                      value: state.autoDownload,
+                      onChanged: (value) => controller.setAutoDownload(value))),
+            ]),
+          ],
           const Divider(height: 22),
           if (state.status == UpdateStatus.downloading) ...[
             LinearProgressIndicator(value: state.progress),
@@ -306,11 +314,19 @@ Future<void> showAppUpdate(BuildContext context, AppRelease release) =>
         final state = ref.watch(appUpdateProvider);
         final controller = ref.read(appUpdateProvider.notifier);
         final current = state.release ?? release;
-        final artifact = current.artifactFor();
+        final testFlight = updatesViaTestFlight;
+        final artifact = testFlight ? null : current.artifactFor();
         final theme = Theme.of(context);
         final ready = state.status == UpdateStatus.ready;
         final installing = state.status == UpdateStatus.installing;
         final downloading = state.status == UpdateStatus.downloading;
+        final instructions = switch (state.status) {
+          _ when testFlight => '在 TestFlight 中查看此版本是否已开放测试。',
+          _ when artifact == null => '此版本暂未提供当前架构的安装包。',
+          UpdateStatus.installing => '正在准备安装，请留意系统的授权提示。',
+          UpdateStatus.ready => '更新包已下载并通过校验。安装后将自动重启应用。',
+          _ => '下载完成并校验后，即可安装更新。',
+        };
         final title = state.error != null
             ? '更新未完成'
             : installing
@@ -373,15 +389,7 @@ Future<void> showAppUpdate(BuildContext context, AppRelease release) =>
                       const SizedBox(height: 16),
                       const Divider(),
                       const SizedBox(height: 12),
-                      Text(
-                          artifact == null
-                              ? '此版本暂未提供当前架构的安装包。'
-                              : installing
-                                  ? '正在准备安装，请留意系统的授权提示。'
-                                  : ready
-                                      ? '更新包已下载并通过校验。安装后将自动重启应用。'
-                                      : '下载完成并校验后，即可安装更新。',
-                          style: theme.textTheme.bodySmall),
+                      Text(instructions, style: theme.textTheme.bodySmall),
                       if (artifact != null &&
                           defaultTargetPlatform == TargetPlatform.windows) ...[
                         const SizedBox(height: 6),
@@ -434,7 +442,13 @@ Future<void> showAppUpdate(BuildContext context, AppRelease release) =>
             TextButton(
                 onPressed: () => _openUpdateLink(context, current.pageUrl),
                 child: const Text('发布页')),
-            if (state.status == UpdateStatus.downloading)
+            if (testFlight)
+              FilledButton(
+                  onPressed: () => _openUpdateLink(context, _thmrTestFlightUrl,
+                      fallback: _testFlightStoreUrl,
+                      failureMessage: '无法打开 TestFlight，请从主屏幕打开并查看 THMR。'),
+                  child: const Text('打开 TestFlight'))
+            else if (state.status == UpdateStatus.downloading)
               TextButton(
                   onPressed: controller.cancelDownload,
                   child: const Text('取消下载'))
@@ -490,12 +504,14 @@ class _UpdateNotes extends StatelessWidget {
   }
 }
 
-Future<void> _openUpdateLink(BuildContext context, Uri url) async {
-  try {
-    if (await launchUrl(url, mode: LaunchMode.externalApplication)) return;
-  } catch (_) {/* Report a missing browser handler below. */}
-  if (context.mounted) {
-    ScaffoldMessenger.of(context)
-        .showThmrSnackBar(context, const SnackBar(content: Text('无法打开系统浏览器')));
+Future<void> _openUpdateLink(BuildContext context, Uri url,
+    {Uri? fallback, String failureMessage = '无法打开系统浏览器'}) async {
+  for (final target in [url, if (fallback != null) fallback]) {
+    try {
+      if (await launchUrl(target, mode: LaunchMode.externalApplication)) return;
+    } catch (_) {/* Try the fallback when the external handler fails. */}
+    if (!context.mounted) return;
   }
+  ScaffoldMessenger.of(context)
+      .showThmrSnackBar(context, SnackBar(content: Text(failureMessage)));
 }

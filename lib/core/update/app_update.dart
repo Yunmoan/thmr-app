@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io' show File;
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pub_semver/pub_semver.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,6 +13,8 @@ import 'update_packages.dart';
 
 export '../platform/client_version.dart';
 export 'update_manifest.dart';
+
+bool get updatesViaTestFlight => defaultTargetPlatform == TargetPlatform.iOS;
 
 class AppUpdateService {
   AppUpdateService(
@@ -364,9 +367,9 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
 final appUpdateProvider =
     StateNotifierProvider<AppUpdateController, AppUpdateState>((ref) {
   final service = AppUpdateService();
-  final packages = UpdatePackageManager();
+  final packages = updatesViaTestFlight ? null : UpdatePackageManager();
   ref.onDispose(service.close);
-  ref.onDispose(packages.close);
+  if (packages != null) ref.onDispose(packages.close);
   return AppUpdateController(
       service: service,
       packages: packages,

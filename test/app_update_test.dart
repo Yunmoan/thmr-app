@@ -199,8 +199,7 @@ void main() {
         throwsA(isA<UpdateCheckException>()));
   });
 
-  test('semantic versions compare numerically; build number is not an update',
-      () async {
+  test('semantic versions compare first, then build numbers', () async {
     final adapter = ReleaseAdapter();
     final controller = AppUpdateController(
       service: serviceFor(adapter),
@@ -213,6 +212,9 @@ void main() {
     await controller.check(manual: true);
     expect(controller.state.status, UpdateStatus.current);
     expect(controller.state.release, isNull);
+    adapter.data = releaseJson('0.1.3')..['build_number'] = 100;
+    await controller.check(manual: true);
+    expect(controller.state.status, UpdateStatus.available);
     adapter.data = releaseJson('0.1.1');
     await controller.check(manual: true);
     expect(controller.state.status, UpdateStatus.current);

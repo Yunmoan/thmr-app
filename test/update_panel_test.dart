@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -79,6 +80,52 @@ void main() {
     }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
   }
 
+  for (final opensTestFlight in [true, false]) {
+    testWidgets(
+        'iOS update opens TestFlight or its store page ($opensTestFlight)',
+        (tester) async {
+      const channel = MethodChannel('plugins.flutter.io/url_launcher');
+      final messenger = tester.binding.defaultBinaryMessenger;
+      final launches = <String>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        expect(call.method, 'launch');
+        launches.add(call.arguments['url'] as String);
+        return opensTestFlight || launches.length == 2;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final adapter = ReleaseAdapter();
+      final container = ProviderContainer(overrides: [
+        appUpdateProvider.overrideWith((ref) => AppUpdateController(
+              service: _UiUpdateService(uiRelease, adapter),
+              installedVersion: () async => const ClientVersion('0.1.9', '1'),
+            )),
+      ]);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: UpdatePanel())),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.text('自动检查更新'), findsOneWidget);
+      expect(find.text('自动下载更新'), findsNothing);
+
+      await tester.tap(find.text('检查更新'));
+      await tester.pumpAndSettle();
+      expect(adapter.requests, 1);
+      expect(find.text('v0.1.10'), findsOneWidget);
+      expect(find.text('下载更新'), findsNothing);
+      expect(launches, isEmpty);
+      await tester.tap(find.text('打开 TestFlight'));
+      await tester.pumpAndSettle();
+      expect(launches, [
+        'itms-beta://testflight.apple.com/v1/app/6835702209',
+        if (!opensTestFlight)
+          'https://apps.apple.com/app/testflight/id899247664',
+      ]);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+  }
+
   testWidgets('startup notice can be ignored without removing the child',
       (tester) async {
     final container = ProviderContainer(overrides: [
@@ -104,7 +151,11 @@ void main() {
     expect(find.text('电台页面'), findsOneWidget);
     expect(tester.getRect(find.text('电台页面')), contentRect);
     await tester.pumpWidget(const SizedBox.shrink());
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  },
+      variant: const TargetPlatformVariant({
+        TargetPlatform.windows,
+        TargetPlatform.iOS,
+      }));
 
   for (final width in [320.0, 1280.0]) {
     testWidgets(
