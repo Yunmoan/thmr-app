@@ -2,6 +2,7 @@
 //  - Windows: thmr_capture.dll (WASAPI loopback + FFT, dart:ffi)
 //  - Android: decoded PCM from this app's radio stream via method channel
 //  - Linux: bundled minimp3 + FFT in a worker isolate
+//  - iOS / macOS: the same stream decoder bundled as a native framework
 //  - others  : null -> UI stays still rather than simulating audio
 // All supported platforms share adaptive bandwidth detection and logarithmic
 // band mapping in Dart, before the UI's attack/release envelope.
@@ -36,5 +37,6 @@ SpectrumSource? getPlatformSpectrum() {
     return AndroidSpectrum.tryCreate();
   }
   if (Platform.isLinux) return LinuxSpectrum.instance;
+  if (Platform.isIOS || Platform.isMacOS) return LinuxSpectrum.appleInstance;
   return null;
 }

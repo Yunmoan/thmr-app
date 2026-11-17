@@ -221,8 +221,10 @@ class ThmrTheme {
         dragHandleColor: t.panelBorder,
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: t.ink,
-        contentTextStyle: base.bodyMedium?.copyWith(color: t.pageBg),
+        backgroundColor: scheme.inverseSurface,
+        contentTextStyle:
+            base.bodySmall?.copyWith(color: scheme.onInverseSurface),
+        insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),

@@ -5,6 +5,7 @@ import android.os.Handler;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.WindowManager;
 import com.ryanheise.audioservice.AudioServiceActivity;
 import kotlin.jvm.functions.Function1;
 import org.flame_engine.gamepads_android.GamepadsCompatibleActivity;
@@ -17,6 +18,33 @@ public class MainActivity extends AudioServiceActivity implements GamepadsCompat
     private final StreamSpectrumDecoder spectrum = new StreamSpectrumDecoder();
     private Function1<? super KeyEvent, Boolean> gamepadKeyHandler;
     private Function1<? super MotionEvent, Boolean> gamepadMotionHandler;
+    private boolean keepScreenOn;
+
+    private void updateKeepScreenOn(boolean enabled) {
+        if (enabled) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } else {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        updateKeepScreenOn(keepScreenOn);
+    }
+
+    @Override
+    protected void onPause() {
+        updateKeepScreenOn(false);
+        super.onPause();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        updateKeepScreenOn(keepScreenOn && hasFocus);
+    }
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
@@ -79,6 +107,16 @@ public class MainActivity extends AudioServiceActivity implements GamepadsCompat
     @Override
     public void configureFlutterEngine(FlutterEngine engine) {
         super.configureFlutterEngine(engine);
+        new MethodChannel(engine.getDartExecutor().getBinaryMessenger(), "thmr/mobile_presentation")
+            .setMethodCallHandler((call, result) -> {
+                if (!call.method.equals("setKeepScreenOn")) {
+                    result.notImplemented();
+                    return;
+                }
+                keepScreenOn = Boolean.TRUE.equals(call.arguments);
+                updateKeepScreenOn(keepScreenOn && hasWindowFocus());
+                result.success(null);
+            });
         new MethodChannel(engine.getDartExecutor().getBinaryMessenger(), "thmr/updater")
             .setMethodCallHandler((call, result) -> {
                 if (!call.method.equals("installApk")) { result.notImplemented(); return; }
@@ -127,6 +165,7 @@ public class MainActivity extends AudioServiceActivity implements GamepadsCompat
 
     @Override
     public void onDestroy() {
+        updateKeepScreenOn(false);
         spectrum.stop();
         super.onDestroy();
     }

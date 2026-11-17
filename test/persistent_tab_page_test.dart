@@ -56,6 +56,11 @@ void main() {
     state.scroll.jumpTo(500);
     await tester.pump();
     active.value = false;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(find.byType(_Page), findsOneWidget,
+        reason: 'The departing page stays painted until its exit completes.');
+    expect(find.byType(_Page).hitTestable(), findsNothing);
     await tester.pumpAndSettle();
     expect(page.currentState, same(state));
     expect(find.byType(TextField), findsNothing);

@@ -189,7 +189,7 @@ class _CollectionDetailScreenState
       final api = ref.read(authProvider.notifier).api;
       final content = await api.exportContent(widget.collectionId, format);
       if (!context.mounted) return;
-      showDialog<void>(
+      showThmrDialog<void>(
         animationStyle: ThmrMotion.style(context),
         context: context,
         builder: (dialogContext) => AlertDialog(
@@ -237,7 +237,7 @@ class _CollectionDetailScreenState
         title: Text(widget.name),
         actions: [
           PopupMenuButton<String>(
-            popUpAnimationStyle: ThmrMotion.style(context),
+            popUpAnimationStyle: ThmrMotion.menuStyle(context),
             tooltip: '排序',
             icon: const Icon(Icons.sort_rounded),
             onSelected: (v) {
@@ -263,7 +263,7 @@ class _CollectionDetailScreenState
             ],
           ),
           PopupMenuButton<String>(
-            popUpAnimationStyle: ThmrMotion.style(context),
+            popUpAnimationStyle: ThmrMotion.menuStyle(context),
             tooltip: '导出',
             enabled: !_offline,
             icon: const Icon(Icons.ios_share_rounded),

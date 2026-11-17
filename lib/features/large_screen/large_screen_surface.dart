@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/platform/desktop_window.dart';
+import '../../core/platform/mobile_presentation.dart';
+import '../../core/state/large_screen_settings.dart';
 import '../../core/theme/thmr_motion.dart';
 import '../../core/platform/window_presentation.dart';
 import 'large_screen_controller.dart';
@@ -22,16 +24,70 @@ class LargeScreenSurface extends ConsumerStatefulWidget {
 }
 
 class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
-    with SingleTickerProviderStateMixin, WindowListener {
+    with
+        SingleTickerProviderStateMixin,
+        WindowListener,
+        WidgetsBindingObserver {
   Size? _mainSize;
   MediaQueryData? _mainMetrics;
   FocusNode? _previousFocus;
   final _stageFocus = FocusScopeNode(debugLabel: '大屏幕模式');
+  final _stageMessenger = GlobalKey<ScaffoldMessengerState>();
   late final LargeScreenController _mode;
   late final AnimationController _standard;
   bool _standardVisible = true;
   EdgeInsets _workAreaInsets = EdgeInsets.zero;
   int _metricsRevision = 0;
+  bool _foreground = WidgetsBinding.instance.lifecycleState == null ||
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+  bool? _keepScreenOn = false;
+  Future<void> _keepScreenOnUpdates = Future.value();
+
+  void _showMessage(String message) {
+    void show() {
+      if (!mounted) return;
+      final messenger = ref.read(largeScreenProvider).active
+          ? _stageMessenger.currentState
+          : ScaffoldMessenger.maybeOf(context);
+      messenger?.showThmrSnackBar(context, SnackBar(content: Text(message)));
+    }
+
+    if (ref.read(largeScreenProvider).active &&
+        _stageMessenger.currentState == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => show());
+    } else {
+      show();
+    }
+  }
+
+  void _syncKeepScreenOn({bool force = false}) {
+    if (!hasMobilePresentation) return;
+    final enabled = _foreground &&
+        ref.read(largeScreenProvider).active &&
+        ref.read(largeScreenSettingsProvider).keepScreenOn;
+    if (!force && _keepScreenOn == enabled) return;
+    _keepScreenOn = enabled;
+    _queueKeepScreenOn(enabled);
+  }
+
+  void _queueKeepScreenOn(bool enabled) {
+    _keepScreenOnUpdates = _keepScreenOnUpdates
+        .then((_) => MobilePresentation().setKeepScreenOn(enabled))
+        .catchError((Object error) {
+      debugPrint('Screen wake lock failed: $error');
+      if (!mounted) return;
+      _keepScreenOn = null;
+      if (enabled) {
+        _showMessage('无法保持屏幕常亮，请重试。');
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    _syncKeepScreenOn(force: _foreground);
+  }
 
   Future<void> _refreshWorkArea() async {
     if (!mounted || Theme.of(context).platform != TargetPlatform.windows) {
@@ -53,6 +109,7 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _mode = ref.read(largeScreenProvider.notifier);
     final mode = ref.read(largeScreenProvider);
     _standardVisible = !mode.active && mode.contentVisible;
@@ -79,6 +136,10 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
     _standardVisible = visible;
     final duration = ThmrMotion.of(context, exiting: !visible);
     _standard.duration = duration;
+    if (duration == Duration.zero || !TickerMode.valuesOf(context).enabled) {
+      _standard.value = visible ? 1 : 0;
+      return;
+    }
     try {
       await (visible ? _standard.forward() : _standard.reverse())
           .orCancel
@@ -95,6 +156,8 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    if (hasMobilePresentation) _queueKeepScreenOn(false);
     if (hasDesktopWindowControls) windowManager.removeListener(this);
     if (_mode.animateStandard == _animateStandard) {
       _mode.animateStandard = null;
@@ -129,6 +192,7 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
     final mode = ref.watch(largeScreenProvider);
     final active = mode.active;
     ref.listen(largeScreenProvider, (previous, next) {
+      if (previous?.active != next.active) _syncKeepScreenOn();
       if (next.active && previous?.active != true) {
         unawaited(_refreshWorkArea());
       }
@@ -138,6 +202,10 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
         _previousFocus = FocusManager.instance.primaryFocus;
       }
       if (next.busy) return;
+      if (!next.active && next.contentVisible) {
+        _standardVisible = true;
+        _standard.value = 1;
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || ref.read(largeScreenProvider).active != next.active) {
           return;
@@ -150,57 +218,68 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
         }
       });
     });
+    ref.listen(largeScreenSettingsProvider.select((s) => s.keepScreenOn),
+        (_, __) => _syncKeepScreenOn());
     ref.listen(largeScreenProvider.select((s) => s.error), (_, error) {
       if (error != null) {
-        ScaffoldMessenger.of(context)
-            .showThmrSnackBar(context, SnackBar(content: Text(error)));
+        _showMessage(error);
       }
     });
-    return LayoutBuilder(builder: (context, constraints) {
-      final metrics = MediaQuery.of(context);
-      if (!active) {
-        _mainSize = constraints.biggest;
-        _mainMetrics = metrics;
-      }
-      final retainedMetrics = metrics.copyWith(
-        size: _mainMetrics?.size,
-        padding: _mainMetrics?.padding,
-        viewPadding: _mainMetrics?.viewPadding,
-        viewInsets: _mainMetrics?.viewInsets,
-        systemGestureInsets: _mainMetrics?.systemGestureInsets,
-      );
-      return Stack(fit: StackFit.expand, children: [
-        Offstage(
-          offstage: active,
-          child: TickerMode(
-            enabled: !active,
-            child: ExcludeFocus(
-              excluding: active,
-              child: OverflowBox(
-                alignment: Alignment.topLeft,
-                minWidth: 0,
-                minHeight: 0,
-                maxWidth: double.infinity,
-                maxHeight: double.infinity,
-                child: SizedBox.fromSize(
-                    size: _mainSize ?? constraints.biggest,
-                    child: MediaQuery(
-                        data: retainedMetrics,
-                        child: IgnorePointer(
-                            ignoring: mode.busy,
-                            child: ThmrFadeSlide(
-                                key: const ValueKey('standard-mode-transition'),
-                                animation: _standard,
-                                child: widget.child)))),
+    return PopScope(
+        canPop: !hasMobilePresentation || (!active && !mode.busy),
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && (active || mode.busy)) {
+            unawaited(_mode.change(false));
+          }
+        },
+        child: LayoutBuilder(builder: (context, constraints) {
+          final metrics = MediaQuery.of(context);
+          if (!active) {
+            _mainSize = constraints.biggest;
+            _mainMetrics = metrics;
+          }
+          final retainedMetrics = metrics.copyWith(
+            size: _mainMetrics?.size,
+            padding: _mainMetrics?.padding,
+            viewPadding: _mainMetrics?.viewPadding,
+            viewInsets: _mainMetrics?.viewInsets,
+            systemGestureInsets: _mainMetrics?.systemGestureInsets,
+          );
+          return Stack(fit: StackFit.expand, children: [
+            Offstage(
+              offstage: active,
+              child: TickerMode(
+                enabled: !active,
+                child: ExcludeFocus(
+                  excluding: active,
+                  child: OverflowBox(
+                    alignment: Alignment.topLeft,
+                    minWidth: 0,
+                    minHeight: 0,
+                    maxWidth: double.infinity,
+                    maxHeight: double.infinity,
+                    child: SizedBox.fromSize(
+                        size: _mainSize ?? constraints.biggest,
+                        child: MediaQuery(
+                            data: retainedMetrics,
+                            child: IgnorePointer(
+                                ignoring: mode.busy,
+                                child: ThmrFadeSlide(
+                                    key: const ValueKey(
+                                        'standard-mode-transition'),
+                                    animation: _standard,
+                                    child: widget.child)))),
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-        if (active)
-          FocusScope(
-              node: _stageFocus,
-              child: LargeScreenPlayer(safeInsets: _workAreaInsets)),
-      ]);
-    });
+            if (active)
+              FocusScope(
+                  node: _stageFocus,
+                  child: ScaffoldMessenger(
+                      key: _stageMessenger,
+                      child: LargeScreenPlayer(safeInsets: _workAreaInsets))),
+          ]);
+        }));
   }
 }

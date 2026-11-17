@@ -19,7 +19,7 @@ class LargeScreenPreview extends StatefulWidget {
   const LargeScreenPreview({super.key, this.canExpand = true});
   final bool canExpand;
 
-  static Future<void> open(BuildContext context) => showDialog<void>(
+  static Future<void> open(BuildContext context) => showThmrDialog<void>(
       context: context,
       animationStyle: ThmrMotion.style(context),
       builder: (context) => Dialog(
@@ -66,7 +66,7 @@ class _LargeScreenPreviewState extends State<LargeScreenPreview> {
                 Row(mainAxisSize: MainAxisSize.min, children: [
                   PopupMenuButton<int>(
                       tooltip: '预览比例',
-                      popUpAnimationStyle: ThmrMotion.style(context),
+                      popUpAnimationStyle: ThmrMotion.menuStyle(context),
                       initialValue: _frame,
                       onSelected: (value) => setState(() => _frame = value),
                       itemBuilder: (_) => [

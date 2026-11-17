@@ -83,7 +83,9 @@ void main() {
               'while the old or transparent Flutter surface is visible.');
       expect(completed, isTrue);
       await transition;
-    }, skip: !Platform.isWindows);
+    },
+        skip: !Platform.isWindows,
+        variant: TargetPlatformVariant.only(TargetPlatform.windows));
   }
 
   testWidgets(
@@ -146,7 +148,9 @@ void main() {
     expect(tester.getTopLeft(find.byKey(harness.mainKey)), oldOrigin);
     expect(harness.exposedChanges, isEmpty);
     expect(tester.takeException(), isNull);
-  }, skip: !Platform.isWindows);
+  },
+      skip: !Platform.isWindows,
+      variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('maximized bounds restore inside the cloak with reduced motion',
       (tester) async {
@@ -165,7 +169,9 @@ void main() {
     expect(harness.rect, _Harness.maximizedBounds);
     expect(harness.exposedChanges, isEmpty);
     expect(tester.takeException(), isNull);
-  }, skip: !Platform.isWindows);
+  },
+      skip: !Platform.isWindows,
+      variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   for (final failOnEntry in [true, false]) {
     testWidgets(
@@ -192,7 +198,9 @@ void main() {
       expect(harness.concealed, isFalse);
       expect(harness.exposedChanges, isEmpty);
       expect(tester.takeException(), isNull);
-    }, skip: !Platform.isWindows);
+    },
+        skip: !Platform.isWindows,
+        variant: TargetPlatformVariant.only(TargetPlatform.windows));
   }
 }
 

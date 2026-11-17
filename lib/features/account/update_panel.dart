@@ -299,7 +299,7 @@ String _formatTime(DateTime time) =>
     '${time.minute.toString().padLeft(2, '0')}';
 
 Future<void> showAppUpdate(BuildContext context, AppRelease release) =>
-    showDialog<void>(
+    showThmrDialog<void>(
       animationStyle: ThmrMotion.style(context),
       context: context,
       builder: (context) => Consumer(builder: (context, ref, _) {

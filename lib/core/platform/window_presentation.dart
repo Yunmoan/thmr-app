@@ -41,12 +41,21 @@ class WindowPresentation {
   /// Also fence the final enabled surface after its visible entrance.
   Future<void> flushFrame() => _waitForFrame('flushFrame');
 
+  /// Native visibility changes can temporarily pause regular frame scheduling.
+  /// Submit the retained or incoming surface even while that pause is active.
+  Future<void> submitFrame() {
+    final binding = WidgetsBinding.instance;
+    final completed = binding.endOfFrame;
+    binding.scheduleForcedFrame();
+    return completed.timeout(const Duration(seconds: 3));
+  }
+
   Future<void> _waitForFrame(String method) async {
     // endOfFrame submits the target layer tree; it does not wait for raster.
     // The native fence is queued on the raster thread after that submission,
     // and requests a redraw even when the target UI has no active animations.
     final binding = WidgetsBinding.instance;
-    await binding.endOfFrame;
+    await submitFrame();
     var waiting = true;
     void requestFrame(Duration _) {
       if (!waiting) return;

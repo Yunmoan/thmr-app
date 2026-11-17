@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
+import '../../shared/widgets/message_body.dart';
+
 class ThmrMotion {
   const ThmrMotion._();
   static const duration = Duration(milliseconds: 240);
@@ -28,13 +30,101 @@ class ThmrMotion {
 
   static Duration quickOf(BuildContext context) =>
       MediaQuery.disableAnimationsOf(context) ? Duration.zero : shortDuration;
+
+  // Popup menus already stagger their size and individual items internally.
+  static AnimationStyle menuStyle(BuildContext context) =>
+      MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : const AnimationStyle(
+              duration: duration,
+              reverseDuration: exitDuration,
+              curve: Curves.linear,
+              reverseCurve: Curves.linear);
+}
+
+Future<T?> showThmrDialog<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  bool barrierDismissible = true,
+  AnimationStyle? animationStyle,
+}) {
+  Tooltip.dismissAllToolTips();
+  final navigator = Navigator.of(context, rootNavigator: true);
+  return navigator.push<T>(_ThmrDialogRoute<T>(
+    context: context,
+    builder: builder,
+    themes: InheritedTheme.capture(from: context, to: navigator.context),
+    barrierDismissible: barrierDismissible,
+    barrierColor: DialogTheme.of(context).barrierColor ?? Colors.black54,
+    animationStyle: animationStyle ?? ThmrMotion.style(context),
+  ));
+}
+
+class _ThmrDialogRoute<T> extends DialogRoute<T> {
+  _ThmrDialogRoute({
+    required super.context,
+    required super.builder,
+    required super.themes,
+    required super.barrierDismissible,
+    required super.barrierColor,
+    super.traversalEdgeBehavior = TraversalEdgeBehavior.closedLoop,
+    required AnimationStyle animationStyle,
+  })  : _style = animationStyle,
+        super(animationStyle: animationStyle);
+
+  final AnimationStyle _style;
+
+  @override
+  Duration get reverseTransitionDuration =>
+      _style.reverseDuration ?? ThmrMotion.exitDuration;
+
+  @override
+  Widget buildTransitions(BuildContext context, Animation<double> animation,
+          Animation<double> secondaryAnimation, Widget child) =>
+      ThmrFadeSlide(animation: animation, beginScale: .98, child: child);
 }
 
 extension ThmrMessengerMotion on ScaffoldMessengerState {
   ScaffoldFeatureController<SnackBar, SnackBarClosedReason> showThmrSnackBar(
-          BuildContext motionContext, SnackBar snackBar) =>
-      showSnackBar(snackBar,
-          snackBarAnimationStyle: ThmrMotion.style(motionContext));
+      BuildContext motionContext, SnackBar snackBar) {
+    final scheme = Theme.of(motionContext).colorScheme;
+    return showSnackBar(
+      SnackBar(
+        key: snackBar.key,
+        content: Builder(builder: (context) {
+          final animation =
+              context.findAncestorWidgetOfExactType<SnackBar>()?.animation;
+          final surface = MessageSurface(
+            color: scheme.inverseSurface,
+            child: MessageBody(
+              content: snackBar.content,
+              action: snackBar.action,
+              foregroundColor: scheme.onInverseSurface,
+              onClose: () =>
+                  hideCurrentSnackBar(reason: SnackBarClosedReason.dismiss),
+            ),
+          );
+          return animation == null
+              ? surface
+              : ThmrFadeSlide(animation: animation, child: surface);
+        }),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        padding: EdgeInsets.zero,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        clipBehavior: Clip.none,
+        showCloseIcon: false,
+        duration: snackBar.duration,
+        persist: snackBar.persist,
+        animation: snackBar.animation,
+        onVisible: snackBar.onVisible,
+        dismissDirection: snackBar.dismissDirection,
+        hitTestBehavior: snackBar.hitTestBehavior,
+      ),
+      snackBarAnimationStyle: ThmrMotion.style(motionContext),
+    );
+  }
 }
 
 /// AnimatedSize with a true, state-preserving reduced-motion path. A zero
@@ -70,9 +160,15 @@ class _ThmrAnimatedSizeState extends State<ThmrAnimatedSize> {
 /// A reversible entrance. Keep both the curve and child alive when interrupted.
 class ThmrFadeSlide extends StatefulWidget {
   const ThmrFadeSlide(
-      {super.key, required this.animation, required this.child});
+      {super.key,
+      required this.animation,
+      this.secondaryAnimation,
+      required this.child,
+      this.beginScale = 1});
   final Animation<double> animation;
+  final Animation<double>? secondaryAnimation;
   final Widget child;
+  final double beginScale;
 
   @override
   State<ThmrFadeSlide> createState() => _ThmrFadeSlideState();
@@ -80,12 +176,21 @@ class ThmrFadeSlide extends StatefulWidget {
 
 class _ThmrFadeSlideState extends State<ThmrFadeSlide> {
   late CurvedAnimation _curve = _makeCurve();
+  late CurvedAnimation? _secondaryCurve = _makeSecondaryCurve();
 
   CurvedAnimation _makeCurve() => CurvedAnimation(
         parent: widget.animation,
         curve: ThmrMotion.enterCurve,
         reverseCurve: ThmrMotion.exitCurve,
       );
+
+  CurvedAnimation? _makeSecondaryCurve() => widget.secondaryAnimation == null
+      ? null
+      : CurvedAnimation(
+          parent: widget.secondaryAnimation!,
+          curve: ThmrMotion.enterCurve,
+          reverseCurve: ThmrMotion.exitCurve,
+        );
 
   @override
   void didUpdateWidget(covariant ThmrFadeSlide oldWidget) {
@@ -94,37 +199,55 @@ class _ThmrFadeSlideState extends State<ThmrFadeSlide> {
       _curve.dispose();
       _curve = _makeCurve();
     }
+    if (oldWidget.secondaryAnimation != widget.secondaryAnimation) {
+      _secondaryCurve?.dispose();
+      _secondaryCurve = _makeSecondaryCurve();
+    }
   }
 
   @override
   void dispose() {
     _curve.dispose();
+    _secondaryCurve?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final reduced = MediaQuery.disableAnimationsOf(context);
-    return AnimatedBuilder(
-      animation: _curve,
+    final animation = reduced ? kAlwaysCompleteAnimation : _curve;
+    final content = AnimatedBuilder(
+      animation: animation,
       child: widget.child,
       builder: (context, child) {
-        final progress = reduced ? 1.0 : _curve.value;
+        final progress = animation.value;
         return IgnorePointer(
           ignoring: progress == 0,
           child: ExcludeFocus(
             excluding: progress == 0,
             child: FadeTransition(
-              opacity: AlwaysStoppedAnimation(progress),
+              opacity: animation,
               child: Transform.translate(
                 offset: Offset(0, ThmrMotion.distance * (1 - progress)),
-                child: child,
+                child: widget.beginScale == 1
+                    ? child
+                    : Transform.scale(
+                        scale: widget.beginScale +
+                            (1 - widget.beginScale) * progress,
+                        child: child),
               ),
             ),
           ),
         );
       },
     );
+    return _secondaryCurve == null
+        ? content
+        : FadeTransition(
+            opacity: reduced
+                ? kAlwaysCompleteAnimation
+                : ReverseAnimation(_secondaryCurve!),
+            child: content);
   }
 }
 
@@ -375,6 +498,15 @@ class _RenderContentLayers extends RenderBox
           current.hitTest(result, position: position),
     );
   }
+
+  @override
+  void visitChildrenForSemantics(RenderObjectVisitor visitor) {
+    final current = _current;
+    if (current != null) visitor(current);
+  }
+
+  @override
+  Rect describeApproximatePaintClip(RenderObject child) => Offset.zero & size;
 }
 
 class ThmrPageTransitionsBuilder extends PageTransitionsBuilder {
@@ -390,5 +522,8 @@ class ThmrPageTransitionsBuilder extends PageTransitionsBuilder {
           Animation<double> animation,
           Animation<double> secondaryAnimation,
           Widget child) =>
-      ThmrFadeSlide(animation: animation, child: child);
+      ThmrFadeSlide(
+          animation: animation,
+          secondaryAnimation: secondaryAnimation,
+          child: child);
 }

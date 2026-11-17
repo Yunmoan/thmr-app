@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:thmr_app/core/models/models.dart';
 import 'package:thmr_app/core/theme/thmr_theme.dart';
 import 'package:thmr_app/features/listen/widgets/now_playing_panel.dart';
+import 'package:thmr_app/features/large_screen/large_screen_button.dart';
 
 void main() {
   testWidgets('the home track card copies the title and artist',
@@ -48,6 +49,11 @@ void main() {
     ));
 
     expect(find.text('复制信息'), findsOneWidget);
+    final button = tester.getRect(find.byType(LargeScreenButton));
+    final info = tester.getRect(find.byType(NowPlayingTrackInfo));
+    expect(button.top, info.top);
+    expect(button.right, info.right);
+    expect(button.bottom, lessThan(tester.getTopLeft(find.text('复制信息')).dy));
     await tester.tap(find.text('复制信息'));
     await tester.pump();
     expect(copied, '幽雅に咲かせ、墨染の桜 - 上海アリス幻樂団');

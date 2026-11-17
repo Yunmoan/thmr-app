@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/thmr_motion.dart';
+import 'message_body.dart';
 
 /// A status message over the page, with the same entrance/exit as other THMR
 /// surfaces. Retain the outgoing content until its exit has finished.
@@ -103,64 +104,29 @@ class _StatusNoticeState extends State<StatusNotice>
     final display = _display;
     if (display == null) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
-    return Align(
-      alignment: Alignment.topCenter,
-      heightFactor: 1,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
-        child: ExcludeFocus(
-          excluding: !_visible,
-          child: ExcludeSemantics(
-            excluding: !_visible,
-            child: IgnorePointer(
-              ignoring: !_visible,
-              child: ThmrFadeSlide(
-                animation: _animation,
-                child: ThmrAnimatedContent(
-                    child: Material(
-                  key: ValueKey(display.$1),
-                  elevation: 6,
-                  color: scheme.inverseSurface,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    child: Row(children: [
-                      if (display.$2) ...[
-                        SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: MediaQuery.disableAnimationsOf(context)
-                                ? Icon(Icons.hourglass_empty_rounded,
-                                    size: 16, color: scheme.onInverseSurface)
-                                : CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: scheme.onInverseSurface)),
-                        const SizedBox(width: 10),
-                      ],
-                      Expanded(
-                          child: Semantics(
-                              liveRegion: true,
-                              child: Text(display.$1,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                          color: scheme.onInverseSurface)))),
-                      if (display.$3 != null)
-                        TextButton(
-                            onPressed: display.$3,
-                            style: TextButton.styleFrom(
-                                foregroundColor: scheme.inversePrimary),
-                            child: const Text('重试')),
-                      IconButton(
-                          tooltip: '关闭提示',
-                          color: scheme.onInverseSurface,
-                          onPressed: _dismiss,
-                          icon: const Icon(Icons.close_rounded, size: 18)),
-                    ]),
-                  ),
-                )),
+    return ExcludeFocus(
+      excluding: !_visible,
+      child: ExcludeSemantics(
+        excluding: !_visible,
+        child: IgnorePointer(
+          ignoring: !_visible,
+          child: ThmrFadeSlide(
+            animation: _animation,
+            child: ThmrAnimatedContent(
+              child: MessageSurface(
+                key: ValueKey(display.$1),
+                child: MessageBody(
+                  content: Semantics(liveRegion: true, child: Text(display.$1)),
+                  busy: display.$2,
+                  onClose: _dismiss,
+                  action: display.$3 == null
+                      ? null
+                      : TextButton(
+                          onPressed: display.$3,
+                          style: TextButton.styleFrom(
+                              foregroundColor: scheme.inversePrimary),
+                          child: const Text('重试')),
+                ),
               ),
             ),
           ),

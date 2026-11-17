@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../core/platform/desktop_window.dart';
 import '../../core/player/playback_controller.dart';
 import '../../core/models/models.dart';
 import '../../core/state/large_screen_settings.dart';
@@ -72,6 +73,10 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
     if (visible) _reveal();
     final duration = ThmrMotion.of(context, exiting: !visible);
     _presentation.duration = duration;
+    if (duration == Duration.zero || !TickerMode.valuesOf(context).enabled) {
+      _presentation.value = visible ? 1 : 0;
+      return;
+    }
     try {
       await (visible ? _presentation.forward() : _presentation.reverse())
           .orCancel
@@ -127,12 +132,21 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
   @override
   Widget build(BuildContext context) {
     if (!widget.preview) {
+      ref.listen(largeScreenProvider, (_, state) {
+        if (!state.busy && state.active && state.contentVisible) {
+          // Native fullscreen changes can replace or cancel an animation's
+          // ticker. A completed transition must always have painted content.
+          _presentationVisible = true;
+          _presentation.value = 1;
+        }
+      });
       // Fallback for a missed controller callback (for example when the stage
       // remounts during a transition): follow the shared visibility state so
       // the content can never stay transparent while the stage is visible.
       ref.listen(largeScreenProvider.select((state) => state.contentVisible),
           (previous, visible) {
-        if (visible != _presentationVisible) {
+        if (visible != _presentationVisible &&
+            _mode.animatePresentation != _animatePresentation) {
           unawaited(_animatePresentation(visible));
         }
       });
@@ -294,18 +308,19 @@ class _Header extends ConsumerWidget {
                 station: ref
                     .watch(stationProvider.select((s) => s.status?.station))));
     final actions = [
-      IconButton(
-          tooltip: state.fullScreen ? '退出全屏' : '进入全屏',
-          onPressed: preview
-              ? () {}
-              : state.busy
-                  ? null
-                  : () => unawaited(ref
-                      .read(largeScreenProvider.notifier)
-                      .toggleFullScreen()),
-          icon: LargeScreenGlyph(state.fullScreen
-              ? LargeScreenSymbol.windowed
-              : LargeScreenSymbol.fullscreen)),
+      if (hasDesktopWindowControls)
+        IconButton(
+            tooltip: state.fullScreen ? '退出全屏' : '进入全屏',
+            onPressed: preview
+                ? () {}
+                : state.busy
+                    ? null
+                    : () => unawaited(ref
+                        .read(largeScreenProvider.notifier)
+                        .toggleFullScreen()),
+            icon: LargeScreenGlyph(state.fullScreen
+                ? LargeScreenSymbol.windowed
+                : LargeScreenSymbol.fullscreen)),
       IconButton(
           tooltip: '收起大屏幕模式',
           onPressed: preview
@@ -325,9 +340,11 @@ class _Header extends ConsumerWidget {
           children: [
             Row(children: [
               Expanded(
-                  child: DragToMoveArea(
-                      key: const ValueKey('large-screen-window-drag'),
-                      child: brand)),
+                  child: hasDesktopWindowControls
+                      ? DragToMoveArea(
+                          key: const ValueKey('large-screen-window-drag'),
+                          child: brand)
+                      : brand),
               if (!narrow) ...[
                 const SizedBox(width: 20),
                 channels,

@@ -12,5 +12,20 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "MobilePresentation") else {
+      return
+    }
+    let channel = FlutterMethodChannel(
+      name: "thmr/mobile_presentation",
+      binaryMessenger: registrar.messenger()
+    )
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "setKeepScreenOn" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      UIApplication.shared.isIdleTimerDisabled = call.arguments as? Bool ?? false
+      result(nil)
+    }
   }
 }

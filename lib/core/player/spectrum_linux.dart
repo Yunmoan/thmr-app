@@ -16,6 +16,8 @@ class LinuxSpectrum implements RetryableSpectrumSource {
 
   static final instance = LinuxSpectrum._(() => sharedRadioStream.spectrumUri,
       '${File(Platform.resolvedExecutable).parent.path}/lib/libthmr_mp3.so');
+  static final appleInstance = LinuxSpectrum._(
+      () => sharedRadioStream.spectrumUri, 'thmr_mp3.framework/thmr_mp3');
   final Uri? Function() _streamUri;
   final String _library;
   _SpectrumWorker? _worker;

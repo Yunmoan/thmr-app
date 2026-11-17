@@ -166,7 +166,7 @@ class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
 
   Future<void> _openShared(BuildContext context) async {
     final controller = TextEditingController();
-    final slug = await showDialog<String>(
+    final slug = await showThmrDialog<String>(
       animationStyle: ThmrMotion.style(context),
       context: context,
       builder: (context) => AlertDialog(
@@ -196,7 +196,7 @@ class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
 
   Future<void> _newCollection(BuildContext context) async {
     final controller = TextEditingController();
-    final created = await showDialog<bool>(
+    final created = await showThmrDialog<bool>(
       animationStyle: ThmrMotion.style(context),
       context: context,
       builder: (context) => AlertDialog(
@@ -302,7 +302,7 @@ class _CollectionCard extends ConsumerWidget {
   final bool readOnly;
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showThmrDialog<bool>(
       animationStyle: ThmrMotion.style(context),
       context: context,
       builder: (dialogContext) => AlertDialog(

@@ -173,7 +173,7 @@ class _LargeScreenWidgetEditorState
             PopupMenuButton<LargeScreenWidgetKind>(
               tooltip: '添加小组件',
               enabled: items.length < 8,
-              popUpAnimationStyle: ThmrMotion.style(context),
+              popUpAnimationStyle: ThmrMotion.menuStyle(context),
               onSelected: _add,
               itemBuilder: (_) => [
                 for (final kind in LargeScreenWidgetKind.values)

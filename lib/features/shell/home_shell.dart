@@ -235,7 +235,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
     var remember = false;
     final trayAvailable = ref.read(desktopTrayAvailableProvider);
     final isMacOS = _tray.platform == TargetPlatform.macOS;
-    return showDialog<(CloseAction, bool)>(
+    return showThmrDialog<(CloseAction, bool)>(
       animationStyle: ThmrMotion.style(context),
       context: context,
       builder: (dialogContext) => StatefulBuilder(

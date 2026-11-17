@@ -31,6 +31,7 @@ void main() {
       showControls: false,
       autoHideControls: false,
       startFullScreen: false,
+      keepScreenOn: true,
     );
     await controller.update(chosen);
     final restored = LargeScreenSettingsController();
@@ -62,6 +63,7 @@ void main() {
     expect(bounded.state.queueCount, 8);
     expect(bounded.state.textScale, .8);
     expect(bounded.state.showProgress, isTrue);
+    expect(bounded.state.keepScreenOn, isFalse);
     bounded.dispose();
   });
 
@@ -129,6 +131,15 @@ void main() {
         expect(container.read(largeScreenSettingsProvider).queue,
             LargeScreenQueue.hidden);
         expect(find.text('队列曲目数'), findsNothing);
+        final keepAwake = find.descendant(
+            of: find.byWidgetPredicate((widget) =>
+                widget is Semantics && widget.properties.label == '保持屏幕常亮'),
+            matching: find.byType(Switch));
+        await tester.ensureVisible(keepAwake);
+        await tester.tap(keepAwake);
+        await tester.pumpAndSettle();
+        expect(
+            container.read(largeScreenSettingsProvider).keepScreenOn, isTrue);
         await tester.ensureVisible(find.text('恢复默认'));
         await tester.tap(find.text('恢复默认'));
         await tester.pumpAndSettle();

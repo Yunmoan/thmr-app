@@ -8,7 +8,7 @@ import '../../core/platform/desktop_window.dart';
 import 'focus_outline.dart';
 import 'thmr_panel.dart';
 
-Future<void> showInputHelp(BuildContext context) => showDialog<void>(
+Future<void> showInputHelp(BuildContext context) => showThmrDialog<void>(
       animationStyle: ThmrMotion.style(context),
       context: context,
       builder: (_) => const InputHelpDialog(),

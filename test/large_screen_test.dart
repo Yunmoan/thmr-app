@@ -8,9 +8,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:thmr_app/core/input/app_input.dart';
 import 'package:thmr_app/core/input/app_commands.dart';
 import 'package:thmr_app/core/models/models.dart';
+import 'package:thmr_app/core/platform/window_presentation.dart';
+import 'package:thmr_app/core/theme/thmr_motion.dart';
 import 'package:thmr_app/core/player/playback_controller.dart';
 import 'package:thmr_app/core/state/station_provider.dart';
 import 'package:thmr_app/core/state/large_screen_settings.dart';
@@ -101,6 +104,8 @@ class _Harness {
   final playback = _Playback();
   final calls = <bool>[];
   final nativeMethods = <String>[];
+  final orientations = <List<dynamic>>[];
+  final keepScreenOnCalls = <bool>[];
   late final container = ProviderContainer(overrides: [
     stationProvider.overrideWith((ref) => station),
     playbackProvider.overrideWith((ref) => playback),
@@ -117,6 +122,7 @@ class _Harness {
   bool nativeFullScreen = false;
   bool failEnter = false;
   bool failExit = false;
+  bool failOrientation = false;
   bool resizeOnTransition = false;
   bool deferFullScreenEvent = false;
   EdgeInsets workAreaInsets = EdgeInsets.zero;
@@ -124,7 +130,9 @@ class _Harness {
   Completer<void>? enterGate;
   Completer<void>? frameGate;
   bool concealed = false;
+  VoidCallback? onConceal;
   final revealed = <LargeScreenState>[];
+  final revealedOpacities = <double>[];
   final flushed = <LargeScreenState>[];
 
   Future<void> mount(
@@ -135,6 +143,28 @@ class _Harness {
     SharedPreferences.setMockInitialValues({});
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = size;
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'SystemChrome.setPreferredOrientations') {
+        final values = List<dynamic>.from(call.arguments as List);
+        orientations.add(values);
+        if (values.isNotEmpty && failOrientation) {
+          throw PlatformException(code: 'orientation_unavailable');
+        }
+        if (resizeOnTransition) {
+          tester.view.physicalSize =
+              values.isEmpty ? size : Size(size.height, size.width);
+        }
+      }
+      return null;
+    });
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('thmr/mobile_presentation'), (call) async {
+      if (call.method == 'setKeepScreenOn') {
+        keepScreenOnCalls.add(call.arguments as bool);
+      }
+      return null;
+    });
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         const MethodChannel('window_manager'), (call) async {
       nativeMethods.add(call.method);
@@ -175,7 +205,10 @@ class _Harness {
           'bottom': workAreaInsets.bottom
         };
       }
-      if (call.method == 'conceal') concealed = true;
+      if (call.method == 'conceal') {
+        onConceal?.call();
+        concealed = true;
+      }
       if (call.method == 'waitForFrame') await frameGate?.future;
       if (call.method == 'flushFrame') {
         flushed.add(container.read(largeScreenProvider));
@@ -183,6 +216,19 @@ class _Harness {
       if (call.method == 'reveal') {
         concealed = false;
         revealed.add(container.read(largeScreenProvider));
+        final key = container.read(largeScreenProvider).active
+            ? 'large-mode-transition'
+            : 'standard-mode-transition';
+        final fades = find
+            .descendant(
+                of: find.byKey(ValueKey(key), skipOffstage: false),
+                matching: find.byType(FadeTransition, skipOffstage: false),
+                skipOffstage: false)
+            .evaluate();
+        if (fades.isNotEmpty) {
+          revealedOpacities
+              .add((fades.first.widget as FadeTransition).opacity.value);
+        }
       }
       return null;
     });
@@ -198,6 +244,10 @@ class _Harness {
           const MethodChannel('window_manager'), null);
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
           const MethodChannel('thmr/window_presentation'), null);
+      tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null);
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          const MethodChannel('thmr/mobile_presentation'), null);
     });
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
@@ -264,6 +314,101 @@ class _Harness {
 }
 
 void main() {
+  testWidgets('stage messages belong only to the visible scaffold',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount();
+    await h.change(true);
+    final context = tester.element(find.byType(LargeScreenPlayer));
+    ScaffoldMessenger.of(context).showThmrSnackBar(
+        context, const SnackBar(content: Text('stage message')));
+    await tester.pump();
+    await tester.pump(ThmrMotion.duration);
+    expect(find.byType(SnackBar, skipOffstage: false), findsOneWidget,
+        reason: 'The retained ordinary scaffold must not get a duplicate '
+            'message and Hero while it is offstage.');
+    final route = h.navigator.currentState!.push(MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('covered'))));
+    await tester.pumpAndSettle();
+    h.navigator.currentState!.pop();
+    await tester.pumpAndSettle();
+    await route;
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets(
+      'native reveal waits for a frame containing visible incoming content',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount();
+    await h.change(true);
+    await h.change(false);
+    expect(h.revealedOpacities, hasLength(2));
+    expect(h.revealedOpacities, everyElement(greaterThan(0)),
+        reason: 'A rasterized backdrop at opacity zero is not a ready player.');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('fullscreen resizing keeps the initialized stage opaque',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount();
+    await h.change(true);
+    final hidden = <LargeScreenState>[];
+    final subscription = h.container.listen(largeScreenProvider, (_, next) {
+      if (next.active && !next.contentVisible) hidden.add(next);
+    });
+    addTearDown(subscription.close);
+    final toggling = h.controller.toggleFullScreen();
+    await tester.pumpAndSettle();
+    await toggling;
+    expect(hidden, isEmpty,
+        reason: 'Fullscreen changes resize an existing stage without fading '
+            'its initialized content back to transparent.');
+    expect(h.container.read(largeScreenProvider).active, isTrue);
+    expect(h.container.read(largeScreenProvider).fullScreen, isFalse);
+  },
+      variant: const TargetPlatformVariant({
+        TargetPlatform.windows,
+        TargetPlatform.macOS,
+        TargetPlatform.linux,
+      }));
+
+  testWidgets(
+      'mode changes remove open tooltip overlays before concealing their anchor',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount();
+    tester
+        .state<RawTooltipState>(find.byTooltip('大屏幕模式'))
+        .ensureTooltipVisible();
+    await tester.pumpAndSettle();
+    expect(find.text('大屏幕模式'), findsOneWidget);
+    var tooltipWasOpen = false;
+    h.onConceal =
+        () => tooltipWasOpen = find.text('大屏幕模式').evaluate().isNotEmpty;
+    await h.change(true);
+    expect(tooltipWasOpen, isFalse,
+        reason: 'The tooltip traversal parent must be detached before its '
+            'retained page is hidden from the semantics tree.');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets(
+      'native frame fences request a frame while lifecycle scheduling is paused',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    expect(tester.binding.framesEnabled, isFalse);
+    final pending = WindowPresentation().flushFrame();
+    final scheduled = tester.binding.hasScheduledFrame;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    await pending;
+    expect(scheduled, isTrue,
+        reason: 'A native transition must submit its frame before waiting for '
+            'the window to become visible again.');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
   testWidgets(
       'settings preview follows edits without owning window or playback',
       (tester) async {
@@ -829,6 +974,41 @@ void main() {
     expect(h.playback.toggles, 0);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
+  testWidgets(
+      'completed fullscreen exits restore painted content after a lost callback',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount();
+    await h.change(true);
+    // A replaced native surface may finish the request without driving the
+    // widget's original animation callback.
+    h.controller.animatePresentation = (_) async {};
+    await tester.tap(find.byTooltip('退出全屏'));
+    await tester.pumpAndSettle();
+    expect(h.container.read(largeScreenProvider).fullScreen, isFalse);
+    final stageFade = find
+        .descendant(
+            of: find.byKey(const ValueKey('large-mode-transition')),
+            matching: find.byType(FadeTransition))
+        .first;
+    expect(tester.widget<FadeTransition>(stageFade).opacity.value, 1);
+    h.controller.animateStandard = (_) async {};
+    await h.change(false);
+    final standardFade = find
+        .descendant(
+            of: find.byKey(const ValueKey('standard-mode-transition')),
+            matching: find.byType(FadeTransition))
+        .first;
+    expect(tester.widget<FadeTransition>(standardFade).opacity.value, 1);
+    expect(find.text('main control').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  },
+      variant: const TargetPlatformVariant({
+        TargetPlatform.windows,
+        TargetPlatform.macOS,
+        TargetPlatform.linux,
+      }));
+
   testWidgets('native reveal follows raster and input unlocks after entrance',
       (tester) async {
     final h = _Harness(tester);
@@ -1084,17 +1264,84 @@ void main() {
     expect(h.container.read(largeScreenProvider).active, isFalse);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
-  testWidgets('mobile has no desktop entry or fullscreen shortcut',
+  for (final size in [const Size(390, 844), const Size(768, 1024)]) {
+    testWidgets(
+        'mobile enters from its button and restores orientation at $size',
+        (tester) async {
+      final h = _Harness(tester)..resizeOnTransition = true;
+      await h.mount(size: size);
+      h.scroll.jumpTo(750);
+      await tester.tap(find.byTooltip('大屏幕模式'));
+      await tester.pumpAndSettle();
+      expect(h.container.read(largeScreenProvider).active, isTrue);
+      expect(h.orientations.single, [
+        'DeviceOrientation.landscapeLeft',
+        'DeviceOrientation.landscapeRight',
+      ]);
+      expect(find.byType(LargeScreenPlayer), findsOneWidget);
+      expect(find.byTooltip('进入全屏'), findsNothing);
+      expect(find.byType(DragToMoveArea), findsNothing);
+      expect(h.nativeMethods, isEmpty);
+      expect(h.keepScreenOnCalls, isEmpty);
+      await h.navigator.currentState!.maybePop();
+      await tester.pumpAndSettle();
+      expect(h.container.read(largeScreenProvider).active, isFalse);
+      expect(h.orientations.last, isEmpty);
+      expect(tester.view.physicalSize, size);
+      expect(h.scroll.offset, 750);
+      expect(tester.takeException(), isNull);
+    },
+        variant: const TargetPlatformVariant(
+            {TargetPlatform.android, TargetPlatform.iOS}));
+  }
+
+  testWidgets(
+      'mobile keeps the screen awake only while opted in and foreground',
       (tester) async {
     final h = _Harness(tester);
     await h.mount();
-    expect(find.byTooltip('大屏幕模式'), findsNothing);
-    await tester.sendKeyEvent(LogicalKeyboardKey.f11);
-    await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await h.container
+        .read(largeScreenSettingsProvider.notifier)
+        .update(const LargeScreenSettings(keepScreenOn: true));
     await h.change(true);
-    expect(h.calls, isEmpty);
-    expect(h.container.read(appTabProvider), 0);
-    expect(find.byType(LargeScreenPlayer), findsNothing);
+    expect(h.keepScreenOnCalls.last, isTrue);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    expect(h.keepScreenOnCalls.last, isFalse);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(h.keepScreenOnCalls.last, isTrue);
+    await h.container
+        .read(largeScreenSettingsProvider.notifier)
+        .update(const LargeScreenSettings(keepScreenOn: false));
+    await tester.pump();
+    expect(h.keepScreenOnCalls.last, isFalse);
+    await h.container
+        .read(largeScreenSettingsProvider.notifier)
+        .update(const LargeScreenSettings(keepScreenOn: true));
+    await tester.pump();
+    expect(h.keepScreenOnCalls.last, isTrue);
+    await h.change(false);
+    expect(h.keepScreenOnCalls.last, isFalse);
+    expect(tester.takeException(), isNull);
+  },
+      variant: const TargetPlatformVariant(
+          {TargetPlatform.android, TargetPlatform.iOS}));
+
+  testWidgets('failed mobile orientation recovers and permits retry',
+      (tester) async {
+    final h = _Harness(tester)..failOrientation = true;
+    await h.mount();
+    await h.change(true);
+    expect(h.container.read(largeScreenProvider).active, isFalse);
+    expect(h.container.read(largeScreenProvider).busy, isFalse);
+    expect(h.orientations.last, isEmpty);
+    h.failOrientation = false;
+    await h.change(true);
+    expect(h.container.read(largeScreenProvider).active, isTrue);
+    await h.change(false);
+    expect(tester.takeException(), isNull);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('window reveals only after the stage entrance has started',

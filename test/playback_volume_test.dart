@@ -4,6 +4,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:thmr_app/core/models/models.dart';
 import 'package:thmr_app/core/player/playback_controller.dart';
+import 'package:thmr_app/core/player/shared_radio_stream.dart';
 
 class _RecordingPlayer extends PlatformPlayer {
   _RecordingPlayer() : super(configuration: const PlayerConfiguration());
@@ -29,6 +30,35 @@ class _RecordingPlayer extends PlatformPlayer {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final platform in [TargetPlatform.iOS, TargetPlatform.macOS]) {
+    test(
+        '$platform playback supplies the shared radio stream to the spectrum decoder',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      debugDefaultTargetPlatformOverride = platform;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      addTearDown(sharedRadioStream.dispose);
+      final engine = _RecordingPlayer();
+      addTearDown(engine.dispose);
+      final controller =
+          PlaybackController(player: Player(platformPlayer: engine));
+      addTearDown(controller.dispose);
+      await controller.tune('https://radio.test/radio/touhou/320k');
+      final playerUri = Uri.parse(engine.opened.single);
+      final spectrumUri = sharedRadioStream.spectrumUri!;
+      expect(playerUri.host, '127.0.0.1');
+      expect(playerUri.pathSegments.first, 'play');
+      expect(spectrumUri.pathSegments.first, 'spectrum');
+      expect(playerUri.pathSegments.last, spectrumUri.pathSegments.last);
+      await controller.pause();
+      expect(sharedRadioStream.spectrumUri, isNull);
+      await controller.playFromSystem();
+      expect(sharedRadioStream.spectrumUri, isNotNull);
+      expect(sharedRadioStream.spectrumUri, isNot(spectrumUri));
+      expect(engine.opened, hasLength(2));
+    });
+  }
 
   test('muting restores the previous nonzero volume', () {
     var state = const PlaybackState().copyWith(volume: 70);

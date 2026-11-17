@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/platform/desktop_window.dart';
+import '../../core/platform/mobile_presentation.dart';
 import '../../core/state/large_screen_settings.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/focus_outline.dart';
@@ -256,13 +258,20 @@ class LargeScreenSettingsPanel extends ConsumerWidget {
         _SettingSwitch(
             title: '自动收起控制栏',
             value: settings.autoHideControls,
-            description: '闲置 4 秒后隐藏，移动鼠标或操作按键时恢复',
+            description: '闲置 4 秒后隐藏，轻触画面、移动鼠标或操作按键时恢复',
             onChanged: (v) => save(settings.copyWith(autoHideControls: v))),
-        _SettingSwitch(
-            title: '打开时进入全屏',
-            value: settings.startFullScreen,
-            description: '也可在大屏右上角单独切换全屏',
-            onChanged: (v) => save(settings.copyWith(startFullScreen: v))),
+        if (hasDesktopWindowControls)
+          _SettingSwitch(
+              title: '打开时进入全屏',
+              value: settings.startFullScreen,
+              description: '也可在大屏右上角单独切换全屏',
+              onChanged: (v) => save(settings.copyWith(startFullScreen: v))),
+        if (hasMobilePresentation)
+          _SettingSwitch(
+              title: '保持屏幕常亮',
+              value: settings.keepScreenOn,
+              description: '在手机和平板上使用大屏幕模式时保持常亮，退出或切到后台后恢复自动息屏',
+              onChanged: (v) => save(settings.copyWith(keepScreenOn: v))),
         if (settings.showIllustration)
           _SettingRow(
               title: '立绘不透明度',

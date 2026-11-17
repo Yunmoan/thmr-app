@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
-import '../../core/platform/desktop_window.dart';
+import '../../core/platform/mobile_presentation.dart';
 import '../../core/platform/window_presentation.dart';
 import '../../core/state/large_screen_settings.dart';
 import '../mini/mini_player.dart';
@@ -65,7 +65,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
   }
 
   Future<void> _request({bool? active, bool? fullScreen}) {
-    if (!hasDesktopWindowControls ||
+    if (!supportsLargeScreenMode ||
         _ref.read(miniPlayerProvider) ||
         _ref.read(miniTransitionBusyProvider)) {
       return Future.value();
@@ -117,7 +117,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
         await _presentation.flushFrame();
       }
     } else {
-      await WidgetsBinding.instance.endOfFrame;
+      await _presentation.submitFrame();
     }
   }
 
@@ -149,13 +149,17 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
   }
 
   Future<void> _change(_PresentationTarget target) async {
+    if (hasMobilePresentation) return _changeMobile(target.active);
     final previous = state;
+    final switchingMode = previous.active != target.active;
     var previousFullScreen = previous.fullScreen;
     var concealed = false;
     String? errorMessage;
     state = LargeScreenState(
         active: previous.active, fullScreen: previous.fullScreen, busy: true);
     try {
+      await _ref.read(largeScreenSettingsProvider.notifier).ready;
+      if (!mounted) return;
       previousFullScreen = await windowManager.isFullScreen();
       if (!mounted) return;
       if (!previous.active && target.active) {
@@ -167,7 +171,8 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
                   previousFullScreen
               : _restoreFullScreen);
       _target = (active: target.active, fullScreen: targetFullScreen);
-      await _animate(false);
+      Tooltip.dismissAllToolTips();
+      if (switchingMode) await _animate(false);
       if (!mounted) return;
       if (_windows) {
         await _presentation.conceal();
@@ -180,7 +185,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
             fullScreen: targetFullScreen,
             busy: true,
             contentVisible: false);
-        await WidgetsBinding.instance.endOfFrame;
+        await _presentation.submitFrame();
       }
       if (previousFullScreen != targetFullScreen) {
         await _setFullScreen(targetFullScreen);
@@ -194,7 +199,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
           active: target.active,
           fullScreen: targetFullScreen,
           busy: true,
-          contentVisible: false);
+          contentVisible: !switchingMode);
       await _paint(concealed: concealed);
     } catch (error, stack) {
       debugPrint('Large screen transition failed: $error\n$stack');
@@ -212,7 +217,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
         state = LargeScreenState(
             active: previous.active,
             fullScreen: previousFullScreen,
-            contentVisible: false,
+            contentVisible: !switchingMode,
             busy: true);
         try {
           await _paint(concealed: concealed);
@@ -221,15 +226,14 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
         }
       }
     } finally {
-      // Start the incoming entrance while the window is still concealed, then
-      // fence one rasterized frame before revealing it. Revealing first would
-      // expose a frame with only the backdrop (the content is still at opacity
-      // zero), which is longest on the first entry while the native fullscreen
-      // change and the shell hint are still settling.
-      final entrance = mounted ? _animate(true) : null;
+      // The first animation frame establishes its timestamp at opacity zero.
+      // Fence the following frame as well so reveal exposes incoming content,
+      // including on the first entry after native metrics have changed.
+      final entrance = mounted && switchingMode ? _animate(true) : null;
       if (concealed) {
         try {
           await _paint(concealed: true);
+          if (entrance != null) await _paint(concealed: true);
         } catch (error) {
           debugPrint('Entrance frame fence failed: $error');
         }
@@ -276,6 +280,55 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
     }
   }
 
+  Future<void> _changeMobile(bool active) async {
+    final previous = state;
+    String? errorMessage;
+    state = LargeScreenState(active: previous.active, busy: true);
+    try {
+      await _ref.read(largeScreenSettingsProvider.notifier).ready;
+      if (!mounted) return;
+      Tooltip.dismissAllToolTips();
+      await _animate(false);
+      if (!mounted) return;
+      if (active) {
+        // Retain the ordinary page's portrait metrics before rotation starts.
+        state = const LargeScreenState(
+            active: true, busy: true, contentVisible: false);
+        await _presentation.submitFrame();
+      }
+      await MobilePresentation().setLandscape(active);
+      await _presentation.submitFrame();
+      if (!mounted) return;
+      state =
+          LargeScreenState(active: active, busy: true, contentVisible: false);
+      await _presentation.submitFrame();
+    } catch (error, stack) {
+      debugPrint('Mobile presentation failed: $error\n$stack');
+      errorMessage = '无法切换大屏幕模式，请重试。';
+      try {
+        await MobilePresentation().setLandscape(previous.active);
+      } catch (rollbackError) {
+        debugPrint('Screen orientation recovery failed: $rollbackError');
+      }
+      if (mounted) {
+        state = LargeScreenState(
+            active: previous.active, busy: true, contentVisible: false);
+      }
+    } finally {
+      if (mounted) {
+        try {
+          await _animate(true);
+        } catch (error) {
+          debugPrint('Mobile presentation entrance failed: $error');
+          errorMessage ??= '无法完成显示切换，请重试。';
+        }
+        if (mounted) {
+          state = LargeScreenState(active: state.active, error: errorMessage);
+        }
+      }
+    }
+  }
+
   void nativeFullScreenChanged(bool fullScreen) {
     final waiter = _nativeFullScreenWaiter;
     if (waiter != null &&
@@ -297,6 +350,12 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
   void dispose() {
     final waiter = _nativeFullScreenWaiter;
     if (waiter != null && !waiter.isCompleted) waiter.complete();
+    if (hasMobilePresentation && (state.active || _inFlight != null)) {
+      unawaited(
+          MobilePresentation().setLandscape(false).catchError((Object error) {
+        debugPrint('Screen orientation cleanup failed: $error');
+      }));
+    }
     super.dispose();
   }
 }

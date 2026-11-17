@@ -22,7 +22,6 @@ import '../../../shared/widgets/player_panel_layout.dart';
 import '../../../shared/widgets/volume_slider.dart';
 import '../../../shared/widgets/focus_outline.dart';
 import '../../../shared/widgets/volume_wheel_control.dart';
-import '../../../core/platform/desktop_window.dart';
 import '../../large_screen/large_screen_button.dart';
 import 'bitrate_row.dart';
 import 'feedback_sheet.dart';
@@ -248,7 +247,7 @@ class NowPlayingTrackInfo extends ConsumerWidget {
     final pos = box.localToGlobal(Offset.zero);
     final size = box.size;
     final picked = await showMenu<FavCollectionRef>(
-      popUpAnimationStyle: ThmrMotion.style(context),
+      popUpAnimationStyle: ThmrMotion.menuStyle(context),
       context: context,
       position: RelativeRect.fromLTRB(
         pos.dx,
@@ -338,31 +337,45 @@ class NowPlayingTrackInfo extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '当前曲目',
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: tokens.mutedInk,
-                letterSpacing: 3,
-                fontWeight: FontWeight.w600,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '当前曲目',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: tokens.mutedInk,
+                          letterSpacing: 3,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  ThmrAnimatedSize(
+                    alignment: Alignment.topLeft,
+                    child: title,
+                  ),
+                  const SizedBox(height: 6),
+                  ThmrAnimatedContent(
+                    child: Text(
+                      cur?.artist ?? '等待下一首',
+                      key: ValueKey((cur?.trackId, cur?.artist)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: tokens.mutedInk),
+                    ),
+                  ),
+                ],
               ),
-        ),
-        const SizedBox(height: 4),
-        ThmrAnimatedSize(
-          alignment: Alignment.topLeft,
-          child: title,
-        ),
-        const SizedBox(height: 6),
-        ThmrAnimatedContent(
-          child: Text(
-            cur?.artist ?? '等待下一首',
-            key: ValueKey((cur?.trackId, cur?.artist)),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: tokens.mutedInk),
-          ),
+            ),
+            const SizedBox(width: 8),
+            const LargeScreenButton(),
+          ],
         ),
         const SizedBox(height: 8),
         Wrap(
@@ -383,7 +396,6 @@ class NowPlayingTrackInfo extends ConsumerWidget {
               label: '复制信息',
               onTap: cur == null ? null : () => _copyTrackInfo(context),
             ),
-            if (hasDesktopWindowControls) const LargeScreenButton(),
           ],
         ),
       ],

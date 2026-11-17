@@ -302,6 +302,8 @@ void main() {
     ));
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pumpAndSettle();
+    Focus.of(tester.element(find.text('收藏'))).requestFocus();
+    await tester.pumpAndSettle();
     await _expectRingPixels(tester, capture, theme);
     final firstWidth = tester.getSize(_visibleRings).width;
     for (final label in ['已收藏', '收藏', '已收藏']) {

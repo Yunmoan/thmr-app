@@ -6,6 +6,7 @@ import '../../core/theme/thmr_motion.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/widgets/focus_outline.dart';
 import '../../core/platform/desktop_window.dart';
+import '../../core/platform/mobile_presentation.dart';
 import '../../core/platform/linux_tray.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -73,7 +74,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           context, const SnackBar(content: Text('登录成功,欢迎回到幻想乡')));
       final user = ref.read(authProvider).user;
       if (user?.needsNickname == true) {
-        await showDialog<void>(
+        await showThmrDialog<void>(
           animationStyle: ThmrMotion.style(context),
           context: context,
           barrierDismissible: false,
@@ -232,7 +233,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               ],
             ),
           ),
-          if (hasDesktopWindowControls) ...[
+          if (supportsLargeScreenMode) ...[
             const SizedBox(height: 10),
             const LargeScreenSettingsEntry(),
           ],
@@ -704,7 +705,7 @@ Future<void> _editNickname(
   var ok = false;
   while (true) {
     if (!context.mounted) return;
-    final submitted = await showDialog<bool>(
+    final submitted = await showThmrDialog<bool>(
       animationStyle: ThmrMotion.style(context),
       context: context,
       barrierDismissible: false,
@@ -816,7 +817,7 @@ class _SignedInBody extends ConsumerWidget {
             const SizedBox(width: 8),
             TextButton.icon(
               onPressed: () async {
-                final confirmed = await showDialog<bool>(
+                final confirmed = await showThmrDialog<bool>(
                   animationStyle: ThmrMotion.style(context),
                   context: context,
                   builder: (context) => AlertDialog(

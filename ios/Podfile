@@ -31,6 +31,7 @@ flutter_ios_podfile_setup
 
 target 'Runner' do
   use_frameworks!
+  pod 'thmr_mp3', :path => '../native'
 
   flutter_install_all_ios_pods __dir__
   target 'RunnerTests' do

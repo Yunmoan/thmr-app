@@ -36,6 +36,107 @@ class _MotionHostState extends State<_MotionHost>
 }
 
 void main() {
+  testWidgets('pushed pages crossfade through both push and pop',
+      (tester) async {
+    const first = ValueKey('first-page');
+    const second = ValueKey('second-page');
+    late BuildContext pageContext;
+    await tester.pumpWidget(MaterialApp(
+      theme: ThemeData(
+          pageTransitionsTheme: const PageTransitionsTheme(builders: {
+        TargetPlatform.android: ThmrPageTransitionsBuilder(),
+      })),
+      home: Builder(builder: (context) {
+        pageContext = context;
+        return const Scaffold(key: first, body: Text('first'));
+      }),
+    ));
+    double opacity(Key key) {
+      var value = 1.0;
+      tester.element(find.byKey(key)).visitAncestorElements((element) {
+        if (element.widget case FadeTransition(:final opacity)) {
+          value *= opacity.value;
+        }
+        return true;
+      });
+      return value;
+    }
+
+    Navigator.of(pageContext).push(MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(key: second, body: Text('second'))));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(opacity(first), inExclusiveRange(0, 1));
+    expect(opacity(first) + opacity(second), closeTo(1, .001));
+    await tester.pumpAndSettle();
+    Navigator.of(pageContext).pop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(opacity(second), inExclusiveRange(0, 1));
+    expect(opacity(first) + opacity(second), closeTo(1, .001),
+        reason: 'The covered page must use the same reverse curve as the '
+            'departing page instead of fading both toward the backdrop.');
+    await tester.pumpAndSettle();
+    expect(find.byKey(first), findsOneWidget);
+    expect(find.byKey(second), findsNothing);
+  });
+
+  for (final reduced in [false, true]) {
+    testWidgets('dialogs animate and keep their result with reduced=$reduced',
+        (tester) async {
+      int? result;
+      late BuildContext dialogContext;
+      await tester.pumpWidget(MaterialApp(
+        builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: reduced),
+            child: child!),
+        home: Scaffold(
+            body: Builder(
+                builder: (context) => TextButton(
+                    onPressed: () async {
+                      result = await showThmrDialog<int>(
+                          context: context,
+                          builder: (context) {
+                            dialogContext = context;
+                            return AlertDialog(
+                                content: const Text('dialog body'),
+                                actions: [
+                                  TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(context, 7),
+                                      child: const Text('confirm')),
+                                ]);
+                          });
+                    },
+                    child: const Text('open')))),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      final transition = find
+          .ancestor(
+              of: find.byType(AlertDialog),
+              matching: find.byType(ThmrFadeSlide))
+          .first;
+      final fade = find
+          .descendant(of: transition, matching: find.byType(FadeTransition))
+          .first;
+      if (!reduced) {
+        await tester.pump(const Duration(milliseconds: 80));
+        expect(tester.widget<FadeTransition>(fade).opacity.value,
+            inExclusiveRange(0, 1));
+      }
+      await tester.pumpAndSettle();
+      expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
+      expect(ModalRoute.of(dialogContext)!.reverseTransitionDuration,
+          reduced ? Duration.zero : ThmrMotion.exitDuration);
+      await tester.tap(find.text('confirm'));
+      await tester.pumpAndSettle();
+      expect(result, 7);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
       'portrait content remains centered in a square transition viewport',
       (tester) async {

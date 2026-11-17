@@ -15,6 +15,7 @@ import 'core/platform/desktop_tray.dart';
 import 'core/platform/application_exit.dart';
 import 'core/player/audio_engine.dart';
 import 'core/player/shared_radio_stream.dart';
+import 'core/player/spectrum_linux.dart';
 import 'core/state/settings_provider.dart';
 import 'core/state/large_screen_settings.dart';
 import 'core/theme/thmr_colors.dart';
@@ -72,6 +73,7 @@ Future<void> main(List<String> args) async {
       // disposing mpv. AppKit must keep the engine alive until this completes.
       container.dispose();
       try {
+        await LinuxSpectrum.appleInstance.dispose();
         await disposeSystemMediaControls();
       } finally {
         await enginePlayer.dispose();

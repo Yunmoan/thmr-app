@@ -121,7 +121,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 ),
                 const SizedBox(width: 8),
                 PopupMenuButton<String>(
-                  popUpAnimationStyle: ThmrMotion.style(context),
+                  popUpAnimationStyle: ThmrMotion.menuStyle(context),
                   initialValue: _sort,
                   tooltip: '排序',
                   onSelected: (v) {

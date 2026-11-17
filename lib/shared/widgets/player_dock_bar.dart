@@ -223,7 +223,7 @@ class _DockBitrate extends ConsumerWidget {
     return FocusOutline(
         radius: 6,
         child: PopupMenuButton<String>(
-          popUpAnimationStyle: ThmrMotion.style(context),
+          popUpAnimationStyle: ThmrMotion.menuStyle(context),
           position: PopupMenuPosition.over,
           onSelected: (id) =>
               ref.read(settingsProvider.notifier).setBitrate(stationId, id),

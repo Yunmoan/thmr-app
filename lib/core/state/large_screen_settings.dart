@@ -33,6 +33,7 @@ class LargeScreenSettings {
     this.showControls = true,
     this.autoHideControls = true,
     this.startFullScreen = true,
+    this.keepScreenOn = false,
     this.widgets = const [],
     this.illustrationOpacity = .9,
     this.contentMargin = 32,
@@ -55,6 +56,7 @@ class LargeScreenSettings {
   final bool showControls;
   final bool autoHideControls;
   final bool startFullScreen;
+  final bool keepScreenOn;
   final List<LargeScreenWidgetSettings> widgets;
   final double illustrationOpacity;
   final double contentMargin;
@@ -75,6 +77,7 @@ class LargeScreenSettings {
     bool? showControls,
     bool? autoHideControls,
     bool? startFullScreen,
+    bool? keepScreenOn,
     List<LargeScreenWidgetSettings>? widgets,
     double? illustrationOpacity,
     double? contentMargin,
@@ -95,6 +98,7 @@ class LargeScreenSettings {
         showControls: showControls ?? this.showControls,
         autoHideControls: autoHideControls ?? this.autoHideControls,
         startFullScreen: startFullScreen ?? this.startFullScreen,
+        keepScreenOn: keepScreenOn ?? this.keepScreenOn,
         widgets: List.unmodifiable((widgets ?? this.widgets).take(8)),
         illustrationOpacity:
             (illustrationOpacity ?? this.illustrationOpacity).clamp(.1, 1),
@@ -131,6 +135,7 @@ class LargeScreenSettings {
       showControls: flag('showControls'),
       autoHideControls: flag('autoHideControls'),
       startFullScreen: flag('startFullScreen'),
+      keepScreenOn: json['keepScreenOn'] == true,
       widgets: _widgetsFromJson(json['widgets']),
       illustrationOpacity: json['illustrationOpacity'] is num &&
               (json['illustrationOpacity'] as num).isFinite
@@ -159,6 +164,7 @@ class LargeScreenSettings {
         'showControls': showControls,
         'autoHideControls': autoHideControls,
         'startFullScreen': startFullScreen,
+        'keepScreenOn': keepScreenOn,
         'widgets': widgets.map((w) => w.toJson()).toList(),
         'illustrationOpacity': illustrationOpacity,
         'contentMargin': contentMargin,

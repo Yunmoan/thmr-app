@@ -52,5 +52,5 @@ void main() {
     expect(source.isUnavailable, isTrue);
     expect(source.poll(64), isNull);
     await source.dispose().timeout(const Duration(seconds: 3));
-  }, skip: !Platform.isLinux);
+  });
 }

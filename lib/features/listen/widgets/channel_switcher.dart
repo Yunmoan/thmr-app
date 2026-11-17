@@ -188,7 +188,7 @@ class ChannelSwitcher extends ConsumerWidget {
       return FocusOutline(
           radius: 7,
           child: PopupMenuButton<String>(
-            popUpAnimationStyle: ThmrMotion.style(context),
+            popUpAnimationStyle: ThmrMotion.menuStyle(context),
             tooltip: '切换频道',
             position: PopupMenuPosition.under,
             offset: const Offset(0, 4),
