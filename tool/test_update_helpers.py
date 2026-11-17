@@ -81,9 +81,11 @@ class UpdateHelperTests(unittest.TestCase):
                     exe = directory / "thmr_app"
                     exe.write_text('#!/bin/sh\n' + ('[ "$#" = 4 ] && printf "%s" "$4" > "$2"\n' if good else 'exit 0\n'))
                     exe.chmod(0o755)
+                # A freshly written executable can take several seconds to start on macOS.
+                startup_timeout = "10" if succeeds else "2"
                 command = ["/bin/sh", str(ROOT / "assets/updater/install_unix.sh"), str(plan["processId"]),
                            str(target), str(stage), str(backup), plan["ack"], token, "thmr_app",
-                           plan["result"], plan["ready"], "2", "linux"]
+                           plan["result"], plan["ready"], startup_timeout, "linux"]
             result = subprocess.run(command, capture_output=True, text=True, timeout=50)
             if native_launcher:
                 diagnostics = f'Launcher exited {result.returncode}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}'
