@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -74,6 +75,23 @@ void main() {
     expect(find.text('昨日歌单 #1'), findsOneWidget);
     expect(find.text('昨日专辑'), findsOneWidget);
     expect(find.textContaining('00:05 播放（北京时间）'), findsOneWidget);
+    String? copied;
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = (call.arguments as Map)['text'] as String?;
+      }
+      return null;
+    });
+    await tester.tap(find.text('复制信息'));
+    await tester.pump();
+    expect(copied, contains('昨日曲目'));
+    expect(copied, contains('THMR'));
+    expect(copied, contains('昨日专辑'));
+    expect(copied, contains('00:05 播放（北京时间）'));
+    await tester.pump(const Duration(milliseconds: 1600));
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null);
     Navigator.of(tester.element(find.text('昨日歌单 #1'))).pop();
     await tester.pumpAndSettle();
 

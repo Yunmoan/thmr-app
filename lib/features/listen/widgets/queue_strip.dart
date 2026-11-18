@@ -2,6 +2,7 @@
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../core/theme/thmr_motion.dart';
 
 import '../../../shared/widgets/focus_outline.dart';
@@ -26,7 +27,19 @@ void showQueueEntryDetail(BuildContext context, QueueEntry entry, int index,
   final tokens = Theme.of(context).thmr;
   final planned = queuePlannedHHmm(entry);
   final duration = durationLabel ?? '时长 ${formatDuration(entry.durationSec)}';
+  final timing = playbackLabel != null
+      ? '$duration · $playbackLabel'
+      : planned == null
+          ? duration
+          : '$duration · 预计 $planned 播放';
+  final copyText = [
+    entry.title,
+    entry.artist,
+    if (album != null && album.isNotEmpty) album,
+    timing,
+  ].join('\n');
   final wide = MediaQuery.of(context).size.width >= 720;
+  var copied = false;
   showModalBottomSheet<void>(
     sheetAnimationStyle: ThmrMotion.style(context),
     context: context,
@@ -34,74 +47,90 @@ void showQueueEntryDetail(BuildContext context, QueueEntry entry, int index,
     constraints: BoxConstraints(maxWidth: wide ? 480 : double.infinity),
     builder: (_) => SafeArea(
       child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: SizedBox(
-                    width: 180,
-                    height: 180,
-                    child: TrackCoverImage(
-                      url: entry.coverUrl,
-                      cacheWidth: (180 * MediaQuery.devicePixelRatioOf(context))
-                          .round(),
+        child: StatefulBuilder(
+          builder: (context, setState) => Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: SizedBox(
+                      width: 180,
+                      height: 180,
+                      child: TrackCoverImage(
+                        url: entry.coverUrl,
+                        cacheWidth:
+                            (180 * MediaQuery.devicePixelRatioOf(context))
+                                .round(),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 14),
-              Text(heading ?? '队列 #${index + 1}',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                        letterSpacing: 2,
-                        fontWeight: FontWeight.w700,
-                      )),
-              const SizedBox(height: 6),
-              Text(entry.title,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 4),
-              Text(entry.artist,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(color: tokens.mutedInk)),
-              if (album != null && album.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Text(heading ?? '队列 #${index + 1}',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          letterSpacing: 2,
+                          fontWeight: FontWeight.w700,
+                        )),
+                const SizedBox(height: 6),
+                SelectableText(entry.title,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
-                Text(album,
+                SelectableText(entry.artist,
                     style: Theme.of(context)
                         .textTheme
-                        .bodySmall
+                        .bodyMedium
                         ?.copyWith(color: tokens.mutedInk)),
-              ],
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(Icons.schedule_rounded,
-                      size: 15, color: tokens.mutedInk),
-                  const SizedBox(width: 6),
-                  Flexible(
-                      child: Text(
-                    playbackLabel != null
-                        ? '$duration · $playbackLabel'
-                        : planned == null
-                            ? duration
-                            : '$duration · 预计 $planned 播放',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: tokens.mutedInk),
-                  )),
+                if (album != null && album.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  SelectableText(album,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: tokens.mutedInk)),
                 ],
-              ),
-            ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.schedule_rounded,
+                        size: 15, color: tokens.mutedInk),
+                    const SizedBox(width: 6),
+                    Flexible(
+                        child: SelectableText(
+                      timing,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: tokens.mutedInk),
+                    )),
+                  ],
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: copyText));
+                      if (!context.mounted) return;
+                      setState(() => copied = true);
+                      await Future<void>.delayed(
+                          const Duration(milliseconds: 1600));
+                      if (context.mounted) setState(() => copied = false);
+                    },
+                    icon: Icon(
+                        copied ? Icons.check_rounded : Icons.copy_rounded,
+                        size: 16),
+                    label: Text(copied ? '已复制' : '复制信息'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
