@@ -50,7 +50,7 @@ class LargeScreenMusicVisual extends StatefulWidget {
     required this.lowPower,
     required this.playing,
     required this.source,
-    this.artwork,
+    this.artworkColors,
     this.fluidMotion = LargeScreenFluidMotion.automatic,
     this.demo = false,
   });
@@ -60,7 +60,7 @@ class LargeScreenMusicVisual extends StatefulWidget {
   final bool lowPower;
   final bool playing;
   final SpectrumSource? source;
-  final ImageProvider<Object>? artwork;
+  final FluidColors? artworkColors;
   final LargeScreenFluidMotion fluidMotion;
   final bool demo;
 
@@ -82,10 +82,6 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   bool _allowsMotion = false;
   bool _shaderRequested = false;
   bool _demoFinished = false;
-  ImageProvider<Object>? _watchedArtwork;
-  ({ImageStream stream, ImageStreamListener listener})? _artworkLoad;
-  FluidColors? _artworkColors;
-  int _artworkRevision = 0;
 
   bool get _isFluid => widget.effect == LargeScreenMusicEffect.fluid;
 
@@ -143,7 +139,6 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
     super.didChangeDependencies();
     final tickersEnabled = TickerMode.valuesOf(context).enabled;
     _allowsMotion = tickersEnabled && !MediaQuery.disableAnimationsOf(context);
-    _watchArtwork();
     _refreshFluidColors();
     _sync();
   }
@@ -153,8 +148,7 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
     super.didUpdateWidget(oldWidget);
     final effectChanged = widget.effect != oldWidget.effect;
     if (effectChanged) _motion.clear();
-    if (effectChanged || widget.artwork != oldWidget.artwork) {
-      _watchArtwork();
+    if (effectChanged || widget.artworkColors != oldWidget.artworkColors) {
       _refreshFluidColors();
     }
     if (widget.demo &&
@@ -170,61 +164,11 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) => _sync();
 
-  void _watchArtwork() {
-    final artwork = _isFluid ? widget.artwork : null;
-    if (artwork == _watchedArtwork) return;
-    final revision = ++_artworkRevision;
-    _detachArtwork();
-    _watchedArtwork = artwork;
-    if (artwork == null) {
-      _artworkColors = null;
-      return;
-    }
-
-    // Keep the previous colors while the new cover is loading.
-    final stream = artwork.resolve(createLocalImageConfiguration(context));
-    final listener = ImageStreamListener((info, _) {
-      if (revision == _artworkRevision) _detachArtwork();
-      unawaited(_sampleArtwork(info, revision));
-    }, onError: (Object _, StackTrace? __) {
-      if (revision != _artworkRevision) return;
-      _detachArtwork();
-      _useArtwork(null, revision);
-    });
-    _artworkLoad = (stream: stream, listener: listener);
-    stream.addListener(listener);
-  }
-
-  void _detachArtwork() {
-    final load = _artworkLoad;
-    _artworkLoad = null;
-    load?.stream.removeListener(load.listener);
-  }
-
-  Future<void> _sampleArtwork(ImageInfo info, int revision) async {
-    FluidColors? colors;
-    try {
-      colors = await fluidColorsFromArtwork(info.image);
-    } catch (_) {
-      // An unreadable thumbnail uses the same theme fallback as a missing one.
-    } finally {
-      info.dispose();
-    }
-    _useArtwork(colors, revision);
-  }
-
-  void _useArtwork(FluidColors? colors, int revision) {
-    if (!mounted || revision != _artworkRevision) return;
-    _artworkColors = colors;
-    _refreshFluidColors();
-    _sync();
-  }
-
   void _refreshFluidColors() {
     if (!_isFluid) return;
     final theme = Theme.of(context);
     final palette = musicPaletteFor(theme, widget.effect);
-    final colors = _artworkColors ??
+    final colors = widget.artworkColors ??
         (
           topLeft: palette.highlight,
           topRight: palette.shade,
@@ -348,7 +292,6 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _detachArtwork();
     _ticker.dispose();
     _capture?.stop();
     _shader?.dispose();
@@ -614,24 +557,31 @@ class _MirroredSpectrum {
   void paint(Canvas canvas, Size size, Float32List bands) {
     if (_size != size) {
       _size = size;
-      final count = (size.width / 4.6).round().clamp(48, 480);
+      final span = size.width * .68;
+      final count = (span / 7).round().clamp(36, 220);
       _lines = Float32List(count * 4);
-      final spacing = size.width / count;
+      final spacing = span / (count - 1);
+      final left = (size.width - span) * .5;
       for (var i = 0; i < count; i++) {
-        _lines[i * 4] = _lines[i * 4 + 2] = (i + .5) * spacing;
+        _lines[i * 4] = _lines[i * 4 + 2] = left + i * spacing;
       }
       _paint
-        ..strokeWidth = (spacing * .35).clamp(1, 2.6)
-        ..shader = LinearGradient(colors: [
-          palette.accent.withValues(alpha: intensity),
-          palette.highlight.withValues(alpha: intensity * .82),
-          palette.accent.withValues(alpha: intensity * .9),
-        ]).createShader(Offset.zero & size);
+        ..strokeWidth = (spacing * .3).clamp(1, 2.2)
+        ..shader = LinearGradient(
+          colors: [
+            palette.accent.withValues(alpha: 0),
+            palette.accent.withValues(alpha: intensity * .78),
+            palette.highlight.withValues(alpha: intensity * .64),
+            palette.accent.withValues(alpha: intensity * .72),
+            palette.accent.withValues(alpha: 0),
+          ],
+          stops: const [0, .16, .5, .84, 1],
+        ).createShader(Offset.zero & size);
     }
 
     final count = _lines.length ~/ 4;
     final center = size.height * .5;
-    final extent = size.height * .46 * (.4 + .6 * intensity);
+    final extent = size.height * .27 * (.45 + .55 * intensity);
     final lastBand = bands.length - 1;
     for (var i = 0; i < count; i++) {
       final band = i * lastBand / (count - 1);

@@ -11,6 +11,7 @@ import 'package:thmr_app/core/player/spectrum.dart';
 import 'package:thmr_app/core/player/spectrum_fft.dart';
 import 'package:thmr_app/core/state/large_screen_settings.dart';
 import 'package:thmr_app/core/theme/thmr_colors.dart';
+import 'package:thmr_app/features/large_screen/large_screen_fluid_colors.dart';
 import 'package:thmr_app/features/large_screen/large_screen_music_visual.dart';
 
 class _Spectrum implements SpectrumSource {
@@ -237,13 +238,16 @@ void main() {
                 ThemeData.dark().copyWith(extensions: [ThmrTokens.reimuDark]),
             home: RepaintBoundary(
               key: frame,
-              child: LargeScreenMusicVisual(
-                effect: LargeScreenMusicEffect.fluid,
-                intensity: 1,
-                lowPower: false,
-                playing: false,
-                source: null,
+              child: LargeScreenFluidArtwork(
                 artwork: artwork,
+                builder: (_, colors) => LargeScreenMusicVisual(
+                  effect: LargeScreenMusicEffect.fluid,
+                  intensity: 1,
+                  lowPower: false,
+                  playing: false,
+                  source: null,
+                  artworkColors: colors,
+                ),
               ),
             ),
           ),

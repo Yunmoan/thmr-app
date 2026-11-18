@@ -11,6 +11,7 @@ class ThmrBackground extends StatelessWidget {
     this.underlay,
     this.underlayAboveWash = false,
     this.illustration,
+    this.illustrationTint,
     this.alignment = Alignment.bottomLeft,
     this.showIllustration = true,
     this.illustrationOpacity = .9,
@@ -24,6 +25,7 @@ class ThmrBackground extends StatelessWidget {
 
   /// Defaults to the current character theme's illustration.
   final String? illustration;
+  final Color? illustrationTint;
   final Alignment alignment;
   final bool showIllustration;
   final double illustrationOpacity;
@@ -39,12 +41,6 @@ class ThmrBackground extends StatelessWidget {
             ? Duration.zero
             : ThmrMotion.duration;
     final washBehindArt = underlay != null && underlayAboveWash;
-    // Full-bleed color can sit above the wash. Keep the illustration soft on
-    // that surface with the same amount of translucency as the usual paper.
-    final artOpacity = washBehindArt
-        ? illustrationOpacity *
-            (theme.brightness == Brightness.dark ? .34 : .42)
-        : illustrationOpacity;
     final wash = RepaintBoundary(
       key: const ValueKey('background-wash'),
       child: AnimatedContainer(
@@ -73,12 +69,14 @@ class ThmrBackground extends StatelessWidget {
                   heightFactor: compact ? 0.8 : 0.9,
                   alignment: alignment,
                   child: Opacity(
-                    opacity: artOpacity,
+                    opacity: illustrationOpacity,
                     child: ThmrAnimatedContent(
                       alignment: alignment,
                       child: Image.asset(
                         asset,
                         key: ValueKey(asset),
+                        color: illustrationTint,
+                        colorBlendMode: BlendMode.srcATop,
                         fit: BoxFit.contain,
                         alignment: alignment,
                         filterQuality: FilterQuality.low,

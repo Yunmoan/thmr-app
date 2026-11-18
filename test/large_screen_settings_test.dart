@@ -2,11 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:thmr_app/core/state/large_screen_settings.dart';
 import 'package:thmr_app/core/theme/thmr_theme.dart';
+import 'package:thmr_app/features/large_screen/large_screen_music_visual.dart';
 import 'package:thmr_app/features/large_screen/large_screen_settings_panel.dart';
 import 'package:thmr_app/shared/widgets/thmr_slider.dart';
 
@@ -169,8 +169,11 @@ void main() {
         for (final effect in LargeScreenMusicEffect.values) {
           expect(
               find.descendant(
-                  of: card(effect), matching: find.byType(SvgPicture)),
-              findsOneWidget);
+                  of: card(effect),
+                  matching: find.byType(LargeScreenMusicVisual)),
+              effect == LargeScreenMusicEffect.off
+                  ? findsNothing
+                  : findsOneWidget);
         }
         final selected = find.descendant(
             of: card(LargeScreenMusicEffect.aurora),

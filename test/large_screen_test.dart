@@ -527,7 +527,9 @@ void main() {
     await tester.ensureVisible(style);
     await tester.tap(style);
     await tester.pumpAndSettle();
-    final visual = find.byType(LargeScreenMusicVisual);
+    final visual = find.descendant(
+        of: find.byType(LargeScreenPreview),
+        matching: find.byType(LargeScreenMusicVisual));
     final demo = tester.widget<LargeScreenMusicVisual>(visual);
     expect(demo.effect, LargeScreenMusicEffect.spectrum);
     expect(demo.demo, isTrue);
@@ -560,7 +562,10 @@ void main() {
     h.navigator.currentState!.pop();
     await tester.pumpAndSettle();
     await h.change(true);
-    expect(tester.widget<LargeScreenMusicVisual>(visual).demo, isFalse);
+    final stageVisual = find.descendant(
+        of: find.byType(LargeScreenPlayer),
+        matching: find.byType(LargeScreenMusicVisual));
+    expect(tester.widget<LargeScreenMusicVisual>(stageVisual).demo, isFalse);
     expect(source.starts, 1, reason: 'the radio is paused');
 
     await h.playback.toggle(null);
@@ -571,7 +576,7 @@ void main() {
     expect(collapse, findsOneWidget);
     await tester.tap(collapse, kind: PointerDeviceKind.mouse);
     await tester.pumpAndSettle();
-    expect(visual, findsNothing);
+    expect(stageVisual, findsNothing);
     expect(find.text('main control').hitTestable(), findsOneWidget);
     expect(source.stops, 2);
     expect(tester.takeException(), isNull);
@@ -974,6 +979,58 @@ void main() {
         Alignment.bottomLeft);
     expect(find.descendant(of: stage, matching: find.byType(BackdropFilter)),
         findsWidgets);
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets(
+      'fluid motion keeps the illustration visible and tints it with the cover',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount();
+    const url = 'https://cover.test/fluid.png';
+    final cover = await tester.runAsync(() async {
+      final recorder = ui.PictureRecorder();
+      Canvas(recorder).drawRect(
+          const Rect.fromLTWH(0, 0, 16, 16), Paint()..color = Colors.blue);
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(16, 16);
+      picture.dispose();
+      return image;
+    });
+    const provider = ResizeImage(NetworkImage(url),
+        width: 48, height: 48, policy: ResizeImagePolicy.fit);
+    final key = await tester
+        .runAsync(() => provider.obtainKey(ImageConfiguration.empty));
+    PaintingBinding.instance.imageCache.putIfAbsent(
+        key!,
+        () => OneFrameImageStreamCompleter(
+            Future.value(ImageInfo(image: cover!))));
+    await h.container.read(largeScreenSettingsProvider.notifier).update(
+        const LargeScreenSettings(
+            musicEffect: LargeScreenMusicEffect.fluid,
+            showIllustration: true,
+            illustrationOpacity: .65));
+    h.station.update(
+        StationUiState(status: _status(coverUrl: url), initialLoading: false));
+    // A playing fluid stage animates continuously, so pause for a settled frame.
+    await h.playback.toggle(null);
+    await h.change(true);
+    await tester.pumpAndSettle();
+    await tester
+        .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 40)));
+    await tester.pumpAndSettle();
+    final background = tester.widget<ThmrBackground>(find.descendant(
+        of: find.byType(LargeScreenPlayer),
+        matching: find.byType(ThmrBackground)));
+    expect(background.underlayAboveWash, isTrue);
+    final opacity = tester.widget<Opacity>(find.descendant(
+        of: find.byKey(const ValueKey('background-illustration')),
+        matching: find.byType(Opacity)));
+    expect(opacity.opacity, closeTo(.65 * .55, .001),
+        reason: 'fluid motion keeps the portrait visible but subdued');
+    final tint = background.illustrationTint;
+    expect(tint, isNotNull, reason: 'the cover pigments wash the illustration');
+    expect(tint!.a, closeTo(.38, .01));
     expect(tester.takeException(), isNull);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 

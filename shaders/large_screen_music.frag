@@ -106,52 +106,71 @@ vec2 curlAround(vec2 p, vec2 center, float spin) {
   return center + rotatePlane(delta, spin / (1.0 + 6.0 * dot(delta, delta)));
 }
 
-float pigmentWeight(vec2 offset) {
-  float distance = 0.056 + dot(offset, offset);
-  return 1.0 / (distance * distance);
-}
-
 vec4 fluid(vec2 uv) {
-  float t = uTime;
-  vec2 p = uv - 0.5;
+  // Slower than the stage clock so the field breathes rather than swims.
+  float t = uTime * 0.55;
+  vec2 p = (uv - 0.5) * uSize / max(1.0, min(uSize.x, uSize.y));
   vec2 q = p;
   if (uFluidMotion.x > 0.0) {
     // Slow oblique flow. The upper and lower pigments pull in different
     // directions so the image stretches instead of sliding as a whole.
-    vec2 drift = vec2(0.38 * sin(3.1 * p.y - 0.56 * t),
-                       0.24 * cos(2.7 * p.x + 0.43 * t));
+    vec2 drift = vec2(0.30 * sin(2.7 * p.y - 0.55 * t),
+                       0.20 * cos(2.3 * p.x + 0.42 * t));
     q += uFluidMotion.x * drift;
   }
   if (uFluidMotion.y > 0.0) {
     // An off-center eddy turns the middle faster than the edges.
-    vec2 center = vec2(0.20 * sin(0.44 * t), -0.15 * cos(0.35 * t));
-    vec2 orbit = curlAround(p, center, 1.45 + 1.55 * sin(0.61 * t));
+    vec2 center = vec2(0.18 * sin(0.26 * t), -0.13 * cos(0.22 * t));
+    vec2 orbit = curlAround(p, center, 1.05 + 0.85 * sin(0.36 * t));
     q += uFluidMotion.y * (orbit - p);
   }
   if (uFluidMotion.z > 0.0) {
     // Broad diagonal swells carry color across the screen and roll back.
     vec2 current = vec2(0.82, 0.57);
-    float swell = sin(dot(p, current) * 6.0 - 0.89 * t);
-    float undertow = cos(dot(p, current.yx) * 4.4 + 0.47 * t);
-    q += uFluidMotion.z * (current * (0.30 + 0.09 * uAudio.x) * swell
-                           + vec2(-0.12, 0.15) * undertow);
+    float swell = sin(dot(p, current) * 3.6 - 0.62 * t);
+    float undertow = cos(dot(p, current.yx) * 3.0 + 0.40 * t);
+    q += uFluidMotion.z * (current * (0.18 + 0.08 * uAudio.x) * swell
+                           + vec2(-0.08, 0.10) * undertow);
   }
-  q *= 1.0 - 0.12 * uAudio.x - 0.10 * uAudio.w;
+  q *= 1.0 + 0.015 * sin(0.22 * t);
+  q *= 1.0 - 0.04 * uAudio.x - 0.02 * uAudio.w;
 
-  // Each swatch originates in a different area of the cover. These soft
-  // weights keep the transitions diffuse as the regions overlap.
-  vec4 weights = vec4(pigmentWeight(q - vec2(-0.39, -0.36)),
-                      pigmentWeight(q - vec2( 0.36, -0.31)),
-                      pigmentWeight(q - vec2(-0.32,  0.41)),
-                      pigmentWeight(q - vec2( 0.37,  0.34)));
-  vec3 pigment = (weights.x * uFluidTopLeft + weights.y * uFluidTopRight
-                  + weights.z * uFluidBottomLeft + weights.w * uFluidBottomRight)
-                 / dot(weights, vec4(1.0));
-  float contour = sin(dot(q, vec2(4.7, -3.6)) + 0.45 * t + 0.65 * sin(4.2 * q.y));
-  float depth = smoothstep(-0.95, 0.80, contour);
-  vec3 color = mix(uFluidPaper, pigment, 0.46 + 0.48 * depth + 0.06 * uAudio.z);
-  float alpha = mix(0.32, 1.0, uIntensity) * (0.96 + 0.04 * uAudio.x);
-  return vec4(color * alpha, alpha);
+  // Two drifting noise fields bend the color coordinates into slow folds.
+  vec2 warp = vec2(
+      cloudNoise(q * 1.9 + vec2(0.16 * t, -0.11 * t)),
+      cloudNoise(q * 1.9 + vec2(3.7 - 0.12 * t, 1.9 + 0.14 * t))) - 0.5;
+  vec2 s = q + warp * 0.62;
+
+  // Soft, continuous mixing among the four cover quadrants.
+  float mixX = 0.5 + 0.5 * sin(s.x * 1.9 + s.y * 1.4 + 0.16 * t);
+  float mixY = 0.5 + 0.5 * sin(s.y * 1.6 - s.x * 1.1 - 0.12 * t + 1.4);
+  mixX = smoothstep(0.12, 0.88, mixX);
+  mixY = smoothstep(0.12, 0.88, mixY);
+  vec3 top = mix(uFluidTopLeft, uFluidTopRight, mixX);
+  vec3 bottom = mix(uFluidBottomLeft, uFluidBottomRight, mixX);
+  vec3 pigment = mix(top, bottom, mixY);
+
+  // Shading and a soft sheen give the surface depth without hard contour
+  // lines, which read as banding on large displays.
+  float sheen = 0.5 + 0.5 * sin(s.x * 2.4 + s.y * 1.7 + 0.15 * t + 1.2);
+  pigment *= 0.96 + 0.08 * smoothstep(0.25, 0.80, sheen);
+  pigment += uHighlight * smoothstep(0.52, 0.92, sheen) *
+             (0.05 + 0.04 * uAudio.z);
+
+  float center = 1.0 - smoothstep(0.0, 1.05, length(q));
+  float presence = clamp(0.62 + 0.28 * center + 0.08 * mixY, 0.0, 1.0);
+  vec3 color = mix(uFluidPaper, pigment, presence);
+  color += uHighlight * smoothstep(0.80, 0.98, sheen) * (0.05 + 0.03 * uAudio.z);
+
+  // A faint character-theme wash unifies the cover palette with the stage.
+  color = mix(color, uAccent, 0.05 + 0.07 * sheen);
+  float luminance = dot(color, vec3(0.299, 0.587, 0.114));
+  color = mix(vec3(luminance), color, 1.10);
+
+  // One pixel of dither keeps wide, quiet gradients free of steps.
+  vec3 grain = cellRandom(FlutterFragCoord().xy);
+  float alpha = mix(0.34, 1.0, uIntensity) * (0.95 + 0.05 * uAudio.x);
+  return vec4((color + (grain - 0.5) * 0.006) * alpha, alpha);
 }
 
 void main() {

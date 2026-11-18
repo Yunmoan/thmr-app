@@ -20,6 +20,7 @@ import '../../shared/widgets/thmr_panel.dart';
 import '../../shared/widgets/volume_slider.dart';
 import 'large_screen_content.dart';
 import 'large_screen_controller.dart';
+import 'large_screen_fluid_colors.dart';
 import 'large_screen_music_visual.dart';
 import 'large_screen_symbols.dart';
 import '../listen/widgets/channel_switcher.dart';
@@ -209,32 +210,31 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
               ));
           final coverUrl = station.status?.current?.coverUrl.trim() ?? '';
           final demoVisual = widget.preview && !widget.liveSpectrumPreview;
-          final musicVisual = settings.musicEffect == LargeScreenMusicEffect.off
-              ? null
-              : LargeScreenMusicVisual(
-                  key: ValueKey(widget.demoRun),
-                  effect: settings.musicEffect,
-                  intensity: settings.musicEffectIntensity,
-                  lowPower: settings.musicEffectLowPower,
-                  fluidMotion: settings.fluidMotion,
-                  artwork:
-                      settings.musicEffect == LargeScreenMusicEffect.fluid &&
-                              coverUrl.isNotEmpty
-                          ? ResizeImage(NetworkImage(coverUrl),
-                              width: 48,
-                              height: 48,
-                              policy: ResizeImagePolicy.fit)
-                          : null,
-                  demo: demoVisual,
-                  playing: !demoVisual &&
-                      phase == PlaybackPhase.online &&
-                      (widget.preview ||
-                          ref.watch(largeScreenProvider
-                              .select((state) => state.contentVisible))),
-                  source: demoVisual
-                      ? null
-                      : ref.watch(largeScreenSpectrumProvider),
-                );
+          final playing = !demoVisual &&
+              phase == PlaybackPhase.online &&
+              (widget.preview ||
+                  ref.watch(largeScreenProvider
+                      .select((state) => state.contentVisible)));
+          final source =
+              demoVisual ? null : ref.watch(largeScreenSpectrumProvider);
+          final fluidStage =
+              settings.musicEffect == LargeScreenMusicEffect.fluid;
+          final artwork = fluidStage && coverUrl.isNotEmpty
+              ? ResizeImage(NetworkImage(coverUrl),
+                  width: 48, height: 48, policy: ResizeImagePolicy.fit)
+              : null;
+          Color? illustrationTint(FluidColors? colors) {
+            if (colors == null) return null;
+            final toned = toneFluidColors(
+                colors, theme.thmr, theme.brightness == Brightness.dark);
+            final pigment = Color.lerp(
+                    Color.lerp(toned.topLeft, toned.topRight, .5),
+                    Color.lerp(toned.bottomLeft, toned.bottomRight, .5),
+                    .5)!
+                .withValues(alpha: .38);
+            return pigment;
+          }
+
           final content = ThmrFadeSlide(
             key: ValueKey(widget.preview
                 ? 'large-preview-transition'
@@ -252,47 +252,69 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
               ),
             ),
           );
-          return MouseRegion(
-            cursor: _controlsVisible
-                ? SystemMouseCursors.basic
-                : SystemMouseCursors.none,
-            onHover: (_) => _reveal(),
-            child: Listener(
-              onPointerDown: (_) => _reveal(),
-              child: Focus(
-                autofocus: !widget.preview,
-                skipTraversal: true,
-                onKeyEvent: (_, event) {
-                  if (event is KeyDownEvent) _reveal();
-                  return KeyEventResult.ignored;
-                },
-                child: Scaffold(
-                  backgroundColor: theme.thmr.pageBg,
-                  body: Stack(fit: StackFit.expand, children: [
-                    ThmrBackground(
-                      underlay: musicVisual,
-                      underlayAboveWash:
-                          settings.musicEffect == LargeScreenMusicEffect.fluid,
-                      showIllustration: settings.showIllustration,
-                      illustrationOpacity: settings.illustrationOpacity,
-                      alignment: settings.illustrationPosition ==
-                              LargeScreenIllustrationPosition.right
-                          ? Alignment.bottomRight
-                          : Alignment.bottomLeft,
-                      child: content,
+          return LargeScreenFluidArtwork(
+            artwork: artwork,
+            builder: (context, artworkColors) {
+              final musicVisual =
+                  settings.musicEffect == LargeScreenMusicEffect.off
+                      ? null
+                      : LargeScreenMusicVisual(
+                          key: ValueKey(widget.demoRun),
+                          effect: settings.musicEffect,
+                          intensity: settings.musicEffectIntensity,
+                          lowPower: settings.musicEffectLowPower,
+                          fluidMotion: settings.fluidMotion,
+                          artworkColors: artworkColors,
+                          demo: demoVisual,
+                          playing: playing,
+                          source: source,
+                        );
+              return MouseRegion(
+                cursor: _controlsVisible
+                    ? SystemMouseCursors.basic
+                    : SystemMouseCursors.none,
+                onHover: (_) => _reveal(),
+                child: Listener(
+                  onPointerDown: (_) => _reveal(),
+                  child: Focus(
+                    autofocus: !widget.preview,
+                    skipTraversal: true,
+                    onKeyEvent: (_, event) {
+                      if (event is KeyDownEvent) _reveal();
+                      return KeyEventResult.ignored;
+                    },
+                    child: Scaffold(
+                      backgroundColor: theme.thmr.pageBg,
+                      body: Stack(fit: StackFit.expand, children: [
+                        ThmrBackground(
+                          underlay: musicVisual,
+                          underlayAboveWash: fluidStage,
+                          showIllustration: settings.showIllustration,
+                          illustrationTint: illustrationTint(artworkColors),
+                          // The fluid surface is busy; keep the portrait as a
+                          // quiet presence instead of competing with it.
+                          illustrationOpacity: settings.illustrationOpacity *
+                              (fluidStage ? .55 : 1),
+                          alignment: settings.illustrationPosition ==
+                                  LargeScreenIllustrationPosition.right
+                              ? Alignment.bottomRight
+                              : Alignment.bottomLeft,
+                          child: content,
+                        ),
+                        Positioned(
+                            bottom: 16,
+                            left: 16,
+                            right: 16,
+                            child: StatusNotice(
+                                message: switching ? '正在切换频道…' : null,
+                                busy: switching,
+                                duration: null)),
+                      ]),
                     ),
-                    Positioned(
-                        bottom: 16,
-                        left: 16,
-                        right: 16,
-                        child: StatusNotice(
-                            message: switching ? '正在切换频道…' : null,
-                            busy: switching,
-                            duration: null)),
-                  ]),
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           );
         }));
   }

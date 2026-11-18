@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -11,6 +12,99 @@ typedef FluidColors = ({
   Color bottomLeft,
   Color bottomRight,
 });
+
+/// Resolve the current cover once for both the flowing background and portrait.
+class LargeScreenFluidArtwork extends StatefulWidget {
+  const LargeScreenFluidArtwork({
+    super.key,
+    required this.artwork,
+    required this.builder,
+  });
+
+  final ImageProvider<Object>? artwork;
+  final Widget Function(BuildContext, FluidColors?) builder;
+
+  @override
+  State<LargeScreenFluidArtwork> createState() =>
+      _LargeScreenFluidArtworkState();
+}
+
+class _LargeScreenFluidArtworkState extends State<LargeScreenFluidArtwork> {
+  ImageProvider<Object>? _watchedArtwork;
+  ({ImageStream stream, ImageStreamListener listener})? _load;
+  FluidColors? _colors;
+  int _revision = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _watchArtwork();
+  }
+
+  @override
+  void didUpdateWidget(covariant LargeScreenFluidArtwork oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _watchArtwork();
+  }
+
+  void _watchArtwork() {
+    final artwork = widget.artwork;
+    if (artwork == _watchedArtwork) return;
+    _watchedArtwork = artwork;
+    final revision = ++_revision;
+    _detach();
+    if (artwork == null) {
+      _colors = null;
+      return;
+    }
+
+    // Keep the previous colors while the new cover is loading.
+    final stream = artwork.resolve(createLocalImageConfiguration(context));
+    final listener = ImageStreamListener((info, _) {
+      if (revision == _revision) _detach();
+      unawaited(_sample(info, revision));
+    }, onError: (Object _, StackTrace? __) {
+      if (revision != _revision) return;
+      _detach();
+      // A provider may report a cached error during this build.
+      scheduleMicrotask(() => _useColors(null, revision));
+    });
+    _load = (stream: stream, listener: listener);
+    stream.addListener(listener);
+  }
+
+  Future<void> _sample(ImageInfo info, int revision) async {
+    FluidColors? colors;
+    try {
+      colors = await fluidColorsFromArtwork(info.image);
+    } catch (_) {
+      // An unreadable thumbnail uses the same theme fallback as a missing one.
+    } finally {
+      info.dispose();
+    }
+    _useColors(colors, revision);
+  }
+
+  void _useColors(FluidColors? colors, int revision) {
+    if (!mounted || revision != _revision || colors == _colors) return;
+    setState(() => _colors = colors);
+  }
+
+  void _detach() {
+    final load = _load;
+    _load = null;
+    load?.stream.removeListener(load.listener);
+  }
+
+  @override
+  void dispose() {
+    _detach();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _colors);
+}
 
 /// Read a small decoded cover once. Keeping four spatial averages preserves
 /// the cover's distribution of color when the shader moves each region.
