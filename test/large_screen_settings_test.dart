@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:thmr_app/core/state/large_screen_settings.dart';
@@ -159,9 +160,27 @@ void main() {
         expect(container.read(largeScreenSettingsProvider).queue,
             LargeScreenQueue.hidden);
         expect(find.text('队列曲目数'), findsNothing);
-        final prism = find.widgetWithText(ChoiceChip, '棱镜涟漪');
-        expect(tester.widget<ChoiceChip>(prism).selected, isTrue);
-        final off = find.widgetWithText(ChoiceChip, '关闭');
+        Finder card(LargeScreenMusicEffect effect) =>
+            find.byKey(ValueKey('music-effect-${effect.name}'));
+        for (final effect in LargeScreenMusicEffect.values) {
+          expect(
+              find.descendant(
+                  of: card(effect), matching: find.byType(SvgPicture)),
+              findsOneWidget);
+        }
+        final prism = card(LargeScreenMusicEffect.prism);
+        final selected = find.descendant(
+            of: prism,
+            matching: find.byWidgetPredicate(
+                (w) => w is Semantics && w.properties.label == '棱镜涟漪'));
+        expect(tester.widget<Semantics>(selected).properties.selected, isTrue);
+        final fluid = card(LargeScreenMusicEffect.fluid);
+        await tester.ensureVisible(fluid);
+        await tester.tap(fluid);
+        await tester.pumpAndSettle();
+        expect(container.read(largeScreenSettingsProvider).musicEffect,
+            LargeScreenMusicEffect.fluid);
+        final off = card(LargeScreenMusicEffect.off);
         await tester.ensureVisible(off);
         await tester.tap(off);
         await tester.pumpAndSettle();

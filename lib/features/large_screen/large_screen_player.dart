@@ -24,7 +24,8 @@ import 'large_screen_music_visual.dart';
 import 'large_screen_symbols.dart';
 import '../listen/widgets/channel_switcher.dart';
 
-final _stageThemeProvider = Provider.family<ThemeData, ThemeMode>((ref, mode) {
+final largeScreenThemeProvider =
+    Provider.family<ThemeData, ThemeMode>((ref, mode) {
   final accent = ref.watch(settingsProvider.select((s) => s.accentTheme));
   return mode == ThemeMode.light
       ? ThmrTheme.light(accent)
@@ -164,7 +165,7 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
     ref.listen(largeScreenSettingsProvider, (_, __) => _reveal());
     final theme = settings.themeMode == ThemeMode.system
         ? Theme.of(context)
-        : ref.watch(_stageThemeProvider(settings.themeMode));
+        : ref.watch(largeScreenThemeProvider(settings.themeMode));
     return Theme(
         data: theme,
         child: Builder(builder: (context) {

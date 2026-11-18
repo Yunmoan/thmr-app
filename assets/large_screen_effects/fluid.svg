@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 80">
+  <defs>
+    <linearGradient id="pool" x1="0" y1="7" x2="150" y2="79" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#21171c"/>
+      <stop offset=".52" stop-color="#643b4d"/>
+      <stop offset="1" stop-color="#21171c"/>
+    </linearGradient>
+    <linearGradient id="dye" x1="12" y1="15" x2="158" y2="69" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#643b4d"/>
+      <stop offset=".37" stop-color="#d17790"/>
+      <stop offset=".61" stop-color="#ffe0e7" stop-opacity=".84"/>
+      <stop offset="1" stop-color="#d17790" stop-opacity=".52"/>
+    </linearGradient>
+    <linearGradient id="fold" x1="22" y1="66" x2="132" y2="10" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#21171c" stop-opacity=".2"/>
+      <stop offset=".62" stop-color="#643b4d" stop-opacity=".7"/>
+      <stop offset="1" stop-color="#d17790" stop-opacity=".2"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#pool)" d="M0 0h180v80H0z"/>
+  <path fill="url(#dye)" d="M0 16c25-19 54-15 66 1 10 13-4 26 12 33 18 8 30-21 54-27 20-5 36 4 48 15v42H0Z"/>
+  <path fill="url(#fold)" d="M0 38c20-10 37-13 49-3 12 11 7 25 29 28 30 5 40-31 68-27 12 2 23 8 34 17v27H0Z"/>
+  <path d="M0 22c27-14 50-11 59 4 7 11 0 22 17 29 21 9 35-20 56-25 16-4 33 3 48 16"
+    fill="none" stroke="#ffe0e7" stroke-opacity=".61" stroke-width="1.6"/>
+  <path d="M1 27c25-12 40-10 49-2 13 12 5 25 25 34 25 10 42-22 60-23 19-2 32 6 45 17"
+    fill="none" stroke="#ffe0e7" stroke-opacity=".26" stroke-width=".75"/>
+</svg>

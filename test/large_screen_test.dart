@@ -522,12 +522,13 @@ void main() {
     unawaited(h.navigator.currentState!.push(MaterialPageRoute<void>(
         builder: (_) => const LargeScreenSettingsPage())));
     await tester.pumpAndSettle();
-    final style = find.text('棱镜涟漪');
+    final style = find.text('镜像频谱');
     await tester.ensureVisible(style);
     await tester.tap(style);
     await tester.pumpAndSettle();
     final visual = find.byType(LargeScreenMusicVisual);
     final demo = tester.widget<LargeScreenMusicVisual>(visual);
+    expect(demo.effect, LargeScreenMusicEffect.spectrum);
     expect(demo.demo, isTrue);
     expect(demo.source, isNull);
     expect(source.starts, 0);

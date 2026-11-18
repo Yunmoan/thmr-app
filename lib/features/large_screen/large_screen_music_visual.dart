@@ -14,6 +14,33 @@ import '../../core/theme/thmr_theme.dart';
 
 const _spectrumBandCount = 96;
 
+typedef LargeScreenMusicPalette = ({
+  Color accent,
+  Color shade,
+  Color highlight
+});
+
+LargeScreenMusicPalette musicPaletteFor(
+    ThemeData theme, LargeScreenMusicEffect effect) {
+  final tokens = theme.thmr;
+  final dark = theme.brightness == Brightness.dark;
+  var shade = Color.lerp(tokens.accent, tokens.supportInk, .42)!;
+  if (effect == LargeScreenMusicEffect.fluid) {
+    final pigment = HSLColor.fromColor(tokens.accent);
+    shade = pigment
+        .withHue((pigment.hue + 48) % 360)
+        .withSaturation((pigment.saturation * .8 + .10).clamp(0, 1))
+        .withLightness(dark ? .54 : .61)
+        .toColor();
+  }
+  return (
+    accent: tokens.accent,
+    shade: shade,
+    highlight: Color.lerp(
+        tokens.accent, dark ? tokens.ink : tokens.codeInk, dark ? .62 : .25)!,
+  );
+}
+
 class LargeScreenMusicVisual extends StatefulWidget {
   const LargeScreenMusicVisual({
     super.key,
@@ -234,23 +261,6 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
     final shader = _shader;
     if (_usesShader && shader == null) return const SizedBox.shrink();
     final theme = Theme.of(context);
-    final tokens = theme.thmr;
-    final dark = theme.brightness == Brightness.dark;
-    var shade = Color.lerp(tokens.accent, tokens.supportInk, .42)!;
-    if (widget.effect == LargeScreenMusicEffect.fluid) {
-      final pigment = HSLColor.fromColor(tokens.accent);
-      shade = pigment
-          .withHue((pigment.hue + 48) % 360)
-          .withSaturation((pigment.saturation * .8 + .10).clamp(0, 1))
-          .withLightness(dark ? .54 : .61)
-          .toColor();
-    }
-    final palette = (
-      accent: tokens.accent,
-      shade: shade,
-      highlight: Color.lerp(
-          tokens.accent, dark ? tokens.ink : tokens.codeInk, dark ? .62 : .25)!,
-    );
     return IgnorePointer(
       child: RepaintBoundary(
         child: CustomPaint(
@@ -260,8 +270,8 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
             motion: _motion,
             effect: widget.effect,
             intensity: widget.intensity,
-            dark: dark,
-            palette: palette,
+            dark: theme.brightness == Brightness.dark,
+            palette: musicPaletteFor(theme, widget.effect),
           ),
         ),
       ),
@@ -332,8 +342,6 @@ class _MusicMotion extends ChangeNotifier {
   }
 }
 
-typedef _VisualPalette = ({Color accent, Color shade, Color highlight});
-
 class _MusicVisualPainter extends CustomPainter {
   _MusicVisualPainter({
     required this.shader,
@@ -349,7 +357,7 @@ class _MusicVisualPainter extends CustomPainter {
   final LargeScreenMusicEffect effect;
   final double intensity;
   final bool dark;
-  final _VisualPalette palette;
+  final LargeScreenMusicPalette palette;
   late final _prism = _PrismMesh(palette);
   late final _spectrum = _MirroredSpectrum(palette, intensity);
 
@@ -412,7 +420,7 @@ class _MusicVisualPainter extends CustomPainter {
 class _MirroredSpectrum {
   _MirroredSpectrum(this.palette, this.intensity);
 
-  final _VisualPalette palette;
+  final LargeScreenMusicPalette palette;
   final double intensity;
   final _paint = Paint();
   Size? _size;
@@ -478,7 +486,7 @@ class _PrismMesh {
   final _positions = Float32List(_rings * _ringVertices * 2);
   final _colors = Int32List(_rings * _ringVertices);
   final _paint = Paint()..isAntiAlias = false;
-  final _VisualPalette palette;
+  final LargeScreenMusicPalette palette;
 
   static Uint16List _buildIndices() {
     final strips = _bevel.length - 1;

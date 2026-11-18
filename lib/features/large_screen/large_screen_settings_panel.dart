@@ -8,6 +8,8 @@ import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/focus_outline.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import '../../shared/widgets/thmr_slider.dart';
+import 'large_screen_music_thumbnail.dart';
+import 'large_screen_player.dart' show largeScreenThemeProvider;
 import 'large_screen_symbols.dart';
 import 'large_screen_widget_editor.dart';
 import 'large_screen_preview.dart';
@@ -129,6 +131,9 @@ class LargeScreenSettingsPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(largeScreenSettingsProvider);
+    final stageTheme = settings.themeMode == ThemeMode.system
+        ? Theme.of(context)
+        : ref.watch(largeScreenThemeProvider(settings.themeMode));
     void save(LargeScreenSettings next) =>
         ref.read(largeScreenSettingsProvider.notifier).update(next);
     return ThmrPanel(
@@ -149,7 +154,8 @@ class LargeScreenSettingsPanel extends ConsumerWidget {
                 width: width,
                 child: _DiagramChoice(
                   label: option.$3,
-                  symbol: option.$2,
+                  graphic: (color) =>
+                      LargeScreenGlyph(option.$2, size: 36, color: color),
                   selected: settings.layout == option.$1,
                   onTap: () => save(settings.copyWith(layout: option.$1)),
                 ),
@@ -228,17 +234,11 @@ class LargeScreenSettingsPanel extends ConsumerWidget {
         ),
         _SettingRow(
           title: '音乐动效',
-          description: '配色随大屏主题变化，棱镜涟漪为轻量样式',
-          child: _Choices<LargeScreenMusicEffect>(
+          description: '配色随大屏主题变化，棱镜和频谱为轻量样式',
+          stacked: true,
+          child: _MusicEffectPicker(
             value: settings.musicEffect,
-            options: const [
-              (LargeScreenMusicEffect.off, '关闭'),
-              (LargeScreenMusicEffect.prism, '棱镜涟漪'),
-              (LargeScreenMusicEffect.aurora, '极光流场'),
-              (LargeScreenMusicEffect.nebula, '星云漫游'),
-              (LargeScreenMusicEffect.fluid, '流体渐变'),
-              (LargeScreenMusicEffect.spectrum, '镜像频谱'),
-            ],
+            stageTheme: stageTheme,
             onChanged: (v) => save(settings.copyWith(musicEffect: v)),
           ),
         ),
@@ -388,14 +388,60 @@ class _Choices<T> extends StatelessWidget {
       ]);
 }
 
+class _MusicEffectPicker extends StatelessWidget {
+  const _MusicEffectPicker({
+    required this.value,
+    required this.stageTheme,
+    required this.onChanged,
+  });
+
+  final LargeScreenMusicEffect value;
+  final ThemeData stageTheme;
+  final ValueChanged<LargeScreenMusicEffect> onChanged;
+
+  static const _options = [
+    (LargeScreenMusicEffect.aurora, '极光流场'),
+    (LargeScreenMusicEffect.fluid, '流体渐变'),
+    (LargeScreenMusicEffect.spectrum, '镜像频谱'),
+    (LargeScreenMusicEffect.nebula, '星云漫游'),
+    (LargeScreenMusicEffect.prism, '棱镜涟漪'),
+    (LargeScreenMusicEffect.off, '关闭'),
+  ];
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final largeText = MediaQuery.textScalerOf(context).scale(14) > 20;
+          final columns = constraints.maxWidth >= 440 && !largeText ? 3 : 2;
+          const gap = 8.0;
+          final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+          return Wrap(spacing: gap, runSpacing: gap, children: [
+            for (final (effect, label) in _options)
+              SizedBox(
+                width: width,
+                child: _DiagramChoice(
+                  key: ValueKey('music-effect-${effect.name}'),
+                  label: label,
+                  graphic: (_) => LargeScreenMusicThumbnail(
+                      effect: effect, stageTheme: stageTheme),
+                  selected: value == effect,
+                  onTap: () => onChanged(effect),
+                ),
+              ),
+          ]);
+        },
+      );
+}
+
 class _DiagramChoice extends StatelessWidget {
   const _DiagramChoice(
-      {required this.label,
-      required this.symbol,
+      {super.key,
+      required this.label,
+      required this.graphic,
       required this.selected,
       required this.onTap});
   final String label;
-  final LargeScreenSymbol symbol;
+  final Widget Function(Color) graphic;
   final bool selected;
   final VoidCallback onTap;
 
@@ -415,13 +461,14 @@ class _DiagramChoice extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: Semantics(
           selected: selected,
+          inMutuallyExclusiveGroup: true,
           button: true,
           label: label,
           child: ExcludeSemantics(
               child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              LargeScreenGlyph(symbol, size: 36, color: color),
+              graphic(color),
               const SizedBox(height: 8),
               Text(label,
                   textAlign: TextAlign.center,
@@ -439,10 +486,14 @@ class _DiagramChoice extends StatelessWidget {
 
 class _SettingRow extends StatelessWidget {
   const _SettingRow(
-      {required this.title, required this.child, this.description});
+      {required this.title,
+      required this.child,
+      this.description,
+      this.stacked = false});
   final String title;
   final String? description;
   final Widget child;
+  final bool stacked;
 
   @override
   Widget build(BuildContext context) {
@@ -460,7 +511,8 @@ class _SettingRow extends StatelessWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Divider(height: 28),
       LayoutBuilder(builder: (context, constraints) {
-        if (constraints.maxWidth < 650 ||
+        if (stacked ||
+            constraints.maxWidth < 650 ||
             MediaQuery.textScalerOf(context).scale(14) > 20) {
           return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
