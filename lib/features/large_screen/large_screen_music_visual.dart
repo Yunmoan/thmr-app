@@ -18,6 +18,7 @@ class LargeScreenMusicVisual extends StatefulWidget {
     required this.lowPower,
     required this.playing,
     required this.source,
+    this.demo = false,
   });
 
   final LargeScreenMusicEffect effect;
@@ -25,6 +26,7 @@ class LargeScreenMusicVisual extends StatefulWidget {
   final bool lowPower;
   final bool playing;
   final SpectrumSource? source;
+  final bool demo;
 
   @override
   State<LargeScreenMusicVisual> createState() => _LargeScreenMusicVisualState();
@@ -33,6 +35,7 @@ class LargeScreenMusicVisual extends StatefulWidget {
 class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   static const _bandCount = 48;
+  static const _demoDuration = Duration(milliseconds: 4800);
 
   final _motion = _MusicMotion();
   late final Ticker _ticker = createTicker(_tick);
@@ -41,6 +44,7 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   Duration _lastTick = Duration.zero;
   bool _allowsMotion = false;
   bool _shaderRequested = false;
+  bool _demoFinished = false;
 
   bool get _usesShader => widget.effect != LargeScreenMusicEffect.prism;
 
@@ -62,7 +66,6 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadShaderIfNeeded();
   }
 
   void _loadShaderIfNeeded() {
@@ -94,7 +97,10 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   @override
   void didUpdateWidget(covariant LargeScreenMusicVisual oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _loadShaderIfNeeded();
+    if (widget.demo && (!oldWidget.demo || widget.effect != oldWidget.effect)) {
+      _demoFinished = false;
+      _ticker.stop();
+    }
     _sync();
   }
 
@@ -102,16 +108,23 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   void didChangeAppLifecycleState(AppLifecycleState state) => _sync();
 
   void _sync() {
-    final canAnimate =
-        (!_usesShader || _shader != null) && _allowsMotion && _visible;
-    final capture = canAnimate && widget.playing ? widget.source : null;
+    final visible = _allowsMotion && _visible;
+    final source = !widget.demo && widget.playing ? widget.source : null;
+    if (visible && (widget.demo || source != null)) _loadShaderIfNeeded();
+    final canAnimate = visible && (!_usesShader || _shader != null);
+    final capture = canAnimate ? source : null;
     if (!identical(capture, _capture)) {
       _capture?.stop();
       _capture = capture;
       _capture?.start();
     }
-    if (!canAnimate) _motion.clear();
-    if (!canAnimate || (_capture == null && _motion.isSilent)) {
+    if (!canAnimate) {
+      _motion.clear();
+      _demoFinished = false;
+    }
+    final shouldTick =
+        widget.demo ? !_demoFinished : _capture != null || !_motion.isSilent;
+    if (!canAnimate || !shouldTick) {
       _ticker.stop();
     } else if (!_ticker.isActive) {
       _lastTick = Duration.zero;
@@ -124,17 +137,35 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
     final interval = Duration(milliseconds: widget.lowPower ? 64 : 32);
     if (delta < interval) return;
     _lastTick = elapsed;
-    final data = _capture?.poll(_bandCount);
-    final energy = data == null
-        ? _silence
-        : (
-            bass: _level(data, 0, 11),
-            mids: _level(data, 11, 32),
-            treble: _level(data, 32, _bandCount),
-          );
+    final energy = widget.demo ? _demoEnergy(elapsed) : _liveEnergy();
     final seconds = math.min(delta.inMicroseconds / 1e6, .08);
     _motion.advance(energy, seconds, widget.intensity);
-    if (_capture == null && _motion.isSilent) _ticker.stop();
+    if (widget.demo) {
+      _demoFinished = elapsed >= _demoDuration;
+      if (_demoFinished) _ticker.stop();
+    } else if (_capture == null && _motion.isSilent) {
+      _ticker.stop();
+    }
+  }
+
+  _Energy _liveEnergy() {
+    final data = _capture?.poll(_bandCount);
+    if (data == null) return _silence;
+    return (
+      bass: _level(data, 0, 11),
+      mids: _level(data, 11, 32),
+      treble: _level(data, 32, _bandCount),
+    );
+  }
+
+  // A short pattern for settings previews, with no capture or audio playback.
+  _Energy _demoEnergy(Duration elapsed) {
+    final t = elapsed.inMicroseconds / 1e6;
+    return (
+      bass: .26 + .57 * math.exp(-6.4 * ((t / .6) % 1)),
+      mids: .44 + .15 * math.sin(t * 3.6),
+      treble: .13 + .44 * math.exp(-5.2 * ((t / .3 + .4) % 1)),
+    );
   }
 
   // The source returns logarithmic bands. RMS lets a strong kick or cymbal

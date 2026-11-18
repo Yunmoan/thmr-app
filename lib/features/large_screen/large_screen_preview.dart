@@ -1,7 +1,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/state/large_screen_settings.dart';
 import '../../core/theme/thmr_motion.dart';
 import '../../core/theme/thmr_theme.dart';
 import 'large_screen_player.dart';
@@ -15,7 +17,7 @@ const _frames = <(String, Size)>[
 
 /// The actual stage at a virtual display size. It never owns the real window's
 /// animation callbacks, audio controls, focus or pointer input.
-class LargeScreenPreview extends StatefulWidget {
+class LargeScreenPreview extends ConsumerStatefulWidget {
   const LargeScreenPreview({super.key, this.canExpand = true});
   final bool canExpand;
 
@@ -43,16 +45,25 @@ class LargeScreenPreview extends StatefulWidget {
                   ])))));
 
   @override
-  State<LargeScreenPreview> createState() => _LargeScreenPreviewState();
+  ConsumerState<LargeScreenPreview> createState() => _LargeScreenPreviewState();
 }
 
-class _LargeScreenPreviewState extends State<LargeScreenPreview> {
+class _LargeScreenPreviewState extends ConsumerState<LargeScreenPreview> {
   int _frame = 0;
+  int _demoRun = 0;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final frame = _frames[_frame];
+    final hasEffect = ref.watch(largeScreenSettingsProvider
+        .select((s) => s.musicEffect != LargeScreenMusicEffect.off));
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final previewHint = !hasEffect
+        ? '修改会实时显示在预览中'
+        : reduceMotion
+            ? '系统已开启减少动态效果'
+            : '动效预览使用示例节奏';
     return Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -90,19 +101,35 @@ class _LargeScreenPreviewState extends State<LargeScreenPreview> {
           const SizedBox(height: 8),
           Flexible(
               fit: FlexFit.loose,
-              child: _PreviewFrame(size: frame.$2, label: frame.$1)),
+              child: _PreviewFrame(
+                  size: frame.$2, label: frame.$1, demoRun: _demoRun)),
           const SizedBox(height: 8),
-          Text('修改会实时显示在预览中',
-              style: theme.textTheme.labelSmall
-                  ?.copyWith(color: theme.thmr.mutedInk)),
+          Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            alignment: WrapAlignment.spaceBetween,
+            children: [
+              Text(previewHint,
+                  style: theme.textTheme.labelSmall
+                      ?.copyWith(color: theme.thmr.mutedInk)),
+              if (hasEffect && !reduceMotion)
+                TextButton.icon(
+                  onPressed: () => setState(() => _demoRun++),
+                  icon: const Icon(Icons.replay_rounded, size: 16),
+                  label: const Text('重播动效'),
+                ),
+            ],
+          ),
         ]);
   }
 }
 
 class _PreviewFrame extends StatelessWidget {
-  const _PreviewFrame({required this.size, required this.label});
+  const _PreviewFrame(
+      {required this.size, required this.label, required this.demoRun});
   final Size size;
   final String label;
+  final int demoRun;
 
   @override
   Widget build(BuildContext context) =>
@@ -122,7 +149,8 @@ class _PreviewFrame extends StatelessWidget {
         final stage = SizedBox.fromSize(
             size: size,
             child: MediaQuery(
-                data: media, child: const LargeScreenPlayer(preview: true)));
+                data: media,
+                child: LargeScreenPlayer(preview: true, demoRun: demoRun)));
         return Align(
             alignment: Alignment.topCenter,
             widthFactor: 1,

@@ -34,7 +34,7 @@ class LargeScreenSettingsEntry extends StatelessWidget {
                         .bodyMedium
                         ?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
-                Text('布局、小组件与画面预览',
+                Text('布局、音乐动效与小组件',
                     style: Theme.of(context)
                         .textTheme
                         .labelSmall
@@ -226,6 +226,57 @@ class LargeScreenSettingsPanel extends ConsumerWidget {
               ],
               onChanged: (v) => save(settings.copyWith(themeMode: v))),
         ),
+        _SettingRow(
+          title: '音乐动效',
+          description: '棱镜涟漪采用轻量渲染',
+          child: _Choices<LargeScreenMusicEffect>(
+            value: settings.musicEffect,
+            options: const [
+              (LargeScreenMusicEffect.off, '关闭'),
+              (LargeScreenMusicEffect.prism, '棱镜涟漪'),
+              (LargeScreenMusicEffect.aurora, '极光流场'),
+              (LargeScreenMusicEffect.nebula, '星云漫游'),
+            ],
+            onChanged: (v) => save(settings.copyWith(musicEffect: v)),
+          ),
+        ),
+        if (settings.musicEffect != LargeScreenMusicEffect.off) ...[
+          _SettingRow(
+            title: '动效强度',
+            child: SizedBox(
+              width: 300,
+              child: Row(children: [
+                Expanded(
+                  child: ThmrSlider(
+                    value: settings.musicEffectIntensity,
+                    min: LargeScreenSettings.minMusicEffectIntensity,
+                    max: 1,
+                    divisions: 8,
+                    semanticsLabel: '动效强度',
+                    formatValue: (value) => '${(value * 100).round()}%',
+                    onChanged: (value) {
+                      final current = ref.read(largeScreenSettingsProvider);
+                      if ((current.musicEffectIntensity - value).abs() < .001) {
+                        return;
+                      }
+                      save(current.copyWith(musicEffectIntensity: value));
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ExcludeSemantics(
+                    child: Text(
+                        '${(settings.musicEffectIntensity * 100).round()}%')),
+              ]),
+            ),
+          ),
+          _SettingSwitch(
+            title: '动效省电模式',
+            description: '将动效刷新率降至约 15 帧/秒',
+            value: settings.musicEffectLowPower,
+            onChanged: (v) => save(settings.copyWith(musicEffectLowPower: v)),
+          ),
+        ],
         _SettingSwitch(
             title: '卡片式布局',
             value: settings.cardLayout,
@@ -304,7 +355,7 @@ class LargeScreenSettingsPanel extends ConsumerWidget {
                 ? const LargeScreenSettings()
                 : LargeScreenSettings(widgets: settings.widgets)),
             icon: const Icon(Icons.restart_alt_rounded, size: 18),
-            label: Text(includeWidgets ? '恢复默认' : '恢复默认布局'),
+            label: Text(includeWidgets ? '恢复默认' : '恢复默认显示设置'),
           ),
         ),
       ]),

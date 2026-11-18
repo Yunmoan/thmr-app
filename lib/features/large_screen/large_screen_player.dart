@@ -38,9 +38,13 @@ final largeScreenSpectrumProvider =
 /// without navigation. The shared player and station remain mounted throughout.
 class LargeScreenPlayer extends ConsumerStatefulWidget {
   const LargeScreenPlayer(
-      {super.key, this.safeInsets = EdgeInsets.zero, this.preview = false});
+      {super.key,
+      this.safeInsets = EdgeInsets.zero,
+      this.preview = false,
+      this.demoRun = 0});
   final EdgeInsets safeInsets;
   final bool preview;
+  final int demoRun;
 
   @override
   ConsumerState<LargeScreenPlayer> createState() => _LargeScreenPlayerState();
@@ -208,16 +212,20 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
             child: Stack(
               fit: StackFit.expand,
               children: [
-                if (!widget.preview &&
-                    settings.musicEffect != LargeScreenMusicEffect.off)
+                if (settings.musicEffect != LargeScreenMusicEffect.off)
                   LargeScreenMusicVisual(
+                    key: ValueKey(widget.demoRun),
                     effect: settings.musicEffect,
                     intensity: settings.musicEffectIntensity,
                     lowPower: settings.musicEffectLowPower,
-                    playing: phase == PlaybackPhase.online &&
+                    demo: widget.preview,
+                    playing: !widget.preview &&
+                        phase == PlaybackPhase.online &&
                         ref.watch(largeScreenProvider
                             .select((state) => state.contentVisible)),
-                    source: ref.watch(largeScreenSpectrumProvider),
+                    source: widget.preview
+                        ? null
+                        : ref.watch(largeScreenSpectrumProvider),
                   ),
                 SafeArea(
                   minimum: widget.safeInsets,

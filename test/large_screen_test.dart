@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -15,6 +16,7 @@ import 'package:thmr_app/core/models/models.dart';
 import 'package:thmr_app/core/platform/window_presentation.dart';
 import 'package:thmr_app/core/theme/thmr_motion.dart';
 import 'package:thmr_app/core/player/playback_controller.dart';
+import 'package:thmr_app/core/player/spectrum.dart';
 import 'package:thmr_app/core/state/station_provider.dart';
 import 'package:thmr_app/core/state/large_screen_settings.dart';
 import 'package:thmr_app/core/state/channel_provider.dart';
@@ -24,6 +26,7 @@ import 'package:thmr_app/shared/widgets/thmr_slider.dart';
 import 'package:thmr_app/shared/widgets/track_cover.dart';
 import 'package:thmr_app/features/large_screen/large_screen_button.dart';
 import 'package:thmr_app/features/large_screen/large_screen_controller.dart';
+import 'package:thmr_app/features/large_screen/large_screen_music_visual.dart';
 import 'package:thmr_app/features/large_screen/large_screen_player.dart';
 import 'package:thmr_app/features/large_screen/large_screen_surface.dart';
 import 'package:thmr_app/features/large_screen/large_screen_settings_panel.dart';
@@ -94,8 +97,9 @@ class _Playback extends StateNotifier<PlaybackState>
 }
 
 class _Harness {
-  _Harness(this.tester);
+  _Harness(this.tester, {this.spectrum});
   final WidgetTester tester;
+  final SpectrumSource? spectrum;
   final navigator = GlobalKey<NavigatorState>();
   final scroll = ScrollController();
   final mainFocus = FocusNode();
@@ -109,6 +113,8 @@ class _Harness {
   late final container = ProviderContainer(overrides: [
     stationProvider.overrideWith((ref) => station),
     playbackProvider.overrideWith((ref) => playback),
+    if (spectrum != null)
+      largeScreenSpectrumProvider.overrideWithValue(spectrum),
     streamUrlProvider.overrideWithValue('https://radio.test/live'),
     channelCatalogProvider.overrideWith((ref) async => const [
           RadioChannel(id: 'touhou', name: '综合频道'),
@@ -313,6 +319,22 @@ class _Harness {
   }
 }
 
+class _StageSpectrum implements SpectrumSource {
+  int starts = 0, stops = 0, polls = 0;
+
+  @override
+  void start() => starts++;
+
+  @override
+  void stop() => stops++;
+
+  @override
+  Float32List poll(int bands) {
+    polls++;
+    return Float32List(bands)..fillRange(0, bands, .65);
+  }
+}
+
 void main() {
   testWidgets('stage messages belong only to the visible scaffold',
       (tester) async {
@@ -492,6 +514,50 @@ void main() {
       }
     });
   }
+
+  testWidgets('settings demo stays independent of the live spectrum',
+      (tester) async {
+    final source = _StageSpectrum();
+    final h = _Harness(tester, spectrum: source);
+    await h.mount(size: const Size(1440, 900));
+    unawaited(h.navigator.currentState!.push(MaterialPageRoute<void>(
+        builder: (_) => const LargeScreenSettingsPage())));
+    await tester.pumpAndSettle();
+    final style = find.text('棱镜涟漪');
+    await tester.ensureVisible(style);
+    await tester.tap(style);
+    await tester.pumpAndSettle();
+    final visual = find.byType(LargeScreenMusicVisual);
+    final demo = tester.widget<LargeScreenMusicVisual>(visual);
+    expect(demo.demo, isTrue);
+    expect(demo.source, isNull);
+    expect(source.starts, 0);
+    expect(find.text('动效预览使用示例节奏'), findsOneWidget);
+
+    await tester.tap(find.text('重播动效'));
+    await tester.pump();
+    expect(tester.widget<LargeScreenMusicVisual>(visual).key, isNot(demo.key));
+    expect(tester.binding.hasScheduledFrame, isTrue);
+    await tester.pumpAndSettle();
+    expect(source.starts, 0);
+
+    h.navigator.currentState!.pop();
+    await tester.pumpAndSettle();
+    await h.playback.toggle(null);
+    await h.change(true);
+    expect(tester.widget<LargeScreenMusicVisual>(visual).demo, isFalse);
+    expect(source.starts, 0, reason: 'the radio is paused');
+
+    await h.playback.toggle(null);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 70));
+    expect(source.starts, 1);
+    expect(source.polls, greaterThan(0));
+    await h.change(false);
+    expect(visual, findsNothing);
+    expect(source.stops, 1);
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets(
       'portrait covers center in contain mode and crop to fill in cover mode',

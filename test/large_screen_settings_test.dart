@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:thmr_app/core/state/large_screen_settings.dart';
 import 'package:thmr_app/core/theme/thmr_theme.dart';
 import 'package:thmr_app/features/large_screen/large_screen_settings_panel.dart';
+import 'package:thmr_app/shared/widgets/thmr_slider.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -140,6 +141,27 @@ void main() {
         expect(container.read(largeScreenSettingsProvider).queue,
             LargeScreenQueue.hidden);
         expect(find.text('队列曲目数'), findsNothing);
+        expect(find.text('动效强度'), findsNothing);
+        await tester.ensureVisible(find.text('棱镜涟漪'));
+        await tester.tap(find.text('棱镜涟漪'));
+        await tester.pumpAndSettle();
+        final intensity = find.byWidgetPredicate((widget) =>
+            widget is ThmrSlider && widget.semanticsLabel == '动效强度');
+        await tester.ensureVisible(intensity);
+        final slider = tester.getRect(intensity);
+        await tester.tapAt(Offset(slider.right - 8, slider.center.dy));
+        await tester.pumpAndSettle();
+        final powerSaving = find.descendant(
+            of: find.byWidgetPredicate((widget) =>
+                widget is Semantics && widget.properties.label == '动效省电模式'),
+            matching: find.byType(Switch));
+        await tester.ensureVisible(powerSaving);
+        await tester.tap(powerSaving);
+        await tester.pumpAndSettle();
+        final effect = container.read(largeScreenSettingsProvider);
+        expect(effect.musicEffect, LargeScreenMusicEffect.prism);
+        expect(effect.musicEffectIntensity, 1);
+        expect(effect.musicEffectLowPower, isTrue);
         final keepAwake = find.descendant(
             of: find.byWidgetPredicate((widget) =>
                 widget is Semantics && widget.properties.label == '保持屏幕常亮'),
