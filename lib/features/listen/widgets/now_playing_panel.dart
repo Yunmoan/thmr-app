@@ -19,6 +19,7 @@ import '../../../core/state/channel_provider.dart';
 import '../../../core/state/station_provider.dart';
 import '../../../core/theme/thmr_theme.dart';
 import '../../../shared/widgets/player_panel_layout.dart';
+import '../../../shared/widgets/track_cover.dart';
 import '../../../shared/widgets/volume_slider.dart';
 import '../../../shared/widgets/focus_outline.dart';
 import '../../../shared/widgets/volume_wheel_control.dart';
@@ -161,23 +162,8 @@ class _Cover96 extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).thmr;
-    final track = cur;
     // 限制解码尺寸:96px 封面不必解码原图
     final cacheWidth = (96 * MediaQuery.devicePixelRatioOf(context)).round();
-    final child = (track == null || track.coverUrl.isEmpty)
-        ? Image.asset('assets/brand/cover-fallback.png',
-            fit: BoxFit.cover, cacheWidth: cacheWidth)
-        : Image.network(
-            track.coverUrl,
-            fit: BoxFit.cover,
-            filterQuality: FilterQuality.low,
-            cacheWidth: cacheWidth,
-            gaplessPlayback: true,
-            errorBuilder: (_, __, ___) => Image.asset(
-                'assets/brand/cover-fallback.png',
-                fit: BoxFit.cover,
-                cacheWidth: cacheWidth),
-          );
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
@@ -191,11 +177,11 @@ class _Cover96 extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: ThmrAnimatedContent(
-          child: KeyedSubtree(
-            key: ValueKey(track?.coverUrl ?? 'no-cover'),
-            child: SizedBox(width: 96, height: 96, child: child),
-          ),
+        child: SizedBox(
+          width: 96,
+          height: 96,
+          child:
+              TrackCoverImage(url: cur?.coverUrl ?? '', cacheWidth: cacheWidth),
         ),
       ),
     );

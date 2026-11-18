@@ -22,4 +22,4 @@ plist="$app/Info.plist"
 test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$plist")" = "$IOS_VERSION"
 test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$plist")" = "$IOS_BUILD_NUMBER"
 test "$(/usr/libexec/PlistBuddy -c 'Print ITSAppUsesNonExemptEncryption' "$plist")" = false
-lipo -verify_arch arm64 "$app/Frameworks/Mpv.framework/Mpv"
+lipo "$app/Frameworks/Mpv.framework/Mpv" -verify_arch arm64
