@@ -91,3 +91,6 @@ flutter:
     - assets/icons/
     - assets/updater/
     - assets/input_prompts/
+
+  shaders:
+    - shaders/large_screen_music.frag

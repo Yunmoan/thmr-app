@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../core/platform/desktop_window.dart';
 import '../../core/player/playback_controller.dart';
+import '../../core/player/spectrum.dart';
 import '../../core/models/models.dart';
 import '../../core/state/large_screen_settings.dart';
 import '../../core/state/settings_provider.dart';
@@ -19,6 +20,7 @@ import '../../shared/widgets/thmr_panel.dart';
 import '../../shared/widgets/volume_slider.dart';
 import 'large_screen_content.dart';
 import 'large_screen_controller.dart';
+import 'large_screen_music_visual.dart';
 import 'large_screen_symbols.dart';
 import '../listen/widgets/channel_switcher.dart';
 
@@ -28,6 +30,9 @@ final _stageThemeProvider = Provider.family<ThemeData, ThemeMode>((ref, mode) {
       ? ThmrTheme.light(accent)
       : ThmrTheme.dark(accent);
 });
+
+final largeScreenSpectrumProvider =
+    Provider<SpectrumSource?>((ref) => getPlatformSpectrum());
 
 /// The existing THMR paper, character illustration and typography, presented
 /// without navigation. The shared player and station remain mounted throughout.
@@ -200,16 +205,32 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                 ? 'large-preview-transition'
                 : 'large-mode-transition'),
             animation: _presentation,
-            child: SafeArea(
-              minimum: widget.safeInsets,
-              child: LargeScreenContent(
-                settings: settings,
-                station: station,
-                phase: phase,
-                playbackError: error,
-                header: _Header(preview: widget.preview),
-                controls: controls,
-              ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (!widget.preview &&
+                    settings.musicEffect != LargeScreenMusicEffect.off)
+                  LargeScreenMusicVisual(
+                    effect: settings.musicEffect,
+                    intensity: settings.musicEffectIntensity,
+                    lowPower: settings.musicEffectLowPower,
+                    playing: phase == PlaybackPhase.online &&
+                        ref.watch(largeScreenProvider
+                            .select((state) => state.contentVisible)),
+                    source: ref.watch(largeScreenSpectrumProvider),
+                  ),
+                SafeArea(
+                  minimum: widget.safeInsets,
+                  child: LargeScreenContent(
+                    settings: settings,
+                    station: station,
+                    phase: phase,
+                    playbackError: error,
+                    header: _Header(preview: widget.preview),
+                    controls: controls,
+                  ),
+                ),
+              ],
             ),
           );
           return MouseRegion(

@@ -16,7 +16,12 @@ enum LargeScreenCoverFit { cover, contain }
 
 enum LargeScreenIllustrationPosition { left, right }
 
+enum LargeScreenMusicEffect { off, aurora, nebula, prism }
+
 class LargeScreenSettings {
+  static const minMusicEffectIntensity = .2;
+  static const defaultMusicEffectIntensity = .6;
+
   const LargeScreenSettings({
     this.layout = LargeScreenLayout.adaptive,
     this.queue = LargeScreenQueue.strip,
@@ -37,6 +42,9 @@ class LargeScreenSettings {
     this.widgets = const [],
     this.illustrationOpacity = .9,
     this.contentMargin = 32,
+    this.musicEffect = LargeScreenMusicEffect.off,
+    this.musicEffectIntensity = defaultMusicEffectIntensity,
+    this.musicEffectLowPower = false,
   });
 
   final LargeScreenLayout layout;
@@ -60,6 +68,9 @@ class LargeScreenSettings {
   final List<LargeScreenWidgetSettings> widgets;
   final double illustrationOpacity;
   final double contentMargin;
+  final LargeScreenMusicEffect musicEffect;
+  final double musicEffectIntensity;
+  final bool musicEffectLowPower;
 
   LargeScreenSettings copyWith({
     LargeScreenLayout? layout,
@@ -81,6 +92,9 @@ class LargeScreenSettings {
     List<LargeScreenWidgetSettings>? widgets,
     double? illustrationOpacity,
     double? contentMargin,
+    LargeScreenMusicEffect? musicEffect,
+    double? musicEffectIntensity,
+    bool? musicEffectLowPower,
   }) =>
       LargeScreenSettings(
         layout: layout ?? this.layout,
@@ -103,6 +117,10 @@ class LargeScreenSettings {
         illustrationOpacity:
             (illustrationOpacity ?? this.illustrationOpacity).clamp(.1, 1),
         contentMargin: (contentMargin ?? this.contentMargin).clamp(16, 80),
+        musicEffect: musicEffect ?? this.musicEffect,
+        musicEffectIntensity:
+            _effectIntensity(musicEffectIntensity ?? this.musicEffectIntensity),
+        musicEffectLowPower: musicEffectLowPower ?? this.musicEffectLowPower,
       );
 
   factory LargeScreenSettings.fromJson(Map<String, dynamic> json) {
@@ -145,8 +163,17 @@ class LargeScreenSettings {
               (json['contentMargin'] as num).isFinite
           ? (json['contentMargin'] as num).toDouble().clamp(16, 80)
           : 32,
+      musicEffect: choice('musicEffect', LargeScreenMusicEffect.values,
+          LargeScreenMusicEffect.off),
+      musicEffectIntensity: _effectIntensity(json['musicEffectIntensity']),
+      musicEffectLowPower: json['musicEffectLowPower'] == true,
     );
   }
+
+  static double _effectIntensity(Object? value) =>
+      value is num && value.isFinite
+          ? value.toDouble().clamp(minMusicEffectIntensity, 1)
+          : defaultMusicEffectIntensity;
 
   Map<String, dynamic> toJson() => {
         'layout': layout.name,
@@ -168,6 +195,9 @@ class LargeScreenSettings {
         'widgets': widgets.map((w) => w.toJson()).toList(),
         'illustrationOpacity': illustrationOpacity,
         'contentMargin': contentMargin,
+        'musicEffect': musicEffect.name,
+        'musicEffectIntensity': musicEffectIntensity,
+        'musicEffectLowPower': musicEffectLowPower,
       };
 }
 

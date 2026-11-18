@@ -32,6 +32,9 @@ void main() {
       autoHideControls: false,
       startFullScreen: false,
       keepScreenOn: true,
+      musicEffect: LargeScreenMusicEffect.nebula,
+      musicEffectIntensity: .9,
+      musicEffectLowPower: true,
     );
     await controller.update(chosen);
     final restored = LargeScreenSettingsController();
@@ -54,6 +57,8 @@ void main() {
         'queueCount': 999,
         'textScale': -1,
         'showProgress': 'false',
+        'musicEffect': 'missing-effect',
+        'musicEffectIntensity': 2,
       })
     });
     final bounded = LargeScreenSettingsController();
@@ -64,6 +69,10 @@ void main() {
     expect(bounded.state.textScale, .8);
     expect(bounded.state.showProgress, isTrue);
     expect(bounded.state.keepScreenOn, isFalse);
+    expect(bounded.state.musicEffect, LargeScreenMusicEffect.off);
+    expect(bounded.state.musicEffectIntensity, 1);
+    expect(bounded.state.musicEffectLowPower, isFalse);
+    expect(LargeScreenSettings.fromJson(const {}).musicEffectIntensity, .6);
     bounded.dispose();
   });
 
