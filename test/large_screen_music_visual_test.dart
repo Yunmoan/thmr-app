@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:thmr_app/core/player/spectrum.dart';
 import 'package:thmr_app/core/state/large_screen_settings.dart';
+import 'package:thmr_app/core/theme/thmr_colors.dart';
 import 'package:thmr_app/features/large_screen/large_screen_music_visual.dart';
 
 class _Spectrum implements SpectrumSource {
@@ -43,16 +44,18 @@ Future<int> _rasterHash(WidgetTester tester, GlobalKey frame) async {
 }
 
 void main() {
-  testWidgets('all three scenes render real spectrum and clear on silence',
+  testWidgets('each scene uses the character palette and clears on silence',
       (tester) async {
     await tester.runAsync(() async {
       await ui.FragmentProgram.fromAsset('shaders/large_screen_music.frag');
     });
     final source = _Spectrum();
     final frame = GlobalKey();
-    Future<void> mount(LargeScreenMusicEffect effect, {bool playing = true}) =>
+    Future<void> mount(LargeScreenMusicEffect effect,
+            {bool playing = true, ThmrTokens tokens = ThmrTokens.reimuDark}) =>
         tester.pumpWidget(MaterialApp(
-          theme: ThemeData.dark(),
+          theme: ThemeData.dark().copyWith(extensions: [tokens]),
+          themeAnimationDuration: Duration.zero,
           home: Center(
             child: RepaintBoundary(
               key: frame,
@@ -90,6 +93,9 @@ void main() {
       final rendered = await _rasterHash(tester, frame);
       expect(rendered, isNot(quiet), reason: effect.name);
       scenes.add(rendered);
+      await mount(effect, tokens: ThmrTokens.marisaDark);
+      expect(await _rasterHash(tester, frame), isNot(rendered),
+          reason: '${effect.name} needs to reflect a new character palette');
     }
     expect(scenes.length, 3);
     expect(source.starts, 1, reason: 'style changes reuse the live source');

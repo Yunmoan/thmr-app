@@ -9,6 +9,7 @@ import 'package:flutter/scheduler.dart';
 
 import '../../core/player/spectrum.dart';
 import '../../core/state/large_screen_settings.dart';
+import '../../core/theme/thmr_theme.dart';
 
 class LargeScreenMusicVisual extends StatefulWidget {
   const LargeScreenMusicVisual({
@@ -195,6 +196,14 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
     final shader = _shader;
     if (_usesShader && shader == null) return const SizedBox.shrink();
     final theme = Theme.of(context);
+    final tokens = theme.thmr;
+    final dark = theme.brightness == Brightness.dark;
+    final palette = (
+      accent: tokens.accent,
+      shade: Color.lerp(tokens.accent, tokens.supportInk, .42)!,
+      highlight: Color.lerp(
+          tokens.accent, dark ? tokens.ink : tokens.codeInk, dark ? .62 : .25)!,
+    );
     return IgnorePointer(
       child: RepaintBoundary(
         child: CustomPaint(
@@ -204,8 +213,8 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
             motion: _motion,
             effect: widget.effect,
             intensity: widget.intensity,
-            dark: theme.brightness == Brightness.dark,
-            accent: theme.colorScheme.primary,
+            dark: dark,
+            palette: palette,
           ),
         ),
       ),
@@ -259,6 +268,8 @@ class _MusicMotion extends ChangeNotifier {
   }
 }
 
+typedef _VisualPalette = ({Color accent, Color shade, Color highlight});
+
 class _MusicVisualPainter extends CustomPainter {
   _MusicVisualPainter({
     required this.shader,
@@ -266,7 +277,7 @@ class _MusicVisualPainter extends CustomPainter {
     required this.effect,
     required this.intensity,
     required this.dark,
-    required this.accent,
+    required this.palette,
   }) : super(repaint: motion);
 
   final FragmentShader? shader;
@@ -274,8 +285,8 @@ class _MusicVisualPainter extends CustomPainter {
   final LargeScreenMusicEffect effect;
   final double intensity;
   final bool dark;
-  final Color accent;
-  late final _prism = _PrismMesh(accent, dark);
+  final _VisualPalette palette;
+  late final _prism = _PrismMesh(palette);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -295,12 +306,19 @@ class _MusicVisualPainter extends CustomPainter {
       ..setFloat(5, motion.energy.mids)
       ..setFloat(6, motion.energy.treble)
       ..setFloat(7, motion.pulse)
-      ..setFloat(8, accent.r)
-      ..setFloat(9, accent.g)
-      ..setFloat(10, accent.b)
-      ..setFloat(11, dark ? 1 : 0)
-      ..setFloat(12, effect == LargeScreenMusicEffect.aurora ? 1 : 2);
+      ..setFloat(17, dark ? 1 : 0)
+      ..setFloat(18, effect == LargeScreenMusicEffect.aurora ? 1 : 2);
+    _setShaderColor(shader, 8, palette.accent);
+    _setShaderColor(shader, 11, palette.shade);
+    _setShaderColor(shader, 14, palette.highlight);
     canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
+  }
+
+  void _setShaderColor(FragmentShader shader, int offset, Color color) {
+    shader
+      ..setFloat(offset, color.r)
+      ..setFloat(offset + 1, color.g)
+      ..setFloat(offset + 2, color.b);
   }
 
   @override
@@ -308,18 +326,13 @@ class _MusicVisualPainter extends CustomPainter {
       effect != oldDelegate.effect ||
       intensity != oldDelegate.intensity ||
       dark != oldDelegate.dark ||
-      accent != oldDelegate.accent;
+      palette != oldDelegate.palette;
 }
 
 /// Draw the glass rims as one mesh with soft, colored edges. The topology stays
 /// fixed, so the raster thread can skip path tessellation and draw only the rims.
 class _PrismMesh {
-  _PrismMesh(Color accent, bool dark)
-      : _blue = Color.lerp(accent,
-            dark ? const Color(0xff9cd5ff) : const Color(0xff466bb7), .78)!,
-        _rose = Color.lerp(accent,
-            dark ? const Color(0xfff6abd8) : const Color(0xffb050a1), .65)!,
-        _glint = dark ? const Color(0xffd7e9ff) : const Color(0xff605599);
+  _PrismMesh(this.palette);
 
   static const _rings = 3;
   static const _segments = 96;
@@ -341,7 +354,7 @@ class _PrismMesh {
   final _positions = Float32List(_rings * _ringVertices * 2);
   final _colors = Int32List(_rings * _ringVertices);
   final _paint = Paint()..isAntiAlias = false;
-  final Color _blue, _rose, _glint;
+  final _VisualPalette palette;
 
   static Uint16List _buildIndices() {
     final strips = _bevel.length - 1;
@@ -389,10 +402,11 @@ class _PrismMesh {
         final sweep = .5 + .5 * math.cos(angle * 2 + spin);
         final alpha = 255 * visibility * (.15 + .85 * sweep * sweep);
         final hue = .5 + .5 * math.sin(angle * 2 - spin * .7);
-        final tint = Color.lerp(_blue, _rose, hue)!;
+        final tint = Color.lerp(palette.shade, palette.accent, hue)!;
         final rgb = tint.toARGB32() & 0xffffff;
         final reflection =
-            Color.lerp(tint, _glint, .28 + .35 * energy.treble)!.toARGB32() &
+            Color.lerp(tint, palette.highlight, .34 + .42 * energy.treble)!
+                    .toARGB32() &
                 0xffffff;
         for (final face in _bevel) {
           final r = distance + width * face.offset;

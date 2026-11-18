@@ -204,41 +204,37 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                   ),
                 ),
               ));
+          final musicVisual = settings.musicEffect == LargeScreenMusicEffect.off
+              ? null
+              : LargeScreenMusicVisual(
+                  key: ValueKey(widget.demoRun),
+                  effect: settings.musicEffect,
+                  intensity: settings.musicEffectIntensity,
+                  lowPower: settings.musicEffectLowPower,
+                  demo: widget.preview,
+                  playing: !widget.preview &&
+                      phase == PlaybackPhase.online &&
+                      ref.watch(largeScreenProvider
+                          .select((state) => state.contentVisible)),
+                  source: widget.preview
+                      ? null
+                      : ref.watch(largeScreenSpectrumProvider),
+                );
           final content = ThmrFadeSlide(
             key: ValueKey(widget.preview
                 ? 'large-preview-transition'
                 : 'large-mode-transition'),
             animation: _presentation,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (settings.musicEffect != LargeScreenMusicEffect.off)
-                  LargeScreenMusicVisual(
-                    key: ValueKey(widget.demoRun),
-                    effect: settings.musicEffect,
-                    intensity: settings.musicEffectIntensity,
-                    lowPower: settings.musicEffectLowPower,
-                    demo: widget.preview,
-                    playing: !widget.preview &&
-                        phase == PlaybackPhase.online &&
-                        ref.watch(largeScreenProvider
-                            .select((state) => state.contentVisible)),
-                    source: widget.preview
-                        ? null
-                        : ref.watch(largeScreenSpectrumProvider),
-                  ),
-                SafeArea(
-                  minimum: widget.safeInsets,
-                  child: LargeScreenContent(
-                    settings: settings,
-                    station: station,
-                    phase: phase,
-                    playbackError: error,
-                    header: _Header(preview: widget.preview),
-                    controls: controls,
-                  ),
-                ),
-              ],
+            child: SafeArea(
+              minimum: widget.safeInsets,
+              child: LargeScreenContent(
+                settings: settings,
+                station: station,
+                phase: phase,
+                playbackError: error,
+                header: _Header(preview: widget.preview),
+                controls: controls,
+              ),
             ),
           );
           return MouseRegion(
@@ -259,6 +255,7 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                   backgroundColor: theme.thmr.pageBg,
                   body: Stack(fit: StackFit.expand, children: [
                     ThmrBackground(
+                      underlay: musicVisual,
                       showIllustration: settings.showIllustration,
                       illustrationOpacity: settings.illustrationOpacity,
                       alignment: settings.illustrationPosition ==

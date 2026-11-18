@@ -8,6 +8,7 @@ class ThmrBackground extends StatelessWidget {
   const ThmrBackground({
     super.key,
     required this.child,
+    this.underlay,
     this.illustration,
     this.alignment = Alignment.bottomLeft,
     this.showIllustration = true,
@@ -15,6 +16,7 @@ class ThmrBackground extends StatelessWidget {
   });
 
   final Widget child;
+  final Widget? underlay;
 
   /// Defaults to the current character theme's illustration.
   final String? illustration;
@@ -38,6 +40,7 @@ class ThmrBackground extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
+          if (underlay != null) underlay!,
           // The illustration stays still while pages and player controls animate.
           Offstage(
             offstage: !showIllustration,

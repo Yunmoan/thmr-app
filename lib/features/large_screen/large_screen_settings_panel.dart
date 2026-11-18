@@ -228,7 +228,7 @@ class LargeScreenSettingsPanel extends ConsumerWidget {
         ),
         _SettingRow(
           title: '音乐动效',
-          description: '棱镜涟漪采用轻量渲染',
+          description: '配色随大屏主题变化，棱镜涟漪为轻量样式',
           child: _Choices<LargeScreenMusicEffect>(
             value: settings.musicEffect,
             options: const [

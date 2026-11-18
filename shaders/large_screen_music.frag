@@ -6,6 +6,8 @@ uniform float uTime;
 uniform float uIntensity;
 uniform vec4 uAudio;  // Bass, mids, treble, bass transients.
 uniform vec3 uAccent;
+uniform vec3 uShade;
+uniform vec3 uHighlight;
 uniform float uDark;
 uniform float uEffect;
 
@@ -39,9 +41,7 @@ float cloudNoise(vec2 p) {
 
 vec3 aurora(vec2 p) {
   p = rotatePlane(p, -0.22);
-  vec3 jade = mix(vec3(0.10, 0.98, 0.79), uAccent, 0.30);
-  vec3 indigo = mix(vec3(0.29, 0.36, 0.98), uAccent, 0.38);
-  vec3 light = 0.48 * indigo * gaussian((p.y + 0.32) * 1.7);
+  vec3 light = 0.48 * uShade * gaussian((p.y + 0.32) * 1.7);
 
   // Each curtain has a bright folded hem and a taller, translucent veil.
   for (int layer = 0; layer < 3; ++layer) {
@@ -57,9 +57,10 @@ vec3 aurora(vec2 p) {
                * gaussian(height * (4.15 - 1.15 * uAudio.x));
     float fringe = gaussian((height - 0.012) * 53.0) * ribs * uAudio.z;
     float hue = 0.5 + 0.5 * sin(3.6 * x - 1.6 * depth + 0.25 * phase);
-    vec3 tint = mix(indigo, jade, hue);
+    vec3 tint = mix(uShade, uAccent, hue);
     light += tint * (hem * (0.22 + 0.33 * uAudio.w)
-        + veil * (0.17 + ribs * (0.43 + 0.19 * uAudio.y)) + fringe * 0.31);
+        + veil * (0.17 + ribs * (0.43 + 0.19 * uAudio.y)))
+        + uHighlight * fringe * 0.42;
   }
   return light;
 }
@@ -72,10 +73,8 @@ vec3 nebula(vec2 p) {
   float cloud = smoothstep(0.23, 0.86, broad * 0.72 + detail * 0.28);
   float arm = sky.y - 0.16 * sin(sky.x * 3.6 + broad * 2.4);
   float dust = gaussian(arm * (3.8 - uAudio.x)) * cloud;
-  vec3 violet = mix(vec3(0.49, 0.22, 0.94), uAccent, 0.47);
-  vec3 blue = mix(vec3(0.14, 0.43, 0.96), uAccent, 0.23);
-  vec3 light = blue * 0.31 * gaussian(length(sky + vec2(0.42, -0.13)) * 1.65)
-             + mix(blue, violet, broad) * dust * (1.8 + 0.9 * uAudio.x);
+  vec3 light = uShade * 0.31 * gaussian(length(sky + vec2(0.42, -0.13)) * 1.65)
+             + mix(uShade, uAccent, broad) * dust * (1.8 + 0.9 * uAudio.x);
 
   // Three depths use their own drift rate, point size and focus.
   for (int layer = 0; layer < 3; ++layer) {
@@ -89,7 +88,7 @@ vec3 nebula(vec2 p) {
     float twinkle = 0.68 + 0.32 * sin(uTime * (1.4 + seed.x) + seed.y * 91.0);
     float star = (1.0 - smoothstep(size * 0.18, size, r))
                + 0.32 * gaussian(r / (size * (1.45 + depth * 0.6)));
-    light += mix(vec3(0.64, 0.83, 1.0), vec3(1.0, 0.76, 0.87), seed.x)
+    light += mix(uHighlight, uAccent, seed.x * 0.6)
            * step(0.78 + 0.052 * depth, seed.z) * star * twinkle
            * (0.76 + uAudio.z * 1.04 + uAudio.w * 0.27);
   }
@@ -106,10 +105,9 @@ void main() {
   float strength = smoothstep(0.015, 0.39, max(uAudio.x, max(uAudio.y, uAudio.z)));
   float tone = 1.0 - exp(-luminance * 1.6);
   vec3 hue = light / max(0.001, luminance);
-  vec3 color = mix(mix(vec3(0.89, 0.90, 0.97), hue, 0.74),
-                   hue * (0.34 + 0.66 * tone), uDark);
+  vec3 color = hue * mix(0.80 + 0.16 * tone, 0.38 + 0.62 * tone, uDark);
   // Soften the header and controls at the edges of the stage.
   float edges = 0.63 + 0.37 * smoothstep(0.0, 0.19, min(uv.y, 1.0 - uv.y));
-  float alpha = tone * strength * edges * uIntensity * mix(0.78, 1.0, uDark);
+  float alpha = tone * strength * edges * uIntensity;
   fragColor = vec4(color * alpha, alpha);
 }
