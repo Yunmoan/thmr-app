@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:thmr_app/core/player/spectrum.dart';
+import 'package:thmr_app/core/player/spectrum_fft.dart';
 import 'package:thmr_app/core/state/large_screen_settings.dart';
 import 'package:thmr_app/core/theme/thmr_colors.dart';
 import 'package:thmr_app/features/large_screen/large_screen_music_visual.dart';
@@ -12,7 +14,6 @@ import 'package:thmr_app/features/large_screen/large_screen_music_visual.dart';
 class _Spectrum implements SpectrumSource {
   int starts = 0, stops = 0, polls = 0;
   double? level;
-  bool? lowFrequencies;
 
   @override
   void start() => starts++;
@@ -25,10 +26,35 @@ class _Spectrum implements SpectrumSource {
     polls++;
     final amplitude = level;
     if (amplitude == null) return null;
-    final split = bands ~/ 4;
-    return Float32List(bands)
-      ..fillRange(lowFrequencies == false ? bands - split : 0,
-          lowFrequencies == true ? split : bands, amplitude);
+    return Float32List(bands)..fillRange(0, bands, amplitude);
+  }
+}
+
+class _PcmToneSource implements SpectrumSource {
+  static const _sampleRate = 48000;
+  Float32List? _frame;
+
+  void play(double frequency, double amplitude) {
+    final samples = Float32List(_sampleRate ~/ 10);
+    for (var i = 0; i < samples.length; i++) {
+      samples[i] =
+          amplitude * math.sin(2 * math.pi * frequency * i / _sampleRate);
+    }
+    _frame = PcmSpectrumDecoder().add(samples, 1, _sampleRate);
+  }
+
+  @override
+  void start() {}
+
+  @override
+  void stop() {}
+
+  @override
+  Float32List? poll(int bands) {
+    final frame = _frame;
+    return frame == null
+        ? null
+        : logarithmicSpectrumBands(frame, bands, _sampleRate);
   }
 }
 
@@ -114,11 +140,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('mirrored spectrum places low and high bands on opposite sides',
+  testWidgets('mirrored spectrum plots real PCM and responds to quiet tones',
       (tester) async {
-    final source = _Spectrum()
-      ..level = .9
-      ..lowFrequencies = true;
+    final source = _PcmToneSource()..play(140, .75);
     final frame = GlobalKey();
     await tester.pumpWidget(MaterialApp(
       home: Center(
@@ -175,14 +199,14 @@ void main() {
     }
 
     final bass = await visibleBars();
-    expect(bass.left, greaterThan(500));
+    expect(bass.left, greaterThan(100));
     expect(bass.right, 0);
     expect(bass.top, closeTo(bass.bottom, 40));
-    source.lowFrequencies = false;
+    source.play(6000, .00046);
     final treble = await visibleBars();
-    expect(treble.right, greaterThan(500));
+    expect(treble.right, greaterThan(0));
     expect(treble.left, 0);
-    expect(treble.top, closeTo(treble.bottom, 40));
+    expect(treble.top, closeTo(treble.bottom, 3));
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

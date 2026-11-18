@@ -138,10 +138,7 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   @override
   void didUpdateWidget(covariant LargeScreenMusicVisual oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.effect == LargeScreenMusicEffect.spectrum &&
-        widget.effect != oldWidget.effect) {
-      _motion.clearSpectrum();
-    }
+    if (widget.effect != oldWidget.effect) _motion.clear();
     if (widget.demo && (!oldWidget.demo || widget.effect != oldWidget.effect)) {
       _demoFinished = false;
       _ticker.stop();
@@ -185,12 +182,16 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
     final seconds = math.min(delta.inMicroseconds / 1e6, .08);
     final showBands = widget.effect == LargeScreenMusicEffect.spectrum;
     final bands = _capture?.poll(showBands ? _spectrumBandCount : _bandCount);
-    final energy = widget.demo ? _demoEnergy(elapsed) : _measureEnergy(bands);
     if (showBands) {
       _motion.updateSpectrum(
-          widget.demo ? _demoSpectrum(elapsed, energy) : bands, seconds);
+          widget.demo ? _demoSpectrum(elapsed, _demoEnergy(elapsed)) : bands,
+          seconds);
+    } else {
+      _motion.advance(
+          widget.demo ? _demoEnergy(elapsed) : _measureEnergy(bands),
+          seconds,
+          widget.intensity);
     }
-    _motion.advance(energy, seconds, widget.intensity);
     if (widget.demo) {
       _demoFinished = elapsed >= _demoDuration;
       if (_demoFinished) _ticker.stop();
@@ -288,12 +289,15 @@ class _MusicMotion extends ChangeNotifier {
   double time = 0;
   double pulse = 0;
   double _bassFloor = 0;
+  bool _hasSpectrum = false;
 
-  bool get isSilent => energy == _silence;
+  bool get isSilent => energy == _silence && !_hasSpectrum;
 
   void updateSpectrum(Float32List? bands, double seconds) {
     final attack = 1 - math.exp(-seconds / .035);
     final decay = 1 - math.exp(-seconds / .16);
+    var hasSpectrum = false;
+    var changed = false;
     for (var i = 0; i < spectrum.length; i++) {
       final sample = bands?[i] ?? 0.0;
       final next = sample < .02 ? 0.0 : sample;
@@ -301,10 +305,12 @@ class _MusicMotion extends ChangeNotifier {
       final value =
           current + (next - current) * (next > current ? attack : decay);
       spectrum[i] = value < .005 ? 0 : value;
+      hasSpectrum = hasSpectrum || spectrum[i] > 0;
+      changed = changed || spectrum[i] != current;
     }
+    _hasSpectrum = hasSpectrum;
+    if (changed) notifyListeners();
   }
-
-  void clearSpectrum() => spectrum.fillRange(0, spectrum.length, 0);
 
   void advance(_Energy target, double seconds, double intensity) {
     if (isSilent && target == _silence) return;
@@ -331,7 +337,8 @@ class _MusicMotion extends ChangeNotifier {
     if (isSilent) return;
     energy = _silence;
     pulse = _bassFloor = 0;
-    clearSpectrum();
+    if (_hasSpectrum) spectrum.fillRange(0, spectrum.length, 0);
+    _hasSpectrum = false;
     notifyListeners();
   }
 
