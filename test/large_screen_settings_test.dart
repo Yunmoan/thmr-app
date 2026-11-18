@@ -33,7 +33,7 @@ void main() {
       autoHideControls: false,
       startFullScreen: false,
       keepScreenOn: true,
-      musicEffect: LargeScreenMusicEffect.nebula,
+      musicEffect: LargeScreenMusicEffect.fluid,
       musicEffectIntensity: .9,
       musicEffectLowPower: true,
     );

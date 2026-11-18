@@ -95,19 +95,74 @@ vec3 nebula(vec2 p) {
   return light;
 }
 
+vec2 curlAround(vec2 p, vec2 center, float spin) {
+  vec2 delta = p - center;
+  return center + rotatePlane(delta, spin / (1.0 + 6.0 * dot(delta, delta)));
+}
+
+vec4 fluid(vec2 uv, float opacity) {
+  float t = uTime;
+  vec2 aspect = sqrt(uSize / min(uSize.x, uSize.y));
+  vec2 p = (uv - 0.5) * aspect;
+  p.y = -p.y;
+
+  // Counter-rotating eddies advect the same pigment field. Bass accents push
+  // the eddies apart, while the mids control their shear and drift.
+  float push = 0.10 * uAudio.x + 0.14 * uAudio.w;
+  vec2 left = vec2(-0.36 - push + 0.08 * sin(0.63 * t),
+                   0.19 + 0.13 * cos(0.45 * t));
+  vec2 right = vec2(0.34 + push + 0.09 * cos(0.54 * t),
+                   -0.18 + 0.14 * sin(0.39 * t));
+  vec2 q = curlAround(p, left, 2.15 + 0.82 * uAudio.y + 0.75 * sin(0.73 * t));
+  q = curlAround(q, right, -2.05 - push * 5.0 + 0.61 * cos(0.58 * t));
+  q = rotatePlane(q, 0.32 + 0.16 * sin(0.31 * t));
+
+  float current = sin(dot(q, vec2(5.1, 5.8)) - 1.02 * t
+                       + 0.92 * sin(dot(q, vec2(3.1, -5.3)) + 0.53 * t));
+  float eddy = cos(dot(q, vec2(3.5, -5.4)) + 0.62 * t
+                   + 0.65 * sin(q.y * 5.8 - 0.44 * t));
+  float flow = 0.68 * current + 0.32 * eddy;
+  float depth = smoothstep(-0.54, 0.53, flow);
+  vec3 ink = mix(uShade, uAccent, 0.61) * 0.23;
+  vec3 dye = mix(uAccent, uShade, smoothstep(-0.67, 0.82, eddy));
+  vec3 color = mix(ink, dye, 0.16 + 0.79 * depth);
+
+  // Shape color fronts with a soft shoulder and thinner reflected crests.
+  // Highlights come and go across each fold as its orientation changes.
+  float detail = sin(dot(q, vec2(18.6, -14.5)) + 1.2 * sin(9.0 * q.x + 0.9 * t));
+  float folds = flow + (0.04 + 0.04 * uAudio.y) * detail;
+  float facing = smoothstep(-0.85, 0.87, eddy - 0.35 * current);
+  float shoulder = gaussian((folds - 0.08) * 3.2);
+  float ridge = gaussian((folds + 0.13) * 17.0);
+  float vein = gaussian((folds - 0.34 + 0.033 * detail) * 23.0);
+  float sheen = shoulder * facing * (0.31 + 0.14 * uAudio.x)
+              + ridge * (0.09 + 0.33 * facing) * (0.55 + 0.45 * uAudio.z)
+              + vein * (1.0 - facing) * 0.15;
+  color = mix(color, mix(uShade, uHighlight, 0.83), sheen);
+  color = mix(mix(color, vec3(1), 0.54), color, uDark);
+
+  float alpha = opacity * (0.70 + 0.30 * max(shoulder, depth));
+  return vec4(clamp(color, 0.0, 1.0) * alpha, alpha);
+}
+
 void main() {
   vec2 uv = FlutterFragCoord().xy / uSize;
+  float strength = smoothstep(0.015, 0.39, max(uAudio.x, max(uAudio.y, uAudio.z)));
+  // Soften the header and controls at the edges of the stage.
+  float edges = 0.63 + 0.37 * smoothstep(0.0, 0.19, min(uv.y, 1.0 - uv.y));
+  float opacity = strength * edges * uIntensity;
+  if (uEffect > 2.5) {
+    fragColor = fluid(uv, opacity);
+    return;
+  }
   vec2 p = (uv - 0.5) * uSize / min(uSize.x, uSize.y);
   p.y = -p.y;
   vec3 light = uEffect < 1.5 ? aurora(p) : nebula(p);
 
   float luminance = max(light.r, max(light.g, light.b));
-  float strength = smoothstep(0.015, 0.39, max(uAudio.x, max(uAudio.y, uAudio.z)));
   float tone = 1.0 - exp(-luminance * 1.6);
   vec3 hue = light / max(0.001, luminance);
   vec3 color = hue * mix(0.80 + 0.16 * tone, 0.38 + 0.62 * tone, uDark);
-  // Soften the header and controls at the edges of the stage.
-  float edges = 0.63 + 0.37 * smoothstep(0.0, 0.19, min(uv.y, 1.0 - uv.y));
-  float alpha = tone * strength * edges * uIntensity;
+  float alpha = tone * opacity;
   fragColor = vec4(color * alpha, alpha);
 }

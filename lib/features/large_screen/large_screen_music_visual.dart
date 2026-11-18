@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:ui' show FragmentProgram, FragmentShader, VertexMode, Vertices;
+import 'dart:ui'
+    show FragmentProgram, FragmentShader, PointMode, VertexMode, Vertices;
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
@@ -10,6 +11,8 @@ import 'package:flutter/scheduler.dart';
 import '../../core/player/spectrum.dart';
 import '../../core/state/large_screen_settings.dart';
 import '../../core/theme/thmr_theme.dart';
+
+const _spectrumBandCount = 96;
 
 class LargeScreenMusicVisual extends StatefulWidget {
   const LargeScreenMusicVisual({
@@ -39,6 +42,7 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   static const _demoDuration = Duration(milliseconds: 4800);
 
   final _motion = _MusicMotion();
+  late final _sampleBands = Float32List(_spectrumBandCount);
   late final Ticker _ticker = createTicker(_tick);
   FragmentShader? _shader;
   SpectrumSource? _capture;
@@ -47,7 +51,16 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   bool _shaderRequested = false;
   bool _demoFinished = false;
 
-  bool get _usesShader => widget.effect != LargeScreenMusicEffect.prism;
+  bool get _usesShader => switch (widget.effect) {
+        LargeScreenMusicEffect.aurora ||
+        LargeScreenMusicEffect.nebula ||
+        LargeScreenMusicEffect.fluid =>
+          true,
+        LargeScreenMusicEffect.off ||
+        LargeScreenMusicEffect.prism ||
+        LargeScreenMusicEffect.spectrum =>
+          false,
+      };
 
   bool get _visible {
     final state = WidgetsBinding.instance.lifecycleState;
@@ -98,6 +111,10 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   @override
   void didUpdateWidget(covariant LargeScreenMusicVisual oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.effect == LargeScreenMusicEffect.spectrum &&
+        widget.effect != oldWidget.effect) {
+      _motion.clearSpectrum();
+    }
     if (widget.demo && (!oldWidget.demo || widget.effect != oldWidget.effect)) {
       _demoFinished = false;
       _ticker.stop();
@@ -138,8 +155,14 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
     final interval = Duration(milliseconds: widget.lowPower ? 64 : 32);
     if (delta < interval) return;
     _lastTick = elapsed;
-    final energy = widget.demo ? _demoEnergy(elapsed) : _liveEnergy();
     final seconds = math.min(delta.inMicroseconds / 1e6, .08);
+    final showBands = widget.effect == LargeScreenMusicEffect.spectrum;
+    final bands = _capture?.poll(showBands ? _spectrumBandCount : _bandCount);
+    final energy = widget.demo ? _demoEnergy(elapsed) : _measureEnergy(bands);
+    if (showBands) {
+      _motion.updateSpectrum(
+          widget.demo ? _demoSpectrum(elapsed, energy) : bands, seconds);
+    }
     _motion.advance(energy, seconds, widget.intensity);
     if (widget.demo) {
       _demoFinished = elapsed >= _demoDuration;
@@ -149,13 +172,14 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
     }
   }
 
-  _Energy _liveEnergy() {
-    final data = _capture?.poll(_bandCount);
+  _Energy _measureEnergy(Float32List? data) {
     if (data == null) return _silence;
+    final lowEnd = data.length * 11 ~/ _bandCount;
+    final midEnd = data.length * 32 ~/ _bandCount;
     return (
-      bass: _level(data, 0, 11),
-      mids: _level(data, 11, 32),
-      treble: _level(data, 32, _bandCount),
+      bass: _level(data, 0, lowEnd),
+      mids: _level(data, lowEnd, midEnd),
+      treble: _level(data, midEnd, data.length),
     );
   }
 
@@ -167,6 +191,20 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
       mids: .44 + .15 * math.sin(t * 3.6),
       treble: .13 + .44 * math.exp(-5.2 * ((t / .3 + .4) % 1)),
     );
+  }
+
+  Float32List _demoSpectrum(Duration elapsed, _Energy energy) {
+    final seconds = elapsed.inMicroseconds / 1e6;
+    for (var i = 0; i < _sampleBands.length; i++) {
+      final x = i / (_sampleBands.length - 1);
+      final bass = energy.bass * math.exp(-5.0 * x);
+      final mids = energy.mids * math.exp(-4.0 * (x - .32) * (x - .32));
+      final highs = energy.treble * x;
+      final peaks = (.5 + .5 * math.cos(x * 49 + seconds * 2.0)) *
+          (.60 + .4 * math.cos(x * 93 - seconds * 1.2));
+      _sampleBands[i] = (bass * .8 + (mids + highs) * peaks).clamp(0.0, 1.0);
+    }
+    return _sampleBands;
   }
 
   // The source returns logarithmic bands. RMS lets a strong kick or cymbal
@@ -198,9 +236,18 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
     final theme = Theme.of(context);
     final tokens = theme.thmr;
     final dark = theme.brightness == Brightness.dark;
+    var shade = Color.lerp(tokens.accent, tokens.supportInk, .42)!;
+    if (widget.effect == LargeScreenMusicEffect.fluid) {
+      final pigment = HSLColor.fromColor(tokens.accent);
+      shade = pigment
+          .withHue((pigment.hue + 48) % 360)
+          .withSaturation((pigment.saturation * .8 + .10).clamp(0, 1))
+          .withLightness(dark ? .54 : .61)
+          .toColor();
+    }
     final palette = (
       accent: tokens.accent,
-      shade: Color.lerp(tokens.accent, tokens.supportInk, .42)!,
+      shade: shade,
       highlight: Color.lerp(
           tokens.accent, dark ? tokens.ink : tokens.codeInk, dark ? .62 : .25)!,
     );
@@ -226,12 +273,28 @@ typedef _Energy = ({double bass, double mids, double treble});
 const _Energy _silence = (bass: 0, mids: 0, treble: 0);
 
 class _MusicMotion extends ChangeNotifier {
+  final spectrum = Float32List(_spectrumBandCount);
   _Energy energy = _silence;
   double time = 0;
   double pulse = 0;
   double _bassFloor = 0;
 
   bool get isSilent => energy == _silence;
+
+  void updateSpectrum(Float32List? bands, double seconds) {
+    final attack = 1 - math.exp(-seconds / .035);
+    final decay = 1 - math.exp(-seconds / .16);
+    for (var i = 0; i < spectrum.length; i++) {
+      final sample = bands?[i] ?? 0.0;
+      final next = sample < .02 ? 0.0 : sample;
+      final current = spectrum[i];
+      final value =
+          current + (next - current) * (next > current ? attack : decay);
+      spectrum[i] = value < .005 ? 0 : value;
+    }
+  }
+
+  void clearSpectrum() => spectrum.fillRange(0, spectrum.length, 0);
 
   void advance(_Energy target, double seconds, double intensity) {
     if (isSilent && target == _silence) return;
@@ -258,6 +321,7 @@ class _MusicMotion extends ChangeNotifier {
     if (isSilent) return;
     energy = _silence;
     pulse = _bassFloor = 0;
+    clearSpectrum();
     notifyListeners();
   }
 
@@ -287,15 +351,29 @@ class _MusicVisualPainter extends CustomPainter {
   final bool dark;
   final _VisualPalette palette;
   late final _prism = _PrismMesh(palette);
+  late final _spectrum = _MirroredSpectrum(palette, intensity);
 
   @override
   void paint(Canvas canvas, Size size) {
     if (motion.isSilent || size.isEmpty) return;
-    final shader = this.shader;
-    if (shader == null) {
-      _prism.paint(canvas, size, motion, intensity);
-      return;
+    switch (effect) {
+      case LargeScreenMusicEffect.off:
+        return;
+      case LargeScreenMusicEffect.prism:
+        _prism.paint(canvas, size, motion, intensity);
+      case LargeScreenMusicEffect.spectrum:
+        _spectrum.paint(canvas, size, motion.spectrum);
+      case LargeScreenMusicEffect.aurora:
+        _paintShader(canvas, size, 1);
+      case LargeScreenMusicEffect.nebula:
+        _paintShader(canvas, size, 2);
+      case LargeScreenMusicEffect.fluid:
+        _paintShader(canvas, size, 3);
     }
+  }
+
+  void _paintShader(Canvas canvas, Size size, double style) {
+    final shader = this.shader!;
     // Uniform order matches shaders/large_screen_music.frag.
     shader
       ..setFloat(0, size.width)
@@ -307,7 +385,7 @@ class _MusicVisualPainter extends CustomPainter {
       ..setFloat(6, motion.energy.treble)
       ..setFloat(7, motion.pulse)
       ..setFloat(17, dark ? 1 : 0)
-      ..setFloat(18, effect == LargeScreenMusicEffect.aurora ? 1 : 2);
+      ..setFloat(18, style);
     _setShaderColor(shader, 8, palette.accent);
     _setShaderColor(shader, 11, palette.shade);
     _setShaderColor(shader, 14, palette.highlight);
@@ -327,6 +405,52 @@ class _MusicVisualPainter extends CustomPainter {
       intensity != oldDelegate.intensity ||
       dark != oldDelegate.dark ||
       palette != oldDelegate.palette;
+}
+
+/// Symmetric bars use the individual FFT bands, in rising frequency order.
+/// Interpolating the rows of thin strokes keeps the spacing on large displays.
+class _MirroredSpectrum {
+  _MirroredSpectrum(this.palette, this.intensity);
+
+  final _VisualPalette palette;
+  final double intensity;
+  final _paint = Paint();
+  Size? _size;
+  late Float32List _lines;
+
+  void paint(Canvas canvas, Size size, Float32List bands) {
+    if (_size != size) {
+      _size = size;
+      final count = (size.width / 4.6).round().clamp(48, 480);
+      _lines = Float32List(count * 4);
+      final spacing = size.width / count;
+      for (var i = 0; i < count; i++) {
+        _lines[i * 4] = _lines[i * 4 + 2] = (i + .5) * spacing;
+      }
+      _paint
+        ..strokeWidth = (spacing * .35).clamp(1, 2.6)
+        ..shader = LinearGradient(colors: [
+          palette.accent.withValues(alpha: intensity),
+          palette.highlight.withValues(alpha: intensity * .82),
+          palette.accent.withValues(alpha: intensity * .9),
+        ]).createShader(Offset.zero & size);
+    }
+
+    final count = _lines.length ~/ 4;
+    final center = size.height * .5;
+    final extent = size.height * .46 * (.4 + .6 * intensity);
+    final lastBand = bands.length - 1;
+    for (var i = 0; i < count; i++) {
+      final band = i * lastBand / (count - 1);
+      final low = band.toInt();
+      final high = math.min(low + 1, lastBand);
+      final level = bands[low] + (bands[high] - bands[low]) * (band - low);
+      final height = level * math.sqrt(level) * extent;
+      _lines[i * 4 + 1] = center - height;
+      _lines[i * 4 + 3] = center + height;
+    }
+    canvas.drawRawPoints(PointMode.lines, _lines, _paint);
+  }
 }
 
 /// Draw the glass rims as one mesh with soft, colored edges. The topology stays

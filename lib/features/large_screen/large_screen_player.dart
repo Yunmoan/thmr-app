@@ -256,6 +256,8 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                   body: Stack(fit: StackFit.expand, children: [
                     ThmrBackground(
                       underlay: musicVisual,
+                      underlayAboveWash:
+                          settings.musicEffect == LargeScreenMusicEffect.fluid,
                       showIllustration: settings.showIllustration,
                       illustrationOpacity: settings.illustrationOpacity,
                       alignment: settings.illustrationPosition ==

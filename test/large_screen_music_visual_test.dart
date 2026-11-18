@@ -12,6 +12,7 @@ import 'package:thmr_app/features/large_screen/large_screen_music_visual.dart';
 class _Spectrum implements SpectrumSource {
   int starts = 0, stops = 0, polls = 0;
   double? level;
+  bool? lowFrequencies;
 
   @override
   void start() => starts++;
@@ -23,9 +24,11 @@ class _Spectrum implements SpectrumSource {
   Float32List? poll(int bands) {
     polls++;
     final amplitude = level;
-    return amplitude == null
-        ? null
-        : (Float32List(bands)..fillRange(0, bands, amplitude));
+    if (amplitude == null) return null;
+    final split = bands ~/ 4;
+    return Float32List(bands)
+      ..fillRange(lowFrequencies == false ? bands - split : 0,
+          lowFrequencies == true ? split : bands, amplitude);
   }
 }
 
@@ -97,7 +100,7 @@ void main() {
       expect(await _rasterHash(tester, frame), isNot(rendered),
           reason: '${effect.name} needs to reflect a new character palette');
     }
-    expect(scenes.length, 3);
+    expect(scenes.length, 5);
     expect(source.starts, 1, reason: 'style changes reuse the live source');
 
     source.level = null;
@@ -109,6 +112,78 @@ void main() {
     await tester.pumpAndSettle();
     expect(source.stops, 1);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mirrored spectrum places low and high bands on opposite sides',
+      (tester) async {
+    final source = _Spectrum()
+      ..level = .9
+      ..lowFrequencies = true;
+    final frame = GlobalKey();
+    await tester.pumpWidget(MaterialApp(
+      home: Center(
+        child: RepaintBoundary(
+          key: frame,
+          child: SizedBox(
+            width: 480,
+            height: 272,
+            child: LargeScreenMusicVisual(
+              effect: LargeScreenMusicEffect.spectrum,
+              intensity: 1,
+              lowPower: false,
+              playing: true,
+              source: source,
+            ),
+          ),
+        ),
+      ),
+    ));
+    Future<({int left, int right, int top, int bottom})> visibleBars() async {
+      for (var i = 0; i < 32; i++) {
+        await tester.pump(const Duration(milliseconds: 34));
+      }
+      final layer =
+          frame.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      return (await tester.runAsync(() async {
+        final image = await layer.toImage(pixelRatio: .5);
+        try {
+          final pixels = (await image.toByteData())!;
+          final centerX = image.width ~/ 2;
+          final centerY = image.height ~/ 2;
+          var left = 0, right = 0, top = 0, bottom = 0;
+          for (var y = 0; y < image.height; y++) {
+            for (var x = 0; x < image.width; x++) {
+              final alpha = pixels.getUint8((y * image.width + x) * 4 + 3);
+              if (alpha < 16) continue;
+              if (x < centerX) {
+                left++;
+              } else {
+                right++;
+              }
+              if (y < centerY) {
+                top++;
+              } else {
+                bottom++;
+              }
+            }
+          }
+          return (left: left, right: right, top: top, bottom: bottom);
+        } finally {
+          image.dispose();
+        }
+      }))!;
+    }
+
+    final bass = await visibleBars();
+    expect(bass.left, greaterThan(500));
+    expect(bass.right, 0);
+    expect(bass.top, closeTo(bass.bottom, 40));
+    source.lowFrequencies = false;
+    final treble = await visibleBars();
+    expect(treble.right, greaterThan(500));
+    expect(treble.left, 0);
+    expect(treble.top, closeTo(treble.bottom, 40));
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('low-power cadence and hidden or reduced-motion capture',

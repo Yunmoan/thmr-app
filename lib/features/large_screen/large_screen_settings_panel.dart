@@ -236,6 +236,8 @@ class LargeScreenSettingsPanel extends ConsumerWidget {
               (LargeScreenMusicEffect.prism, '棱镜涟漪'),
               (LargeScreenMusicEffect.aurora, '极光流场'),
               (LargeScreenMusicEffect.nebula, '星云漫游'),
+              (LargeScreenMusicEffect.fluid, '流体渐变'),
+              (LargeScreenMusicEffect.spectrum, '镜像频谱'),
             ],
             onChanged: (v) => save(settings.copyWith(musicEffect: v)),
           ),

@@ -16,7 +16,7 @@ enum LargeScreenCoverFit { cover, contain }
 
 enum LargeScreenIllustrationPosition { left, right }
 
-enum LargeScreenMusicEffect { off, aurora, nebula, prism }
+enum LargeScreenMusicEffect { off, aurora, nebula, prism, fluid, spectrum }
 
 class LargeScreenSettings {
   static const defaultMusicEffect = LargeScreenMusicEffect.prism;

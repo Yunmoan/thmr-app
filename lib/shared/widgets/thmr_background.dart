@@ -9,6 +9,7 @@ class ThmrBackground extends StatelessWidget {
     super.key,
     required this.child,
     this.underlay,
+    this.underlayAboveWash = false,
     this.illustration,
     this.alignment = Alignment.bottomLeft,
     this.showIllustration = true,
@@ -18,6 +19,9 @@ class ThmrBackground extends StatelessWidget {
   final Widget child;
   final Widget? underlay;
 
+  /// Place the motion between the paper wash and the character illustration.
+  final bool underlayAboveWash;
+
   /// Defaults to the current character theme's illustration.
   final String? illustration;
   final Alignment alignment;
@@ -26,13 +30,29 @@ class ThmrBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).thmr;
+    final theme = Theme.of(context);
+    final tokens = theme.thmr;
     final asset = illustration ?? tokens.illustration;
     final compact = MediaQuery.sizeOf(context).width < 700;
     final motionDuration =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false
             ? Duration.zero
             : ThmrMotion.duration;
+    final washBehindArt = underlay != null && underlayAboveWash;
+    // Full-bleed color can sit above the wash. Keep the illustration soft on
+    // that surface with the same amount of translucency as the usual paper.
+    final artOpacity = washBehindArt
+        ? illustrationOpacity *
+            (theme.brightness == Brightness.dark ? .34 : .42)
+        : illustrationOpacity;
+    final wash = RepaintBoundary(
+      key: const ValueKey('background-wash'),
+      child: AnimatedContainer(
+        duration: motionDuration,
+        curve: ThmrMotion.enterCurve,
+        decoration: BoxDecoration(gradient: tokens.pageGradient),
+      ),
+    );
     return AnimatedContainer(
       duration: motionDuration,
       curve: ThmrMotion.enterCurve,
@@ -40,9 +60,11 @@ class ThmrBackground extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
+          if (washBehindArt) wash,
           if (underlay != null) underlay!,
           // The illustration stays still while pages and player controls animate.
           Offstage(
+            key: const ValueKey('background-illustration'),
             offstage: !showIllustration,
             child: RepaintBoundary(
               child: Align(
@@ -51,7 +73,7 @@ class ThmrBackground extends StatelessWidget {
                   heightFactor: compact ? 0.8 : 0.9,
                   alignment: alignment,
                   child: Opacity(
-                    opacity: illustrationOpacity,
+                    opacity: artOpacity,
                     child: ThmrAnimatedContent(
                       alignment: alignment,
                       child: Image.asset(
@@ -69,13 +91,7 @@ class ThmrBackground extends StatelessWidget {
             ),
           ),
           // Semi-transparent wash keeps the artwork visible across pages.
-          RepaintBoundary(
-            child: AnimatedContainer(
-              duration: motionDuration,
-              curve: ThmrMotion.enterCurve,
-              decoration: BoxDecoration(gradient: tokens.pageGradient),
-            ),
-          ),
+          if (!washBehindArt) wash,
           child,
         ],
       ),
