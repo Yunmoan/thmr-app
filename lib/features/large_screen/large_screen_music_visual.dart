@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:ui' show FragmentProgram, FragmentShader;
+import 'dart:ui' show FragmentProgram, FragmentShader, VertexMode, Vertices;
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
@@ -275,13 +275,14 @@ class _MusicVisualPainter extends CustomPainter {
   final double intensity;
   final bool dark;
   final Color accent;
+  late final _prism = _PrismMesh(accent, dark);
 
   @override
   void paint(Canvas canvas, Size size) {
     if (motion.isSilent || size.isEmpty) return;
     final shader = this.shader;
     if (shader == null) {
-      _paintPrism(canvas, size);
+      _prism.paint(canvas, size, motion, intensity);
       return;
     }
     // Uniform order matches shaders/large_screen_music.frag.
@@ -302,87 +303,115 @@ class _MusicVisualPainter extends CustomPainter {
     canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
   }
 
-  // Draw narrow paths and ordinary gradients. The rest of the screen needs no
-  // custom shader, blur pass or intermediate surface for this style.
-  void _paintPrism(Canvas canvas, Size size) {
-    final energy = motion.energy;
-    final peak = math.max(energy.bass, math.max(energy.mids, energy.treble));
-    final opacity =
-        Curves.easeOut.transform((peak / .38).clamp(0, 1)) * intensity;
-    final scale = size.shortestSide;
-    final blue = Color.lerp(
-        accent, dark ? const Color(0xff9cd5ff) : const Color(0xff466bb7), .78)!;
-    final pink = Color.lerp(
-        accent, dark ? const Color(0xfff6abd8) : const Color(0xffb050a1), .65)!;
-    final stroke = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeJoin = StrokeJoin.round;
-    canvas.save();
-    canvas.clipRect(Offset.zero & size);
-    canvas.translate(size.width * .54, size.height * .52);
-    canvas.rotate(-.29);
-
-    for (var ring = 2; ring >= 0; ring--) {
-      final spin = motion.time * (.24 - ring * .048) + ring * 1.93;
-      final radius = scale *
-          (.22 + ring * .146 + energy.bass * .048 + motion.pulse * .058);
-      final width = scale * (.012 + .012 * energy.bass + .006 * motion.pulse);
-      final bend = scale * (.021 + .023 * energy.mids);
-      final path = Path();
-      const segments = 72;
-      for (var segment = 0; segment < segments; segment++) {
-        final angle = segment * 2 * math.pi / segments;
-        final distance = radius +
-            bend *
-                (math.sin(angle * 3 - spin) + .41 * math.cos(angle * 5 + spin));
-        final x = math.cos(angle) * distance;
-        final y = math.sin(angle) * distance * .76;
-        if (segment == 0) {
-          path.moveTo(x, y);
-        } else {
-          path.lineTo(x, y);
-        }
-      }
-      path.close();
-      final visibility = opacity * (1 - ring * .16);
-      stroke
-        ..shader = null
-        ..color = blue.withValues(alpha: .12 * visibility)
-        ..strokeWidth = width * 1.75;
-      canvas.drawPath(path, stroke);
-
-      stroke
-        ..color = const Color(0xffffffff)
-        ..shader = SweepGradient(
-          transform: GradientRotation(spin),
-          colors: [
-            blue.withValues(alpha: .07 * visibility),
-            blue.withValues(alpha: .68 * visibility),
-            accent.withValues(alpha: .30 * visibility),
-            pink.withValues(alpha: .09 * visibility),
-            pink.withValues(alpha: .74 * visibility),
-            blue.withValues(alpha: .07 * visibility),
-          ],
-          stops: const [0, .16, .31, .55, .78, 1],
-        ).createShader(Rect.fromCircle(center: Offset.zero, radius: radius))
-        ..strokeWidth = width;
-      canvas.drawPath(path, stroke);
-
-      // A thin offset reflection gives the colored band a beveled edge.
-      stroke
-        ..shader = null
-        ..color =
-            pink.withValues(alpha: (.12 + .25 * energy.treble) * visibility)
-        ..strokeWidth = math.max(.8, scale * .0016);
-      canvas.drawPath(path.shift(Offset(-width * .45, width * .4)), stroke);
-    }
-    canvas.restore();
-  }
-
   @override
   bool shouldRepaint(_MusicVisualPainter oldDelegate) =>
       effect != oldDelegate.effect ||
       intensity != oldDelegate.intensity ||
       dark != oldDelegate.dark ||
       accent != oldDelegate.accent;
+}
+
+/// Draw the glass rims as one mesh with soft, colored edges. The topology stays
+/// fixed, so the raster thread can skip path tessellation and draw only the rims.
+class _PrismMesh {
+  _PrismMesh(Color accent, bool dark)
+      : _blue = Color.lerp(accent,
+            dark ? const Color(0xff9cd5ff) : const Color(0xff466bb7), .78)!,
+        _rose = Color.lerp(accent,
+            dark ? const Color(0xfff6abd8) : const Color(0xffb050a1), .65)!,
+        _glint = dark ? const Color(0xffd7e9ff) : const Color(0xff605599);
+
+  static const _rings = 3;
+  static const _segments = 96;
+  static const _bevel = [
+    (offset: -1.25, alpha: .0),
+    (offset: -.52, alpha: .32),
+    (offset: -.30, alpha: .88),
+    (offset: .16, alpha: .60),
+    (offset: .70, alpha: .18),
+    (offset: 1.25, alpha: .0),
+  ];
+  static final _ringVertices = _segments * _bevel.length;
+  static final _angles =
+      List.generate(_segments, (i) => i * 2 * math.pi / _segments);
+  static final _directions =
+      _angles.map((a) => Offset(math.cos(a), math.sin(a) * .76)).toList();
+  static final _indices = _buildIndices();
+
+  final _positions = Float32List(_rings * _ringVertices * 2);
+  final _colors = Int32List(_rings * _ringVertices);
+  final _paint = Paint()..isAntiAlias = false;
+  final Color _blue, _rose, _glint;
+
+  static Uint16List _buildIndices() {
+    final strips = _bevel.length - 1;
+    final indices = Uint16List(_rings * _segments * strips * 6);
+    var index = 0;
+    for (var ring = 0; ring < _rings; ring++) {
+      final start = ring * _ringVertices;
+      for (var segment = 0; segment < _segments; segment++) {
+        final left = start + segment * _bevel.length;
+        final right = start + (segment + 1) % _segments * _bevel.length;
+        for (var lane = 0; lane < strips; lane++) {
+          // Two triangles connect adjacent radial strips.
+          indices[index++] = left + lane;
+          indices[index++] = right + lane;
+          indices[index++] = left + lane + 1;
+          indices[index++] = left + lane + 1;
+          indices[index++] = right + lane;
+          indices[index++] = right + lane + 1;
+        }
+      }
+    }
+    return indices;
+  }
+
+  void paint(Canvas canvas, Size size, _MusicMotion motion, double intensity) {
+    final energy = motion.energy;
+    final peak = math.max(energy.bass, math.max(energy.mids, energy.treble));
+    final opacity =
+        Curves.easeOut.transform((peak / .38).clamp(0, 1)) * intensity;
+    final scale = size.shortestSide;
+    final pulse = energy.bass * .048 + motion.pulse * .058;
+    final width = scale * (.011 + .012 * energy.bass + .006 * motion.pulse);
+    final bend = scale * (.021 + .023 * energy.mids);
+    var vertex = 0;
+    for (var ring = 0; ring < _rings; ring++) {
+      final spin = motion.time * (.34 - ring * .061) + ring * 1.93;
+      final radius = scale * (.22 + ring * .146 + pulse);
+      final visibility = opacity * (1 - ring * .14);
+      for (var segment = 0; segment < _segments; segment++) {
+        final angle = _angles[segment];
+        final axis = _directions[segment];
+        final distance = radius +
+            bend *
+                (math.sin(angle * 3 - spin) + .41 * math.cos(angle * 5 + spin));
+        final sweep = .5 + .5 * math.cos(angle * 2 + spin);
+        final alpha = 255 * visibility * (.15 + .85 * sweep * sweep);
+        final hue = .5 + .5 * math.sin(angle * 2 - spin * .7);
+        final tint = Color.lerp(_blue, _rose, hue)!;
+        final rgb = tint.toARGB32() & 0xffffff;
+        final reflection =
+            Color.lerp(tint, _glint, .28 + .35 * energy.treble)!.toARGB32() &
+                0xffffff;
+        for (final face in _bevel) {
+          final r = distance + width * face.offset;
+          _positions[vertex * 2] = axis.dx * r;
+          _positions[vertex * 2 + 1] = axis.dy * r;
+          final color = face.alpha > .8 ? reflection : rgb;
+          _colors[vertex++] = ((alpha * face.alpha).round() << 24) | color;
+        }
+      }
+    }
+
+    final mesh = Vertices.raw(VertexMode.triangles, _positions,
+        indices: _indices, colors: _colors);
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    canvas.translate(size.width * .54, size.height * .52);
+    canvas.rotate(-.29);
+    canvas.drawVertices(mesh, BlendMode.dst, _paint);
+    canvas.restore();
+    mesh.dispose();
+  }
 }
