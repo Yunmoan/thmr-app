@@ -144,8 +144,13 @@ class _Harness {
       {Size size = const Size(1280, 720),
       double scale = 1,
       bool desktopRoot = false,
-      bool reducedMotion = false}) async {
-    SharedPreferences.setMockInitialValues({});
+      bool reducedMotion = false,
+      bool startFullScreen = true}) async {
+    // The stage tests exercise native fullscreen paths; opt in explicitly now
+    // that the product default is windowed.
+    SharedPreferences.setMockInitialValues({
+      'largeScreen': '{"startFullScreen":$startFullScreen}',
+    });
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = size;
     tester.binding.defaultBinaryMessenger

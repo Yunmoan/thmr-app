@@ -38,6 +38,7 @@ void main() {
       musicEffectIntensity: .9,
       musicEffectLowPower: true,
       fluidMotion: LargeScreenFluidMotion.tide,
+      themeTint: false,
     );
     await controller.update(chosen);
     final restored = LargeScreenSettingsController();
@@ -193,12 +194,14 @@ void main() {
         expect(container.read(largeScreenSettingsProvider).fluidMotion,
             LargeScreenFluidMotion.tide);
         expect(tester.widget<ChoiceChip>(tide).selected, isTrue);
+        expect(find.text('主题染色'), findsOneWidget);
         final off = card(LargeScreenMusicEffect.off);
         await tester.ensureVisible(off);
         await tester.tap(off);
         await tester.pumpAndSettle();
         expect(find.text('动效强度'), findsNothing);
         expect(find.text('流体运动'), findsNothing);
+        expect(find.text('主题染色'), findsNothing);
         final prism = card(LargeScreenMusicEffect.prism);
         await tester.ensureVisible(prism);
         await tester.tap(prism);

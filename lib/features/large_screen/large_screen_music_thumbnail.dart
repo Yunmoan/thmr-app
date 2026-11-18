@@ -9,10 +9,12 @@ class LargeScreenMusicThumbnail extends StatelessWidget {
     super.key,
     required this.effect,
     required this.stageTheme,
+    this.themeTint = true,
   });
 
   final LargeScreenMusicEffect effect;
   final ThemeData stageTheme;
+  final bool themeTint;
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +51,7 @@ class LargeScreenMusicThumbnail extends StatelessWidget {
                   lowPower: true,
                   playing: false,
                   source: null,
+                  themeTint: themeTint,
                   demo: true,
                 ),
             },

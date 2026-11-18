@@ -52,6 +52,7 @@ class LargeScreenMusicVisual extends StatefulWidget {
     required this.source,
     this.artworkColors,
     this.fluidMotion = LargeScreenFluidMotion.automatic,
+    this.themeTint = true,
     this.demo = false,
   });
 
@@ -62,6 +63,7 @@ class LargeScreenMusicVisual extends StatefulWidget {
   final SpectrumSource? source;
   final FluidColors? artworkColors;
   final LargeScreenFluidMotion fluidMotion;
+  final bool themeTint;
   final bool demo;
 
   @override
@@ -317,6 +319,7 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
             palette: musicPaletteFor(theme, widget.effect),
             paper: theme.thmr.pageBg,
             fluidMotion: widget.fluidMotion,
+            themeTint: widget.themeTint,
           ),
         ),
       ),
@@ -439,6 +442,7 @@ class _MusicVisualPainter extends CustomPainter {
     required this.palette,
     required this.paper,
     required this.fluidMotion,
+    required this.themeTint,
   }) : super(repaint: motion);
 
   final FragmentShader? shader;
@@ -449,6 +453,7 @@ class _MusicVisualPainter extends CustomPainter {
   final LargeScreenMusicPalette palette;
   final Color paper;
   final LargeScreenFluidMotion fluidMotion;
+  final bool themeTint;
   late final _prism = _PrismMesh(palette);
   late final _spectrum = _MirroredSpectrum(palette, intensity);
   final _shaderPaint = Paint();
@@ -503,7 +508,8 @@ class _MusicVisualPainter extends CustomPainter {
       shader
         ..setFloat(34, drift)
         ..setFloat(35, orbit)
-        ..setFloat(36, tide);
+        ..setFloat(36, tide)
+        ..setFloat(37, themeTint ? 1 : 0);
     }
     canvas.drawRect(Offset.zero & size, _shaderPaint..shader = shader);
   }
@@ -540,7 +546,8 @@ class _MusicVisualPainter extends CustomPainter {
       dark != oldDelegate.dark ||
       palette != oldDelegate.palette ||
       paper != oldDelegate.paper ||
-      fluidMotion != oldDelegate.fluidMotion;
+      fluidMotion != oldDelegate.fluidMotion ||
+      themeTint != oldDelegate.themeTint;
 }
 
 /// Symmetric bars use the individual FFT bands, in rising frequency order.

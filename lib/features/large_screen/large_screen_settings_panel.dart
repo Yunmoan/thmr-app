@@ -239,10 +239,11 @@ class LargeScreenSettingsPanel extends ConsumerWidget {
           child: _MusicEffectPicker(
             value: settings.musicEffect,
             stageTheme: stageTheme,
+            themeTint: settings.themeTint,
             onChanged: (v) => save(settings.copyWith(musicEffect: v)),
           ),
         ),
-        if (settings.musicEffect == LargeScreenMusicEffect.fluid)
+        if (settings.musicEffect == LargeScreenMusicEffect.fluid) ...[
           _SettingRow(
             title: '流体运动',
             description: '自动模式在三种运动之间缓慢过渡',
@@ -257,6 +258,13 @@ class LargeScreenSettingsPanel extends ConsumerWidget {
               onChanged: (v) => save(settings.copyWith(fluidMotion: v)),
             ),
           ),
+          _SettingSwitch(
+            title: '主题染色',
+            description: '在流体上叠一层当前角色主题的淡色',
+            value: settings.themeTint,
+            onChanged: (v) => save(settings.copyWith(themeTint: v)),
+          ),
+        ],
         if (settings.musicEffect != LargeScreenMusicEffect.off) ...[
           _SettingRow(
             title: '动效强度',
@@ -407,11 +415,13 @@ class _MusicEffectPicker extends StatelessWidget {
   const _MusicEffectPicker({
     required this.value,
     required this.stageTheme,
+    required this.themeTint,
     required this.onChanged,
   });
 
   final LargeScreenMusicEffect value;
   final ThemeData stageTheme;
+  final bool themeTint;
   final ValueChanged<LargeScreenMusicEffect> onChanged;
 
   static const _options = [
@@ -438,7 +448,9 @@ class _MusicEffectPicker extends StatelessWidget {
                   key: ValueKey('music-effect-${effect.name}'),
                   label: label,
                   graphic: (_) => LargeScreenMusicThumbnail(
-                      effect: effect, stageTheme: stageTheme),
+                      effect: effect,
+                      stageTheme: stageTheme,
+                      themeTint: themeTint),
                   selected: value == effect,
                   onTap: () => onChanged(effect),
                 ),

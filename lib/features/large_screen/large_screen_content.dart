@@ -293,20 +293,11 @@ class _TrackInfo extends StatelessWidget {
                         ? CrossAxisAlignment.center
                         : CrossAxisAlignment.start,
                     children: [
-                      Wrap(
-                          alignment: centered
-                              ? WrapAlignment.center
-                              : WrapAlignment.start,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 14,
-                          runSpacing: 6,
-                          children: [
-                            Text('当前曲目',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                    color: theme.thmr.mutedInk,
-                                    letterSpacing: 2)),
-                            LiveBadge(active: phase == PlaybackPhase.online),
-                          ]),
+                      Text('当前曲目',
+                          textAlign:
+                              centered ? TextAlign.center : TextAlign.left,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                              color: theme.thmr.mutedInk, letterSpacing: 2)),
                       const SizedBox(height: 14),
                       Text(
                           title?.isNotEmpty == true
@@ -323,17 +314,26 @@ class _TrackInfo extends StatelessWidget {
                               fontSize: fontSize,
                               fontWeight: FontWeight.w800,
                               height: 1.2)),
-                      if (current?.artist.trim().isNotEmpty == true) ...[
-                        const SizedBox(height: 14),
-                        Text(current!.artist,
-                            textAlign:
-                                centered ? TextAlign.center : TextAlign.left,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleLarge?.copyWith(
-                                fontSize: (fontSize * .45).clamp(18, 34),
-                                color: theme.thmr.mutedInk)),
-                      ],
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          if (current?.artist.trim().isNotEmpty == true) ...[
+                            Expanded(
+                              child: Text(current!.artist,
+                                  textAlign: centered
+                                      ? TextAlign.center
+                                      : TextAlign.left,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                      fontSize: (fontSize * .45).clamp(18, 34),
+                                      color: theme.thmr.mutedInk)),
+                            ),
+                            const SizedBox(width: 12),
+                          ],
+                          LiveBadge(active: phase == PlaybackPhase.online),
+                        ],
+                      ),
                       if (showProgress) ...[
                         const SizedBox(height: 26),
                         LargeScreenProgress(

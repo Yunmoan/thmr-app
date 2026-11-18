@@ -40,7 +40,7 @@ class LargeScreenSettings {
     this.showQueueCovers = true,
     this.showControls = true,
     this.autoHideControls = true,
-    this.startFullScreen = true,
+    this.startFullScreen = false,
     this.keepScreenOn = false,
     this.widgets = const [],
     this.illustrationOpacity = .9,
@@ -49,6 +49,7 @@ class LargeScreenSettings {
     this.musicEffectIntensity = defaultMusicEffectIntensity,
     this.musicEffectLowPower = false,
     this.fluidMotion = LargeScreenFluidMotion.automatic,
+    this.themeTint = true,
   });
 
   final LargeScreenLayout layout;
@@ -76,6 +77,7 @@ class LargeScreenSettings {
   final double musicEffectIntensity;
   final bool musicEffectLowPower;
   final LargeScreenFluidMotion fluidMotion;
+  final bool themeTint;
 
   LargeScreenSettings copyWith({
     LargeScreenLayout? layout,
@@ -101,6 +103,7 @@ class LargeScreenSettings {
     double? musicEffectIntensity,
     bool? musicEffectLowPower,
     LargeScreenFluidMotion? fluidMotion,
+    bool? themeTint,
   }) =>
       LargeScreenSettings(
         layout: layout ?? this.layout,
@@ -128,6 +131,7 @@ class LargeScreenSettings {
             _effectIntensity(musicEffectIntensity ?? this.musicEffectIntensity),
         musicEffectLowPower: musicEffectLowPower ?? this.musicEffectLowPower,
         fluidMotion: fluidMotion ?? this.fluidMotion,
+        themeTint: themeTint ?? this.themeTint,
       );
 
   factory LargeScreenSettings.fromJson(Map<String, dynamic> json) {
@@ -176,6 +180,7 @@ class LargeScreenSettings {
       musicEffectLowPower: json['musicEffectLowPower'] == true,
       fluidMotion: choice('fluidMotion', LargeScreenFluidMotion.values,
           LargeScreenFluidMotion.automatic),
+      themeTint: json['themeTint'] is bool ? json['themeTint'] as bool : true,
     );
   }
 
@@ -208,6 +213,7 @@ class LargeScreenSettings {
         'musicEffectIntensity': musicEffectIntensity,
         'musicEffectLowPower': musicEffectLowPower,
         'fluidMotion': fluidMotion.name,
+        'themeTint': themeTint,
       };
 }
 

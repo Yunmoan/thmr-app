@@ -16,6 +16,7 @@ uniform vec3 uFluidBottomLeft;
 uniform vec3 uFluidBottomRight;
 uniform vec3 uFluidPaper;
 uniform vec3 uFluidMotion;  // Drift, orbit, tide.
+uniform float uThemeTint;
 
 out vec4 fragColor;
 
@@ -162,8 +163,8 @@ vec4 fluid(vec2 uv) {
   vec3 color = mix(uFluidPaper, pigment, presence);
   color += uHighlight * smoothstep(0.80, 0.98, sheen) * (0.05 + 0.03 * uAudio.z);
 
-  // A faint character-theme wash unifies the cover palette with the stage.
-  color = mix(color, uAccent, 0.05 + 0.07 * sheen);
+  // A faint pale-theme wash unifies the cover palette with the stage.
+  color = mix(color, uHighlight, uThemeTint * (0.08 + 0.08 * sheen));
   float luminance = dot(color, vec3(0.299, 0.587, 0.114));
   color = mix(vec3(luminance), color, 1.10);
 

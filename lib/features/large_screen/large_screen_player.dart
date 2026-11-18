@@ -265,6 +265,7 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                           lowPower: settings.musicEffectLowPower,
                           fluidMotion: settings.fluidMotion,
                           artworkColors: artworkColors,
+                          themeTint: settings.themeTint,
                           demo: demoVisual,
                           playing: playing,
                           source: source,
@@ -339,20 +340,22 @@ class _Header extends ConsumerWidget {
               width: 42, height: 42, excludeFromSemantics: true)),
       const SizedBox(width: 12),
       Expanded(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('东方音乐电台',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w800, height: 1.2)),
-        const SizedBox(height: 4),
-        Text('Touhou Music Radio',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.labelSmall
-                ?.copyWith(color: theme.thmr.mutedInk, letterSpacing: 1)),
-      ])),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+            Text('东方音乐电台',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w800, height: 1.2)),
+            const SizedBox(height: 4),
+            Text('Touhou Music Radio',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: theme.thmr.mutedInk, letterSpacing: 1)),
+          ])),
     ]);
     final channels = ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 240),
