@@ -70,11 +70,29 @@ void main() {
     expect(bounded.state.textScale, .8);
     expect(bounded.state.showProgress, isTrue);
     expect(bounded.state.keepScreenOn, isFalse);
-    expect(bounded.state.musicEffect, LargeScreenMusicEffect.off);
+    expect(bounded.state.musicEffect, LargeScreenMusicEffect.prism);
     expect(bounded.state.musicEffectIntensity, 1);
     expect(bounded.state.musicEffectLowPower, isFalse);
     expect(LargeScreenSettings.fromJson(const {}).musicEffectIntensity, .6);
     bounded.dispose();
+  });
+
+  test('older settings use the default effect and a saved off choice survives',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'largeScreen': jsonEncode({'layout': 'coverRight'}),
+    });
+    final legacy = LargeScreenSettingsController();
+    await legacy.ready;
+    expect(legacy.state.layout, LargeScreenLayout.coverRight);
+    expect(legacy.state.musicEffect, LargeScreenMusicEffect.prism);
+    await legacy
+        .update(legacy.state.copyWith(musicEffect: LargeScreenMusicEffect.off));
+    final restored = LargeScreenSettingsController();
+    await restored.ready;
+    expect(restored.state.musicEffect, LargeScreenMusicEffect.off);
+    legacy.dispose();
+    restored.dispose();
   });
 
   test('a user selection wins over startup and rapid saves retain the last one',
@@ -141,9 +159,15 @@ void main() {
         expect(container.read(largeScreenSettingsProvider).queue,
             LargeScreenQueue.hidden);
         expect(find.text('队列曲目数'), findsNothing);
+        final prism = find.widgetWithText(ChoiceChip, '棱镜涟漪');
+        expect(tester.widget<ChoiceChip>(prism).selected, isTrue);
+        final off = find.widgetWithText(ChoiceChip, '关闭');
+        await tester.ensureVisible(off);
+        await tester.tap(off);
+        await tester.pumpAndSettle();
         expect(find.text('动效强度'), findsNothing);
-        await tester.ensureVisible(find.text('棱镜涟漪'));
-        await tester.tap(find.text('棱镜涟漪'));
+        await tester.ensureVisible(prism);
+        await tester.tap(prism);
         await tester.pumpAndSettle();
         final intensity = find.byWidgetPredicate((widget) =>
             widget is ThmrSlider && widget.semanticsLabel == '动效强度');

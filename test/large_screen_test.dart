@@ -113,8 +113,7 @@ class _Harness {
   late final container = ProviderContainer(overrides: [
     stationProvider.overrideWith((ref) => station),
     playbackProvider.overrideWith((ref) => playback),
-    if (spectrum != null)
-      largeScreenSpectrumProvider.overrideWithValue(spectrum),
+    largeScreenSpectrumProvider.overrideWithValue(spectrum),
     streamUrlProvider.overrideWithValue('https://radio.test/live'),
     channelCatalogProvider.overrideWith((ref) async => const [
           RadioChannel(id: 'touhou', name: '综合频道'),

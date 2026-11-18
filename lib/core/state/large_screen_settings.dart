@@ -19,6 +19,7 @@ enum LargeScreenIllustrationPosition { left, right }
 enum LargeScreenMusicEffect { off, aurora, nebula, prism }
 
 class LargeScreenSettings {
+  static const defaultMusicEffect = LargeScreenMusicEffect.prism;
   static const minMusicEffectIntensity = .2;
   static const defaultMusicEffectIntensity = .6;
 
@@ -42,7 +43,7 @@ class LargeScreenSettings {
     this.widgets = const [],
     this.illustrationOpacity = .9,
     this.contentMargin = 32,
-    this.musicEffect = LargeScreenMusicEffect.off,
+    this.musicEffect = defaultMusicEffect,
     this.musicEffectIntensity = defaultMusicEffectIntensity,
     this.musicEffectLowPower = false,
   });
@@ -163,8 +164,8 @@ class LargeScreenSettings {
               (json['contentMargin'] as num).isFinite
           ? (json['contentMargin'] as num).toDouble().clamp(16, 80)
           : 32,
-      musicEffect: choice('musicEffect', LargeScreenMusicEffect.values,
-          LargeScreenMusicEffect.off),
+      musicEffect: choice(
+          'musicEffect', LargeScreenMusicEffect.values, defaultMusicEffect),
       musicEffectIntensity: _effectIntensity(json['musicEffectIntensity']),
       musicEffectLowPower: json['musicEffectLowPower'] == true,
     );
