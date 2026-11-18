@@ -65,6 +65,37 @@ Future<void> _expectRingPixels(
 }
 
 void main() {
+  testWidgets('a focused control can be removed in the resize frame',
+      (tester) async {
+    final visible = ValueNotifier(true);
+    addTearDown(visible.dispose);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(MaterialApp(
+      home: ThmrFocusLayer(
+        child: ValueListenableBuilder(
+          valueListenable: visible,
+          builder: (_, showControl, __) => showControl
+              ? const Center(
+                  child: ThmrFocusRing(
+                    focused: true,
+                    child: SizedBox(width: 100, height: 40),
+                  ),
+                )
+              : const ColoredBox(color: Colors.white),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byType(CompositedTransformFollower), findsOneWidget);
+
+    visible.value = false;
+    tester.view.physicalSize = const Size(700, 500);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    await tester.pumpAndSettle();
+    expect(find.byType(CompositedTransformFollower), findsNothing);
+  });
+
   testWidgets('selected chips resize their ring around the painted chip',
       (tester) async {
     final selected = ValueNotifier(false);

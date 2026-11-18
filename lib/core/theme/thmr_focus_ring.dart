@@ -137,11 +137,15 @@ class _ThmrFocusRingState extends State<ThmrFocusRing> {
   final _targetKey = GlobalKey();
   final _geometry = _FocusGeometrySignal();
   _ThmrFocusLayerState? _layer;
+  bool _active = true;
   bool _syncPending = false;
   Color _color = Colors.transparent;
   TextDirection _direction = TextDirection.ltr;
 
   Rect? _bounds() {
+    // The window overlay may still paint this frame after the target subtree
+    // is removed. Its element is inactive before this State is disposed.
+    if (!_active) return null;
     final box = _targetKey.currentContext?.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) return null;
     final target = widget.focusNode?.context?.findRenderObject();
@@ -181,6 +185,18 @@ class _ThmrFocusRingState extends State<ThmrFocusRing> {
             : null,
       );
     });
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _active = true;
+  }
+
+  @override
+  void deactivate() {
+    _active = false;
+    super.deactivate();
   }
 
   @override

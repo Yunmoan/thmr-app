@@ -518,8 +518,8 @@ void main() {
   testWidgets('settings demo stays independent of the live spectrum',
       (tester) async {
     final source = _StageSpectrum();
-    final h = _Harness(tester, spectrum: source);
-    await h.mount(size: const Size(1440, 900));
+    final h = _Harness(tester, spectrum: source)..resizeOnTransition = true;
+    await h.mount(size: const Size(1440, 900), desktopRoot: true);
     unawaited(h.navigator.currentState!.push(MaterialPageRoute<void>(
         builder: (_) => const LargeScreenSettingsPage())));
     await tester.pumpAndSettle();
@@ -553,8 +553,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 70));
     expect(source.starts, 1);
     expect(source.polls, greaterThan(0));
-    await h.change(false);
+    final collapse = find.byTooltip('收起大屏幕模式').hitTestable();
+    expect(collapse, findsOneWidget);
+    await tester.tap(collapse, kind: PointerDeviceKind.mouse);
+    await tester.pumpAndSettle();
     expect(visual, findsNothing);
+    expect(find.text('main control').hitTestable(), findsOneWidget);
     expect(source.stops, 1);
     expect(tester.takeException(), isNull);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
