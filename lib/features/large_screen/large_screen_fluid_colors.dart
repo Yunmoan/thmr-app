@@ -28,12 +28,14 @@ Future<FluidColors?> fluidColorsFromArtwork(ui.Image image) async {
       final red = bytes.getUint8(offset);
       final green = bytes.getUint8(offset + 1);
       final blue = bytes.getUint8(offset + 2);
-      final chroma = math.max(red, math.max(green, blue)) -
-          math.min(red, math.min(green, blue));
-      // Favor the cover's pigments over neutral paper and text.
-      final weight = alpha / 255 * (.5 + chroma / 255);
-      final r = (y * 2 < image.height ? 0 : 2) + (x * 2 < image.width ? 0 : 1);
-      regions[r].add(red, green, blue, weight);
+      final chroma = (math.max(red, math.max(green, blue)) -
+              math.min(red, math.min(green, blue))) /
+          255;
+      // A small area of pigment can define a cover with a large neutral field.
+      final weight = alpha / 255 * (.10 + 4.8 * chroma * chroma);
+      final region =
+          (y * 2 < image.height ? 0 : 2) + (x * 2 < image.width ? 0 : 1);
+      regions[region].add(red, green, blue, weight);
       total.add(red, green, blue, weight);
     }
   }
@@ -50,28 +52,34 @@ Future<FluidColors?> fluidColorsFromArtwork(ui.Image image) async {
 /// Tint cover pigments toward the reading surface. Limit strong swatches by
 /// the same secondary text color used for the track details and widgets.
 FluidColors toneFluidColors(FluidColors palette, ThmrTokens theme, bool dark) {
-  Color tone(Color color) {
-    var high = dark ? .64 : .42;
-    final mixed = Color.lerp(theme.pageBg, color, high)!;
-    if (ThmrColors.contrast(mixed, theme.mutedInk) >= 4.5) return mixed;
+  Color tone(Color color, double lightnessOffset) {
+    final hsl = HSLColor.fromColor(color);
+    final lightness =
+        dark ? .16 + .26 * hsl.lightness : .70 + .20 * hsl.lightness;
+    final pigment = hsl
+        .withSaturation((hsl.saturation * 1.27).clamp(0.0, 1.0))
+        .withLightness((lightness + lightnessOffset).clamp(0.0, 1.0))
+        .toColor();
+    if (ThmrColors.contrast(pigment, theme.mutedInk) >= 4.5) return pigment;
+    var high = 1.0;
     var low = 0.0;
     for (var i = 0; i < 10; i++) {
       final mid = (low + high) * .5;
-      final candidate = Color.lerp(theme.pageBg, color, mid)!;
+      final candidate = Color.lerp(theme.pageBg, pigment, mid)!;
       if (ThmrColors.contrast(candidate, theme.mutedInk) >= 4.5) {
         low = mid;
       } else {
         high = mid;
       }
     }
-    return Color.lerp(theme.pageBg, color, low)!;
+    return Color.lerp(theme.pageBg, pigment, low)!;
   }
 
   return (
-    topLeft: tone(palette.topLeft),
-    topRight: tone(palette.topRight),
-    bottomLeft: tone(palette.bottomLeft),
-    bottomRight: tone(palette.bottomRight),
+    topLeft: tone(palette.topLeft, .04),
+    topRight: tone(palette.topRight, -.035),
+    bottomLeft: tone(palette.bottomLeft, -.055),
+    bottomRight: tone(palette.bottomRight, .018),
   );
 }
 

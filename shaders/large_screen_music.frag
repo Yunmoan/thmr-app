@@ -107,7 +107,7 @@ vec2 curlAround(vec2 p, vec2 center, float spin) {
 }
 
 float pigmentWeight(vec2 offset) {
-  float distance = 0.075 + dot(offset, offset);
+  float distance = 0.056 + dot(offset, offset);
   return 1.0 / (distance * distance);
 }
 
@@ -147,9 +147,10 @@ vec4 fluid(vec2 uv) {
   vec3 pigment = (weights.x * uFluidTopLeft + weights.y * uFluidTopRight
                   + weights.z * uFluidBottomLeft + weights.w * uFluidBottomRight)
                  / dot(weights, vec4(1.0));
-  float depth = 0.5 + 0.5 * sin(dot(q, vec2(4.3, -3.2)) + 0.46 * t);
-  vec3 color = mix(uFluidPaper, pigment, 0.70 + 0.24 * depth + 0.06 * uAudio.z);
-  float alpha = mix(0.22, 1.0, uIntensity) * (0.96 + 0.04 * uAudio.x);
+  float contour = sin(dot(q, vec2(4.7, -3.6)) + 0.45 * t + 0.65 * sin(4.2 * q.y));
+  float depth = smoothstep(-0.95, 0.80, contour);
+  vec3 color = mix(uFluidPaper, pigment, 0.46 + 0.48 * depth + 0.06 * uAudio.z);
+  float alpha = mix(0.32, 1.0, uIntensity) * (0.96 + 0.04 * uAudio.x);
   return vec4(color * alpha, alpha);
 }
 
