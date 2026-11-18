@@ -10,6 +10,12 @@ uniform vec3 uShade;
 uniform vec3 uHighlight;
 uniform float uDark;
 uniform float uEffect;
+uniform vec3 uFluidTopLeft;
+uniform vec3 uFluidTopRight;
+uniform vec3 uFluidBottomLeft;
+uniform vec3 uFluidBottomRight;
+uniform vec3 uFluidPaper;
+uniform vec3 uFluidMotion;  // Drift, orbit, tide.
 
 out vec4 fragColor;
 
@@ -100,61 +106,63 @@ vec2 curlAround(vec2 p, vec2 center, float spin) {
   return center + rotatePlane(delta, spin / (1.0 + 6.0 * dot(delta, delta)));
 }
 
-vec4 fluid(vec2 uv, float opacity) {
+float pigmentWeight(vec2 offset) {
+  float distance = 0.075 + dot(offset, offset);
+  return 1.0 / (distance * distance);
+}
+
+vec4 fluid(vec2 uv) {
   float t = uTime;
-  vec2 aspect = sqrt(uSize / min(uSize.x, uSize.y));
-  vec2 p = (uv - 0.5) * aspect;
-  p.y = -p.y;
+  vec2 p = uv - 0.5;
+  vec2 q = p;
+  if (uFluidMotion.x > 0.0) {
+    // Slow oblique flow. The upper and lower pigments pull in different
+    // directions so the image stretches instead of sliding as a whole.
+    vec2 drift = vec2(0.38 * sin(3.1 * p.y - 0.56 * t),
+                       0.24 * cos(2.7 * p.x + 0.43 * t));
+    q += uFluidMotion.x * drift;
+  }
+  if (uFluidMotion.y > 0.0) {
+    // An off-center eddy turns the middle faster than the edges.
+    vec2 center = vec2(0.20 * sin(0.44 * t), -0.15 * cos(0.35 * t));
+    vec2 orbit = curlAround(p, center, 1.45 + 1.55 * sin(0.61 * t));
+    q += uFluidMotion.y * (orbit - p);
+  }
+  if (uFluidMotion.z > 0.0) {
+    // Broad diagonal swells carry color across the screen and roll back.
+    vec2 current = vec2(0.82, 0.57);
+    float swell = sin(dot(p, current) * 6.0 - 0.89 * t);
+    float undertow = cos(dot(p, current.yx) * 4.4 + 0.47 * t);
+    q += uFluidMotion.z * (current * (0.30 + 0.09 * uAudio.x) * swell
+                           + vec2(-0.12, 0.15) * undertow);
+  }
+  q *= 1.0 - 0.12 * uAudio.x - 0.10 * uAudio.w;
 
-  // Counter-rotating eddies advect the same pigment field. Bass accents push
-  // the eddies apart, while the mids control their shear and drift.
-  float push = 0.10 * uAudio.x + 0.14 * uAudio.w;
-  vec2 left = vec2(-0.36 - push + 0.08 * sin(0.63 * t),
-                   0.19 + 0.13 * cos(0.45 * t));
-  vec2 right = vec2(0.34 + push + 0.09 * cos(0.54 * t),
-                   -0.18 + 0.14 * sin(0.39 * t));
-  vec2 q = curlAround(p, left, 2.15 + 0.82 * uAudio.y + 0.75 * sin(0.73 * t));
-  q = curlAround(q, right, -2.05 - push * 5.0 + 0.61 * cos(0.58 * t));
-  q = rotatePlane(q, 0.32 + 0.16 * sin(0.31 * t));
-
-  float current = sin(dot(q, vec2(5.1, 5.8)) - 1.02 * t
-                       + 0.92 * sin(dot(q, vec2(3.1, -5.3)) + 0.53 * t));
-  float eddy = cos(dot(q, vec2(3.5, -5.4)) + 0.62 * t
-                   + 0.65 * sin(q.y * 5.8 - 0.44 * t));
-  float flow = 0.68 * current + 0.32 * eddy;
-  float depth = smoothstep(-0.54, 0.53, flow);
-  vec3 ink = mix(uShade, uAccent, 0.61) * 0.23;
-  vec3 dye = mix(uAccent, uShade, smoothstep(-0.67, 0.82, eddy));
-  vec3 color = mix(ink, dye, 0.16 + 0.79 * depth);
-
-  // Shape color fronts with a soft shoulder and thinner reflected crests.
-  // Highlights come and go across each fold as its orientation changes.
-  float detail = sin(dot(q, vec2(18.6, -14.5)) + 1.2 * sin(9.0 * q.x + 0.9 * t));
-  float folds = flow + (0.04 + 0.04 * uAudio.y) * detail;
-  float facing = smoothstep(-0.85, 0.87, eddy - 0.35 * current);
-  float shoulder = gaussian((folds - 0.08) * 3.2);
-  float ridge = gaussian((folds + 0.13) * 17.0);
-  float vein = gaussian((folds - 0.34 + 0.033 * detail) * 23.0);
-  float sheen = shoulder * facing * (0.31 + 0.14 * uAudio.x)
-              + ridge * (0.09 + 0.33 * facing) * (0.55 + 0.45 * uAudio.z)
-              + vein * (1.0 - facing) * 0.15;
-  color = mix(color, mix(uShade, uHighlight, 0.83), sheen);
-  color = mix(mix(color, vec3(1), 0.54), color, uDark);
-
-  float alpha = opacity * (0.70 + 0.30 * max(shoulder, depth));
-  return vec4(clamp(color, 0.0, 1.0) * alpha, alpha);
+  // Each swatch originates in a different area of the cover. These soft
+  // weights keep the transitions diffuse as the regions overlap.
+  vec4 weights = vec4(pigmentWeight(q - vec2(-0.39, -0.36)),
+                      pigmentWeight(q - vec2( 0.36, -0.31)),
+                      pigmentWeight(q - vec2(-0.32,  0.41)),
+                      pigmentWeight(q - vec2( 0.37,  0.34)));
+  vec3 pigment = (weights.x * uFluidTopLeft + weights.y * uFluidTopRight
+                  + weights.z * uFluidBottomLeft + weights.w * uFluidBottomRight)
+                 / dot(weights, vec4(1.0));
+  float depth = 0.5 + 0.5 * sin(dot(q, vec2(4.3, -3.2)) + 0.46 * t);
+  vec3 color = mix(uFluidPaper, pigment, 0.70 + 0.24 * depth + 0.06 * uAudio.z);
+  float alpha = mix(0.22, 1.0, uIntensity) * (0.96 + 0.04 * uAudio.x);
+  return vec4(color * alpha, alpha);
 }
 
 void main() {
   vec2 uv = FlutterFragCoord().xy / uSize;
+  if (uEffect > 2.5) {
+    fragColor = fluid(uv);
+    return;
+  }
   float strength = smoothstep(0.015, 0.39, max(uAudio.x, max(uAudio.y, uAudio.z)));
   // Soften the header and controls at the edges of the stage.
   float edges = 0.63 + 0.37 * smoothstep(0.0, 0.19, min(uv.y, 1.0 - uv.y));
   float opacity = strength * edges * uIntensity;
-  if (uEffect > 2.5) {
-    fragColor = fluid(uv, opacity);
-    return;
-  }
   vec2 p = (uv - 0.5) * uSize / min(uSize.x, uSize.y);
   p.y = -p.y;
   vec3 light = uEffect < 1.5 ? aurora(p) : nebula(p);

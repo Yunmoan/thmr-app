@@ -18,6 +18,8 @@ enum LargeScreenIllustrationPosition { left, right }
 
 enum LargeScreenMusicEffect { off, aurora, nebula, prism, fluid, spectrum }
 
+enum LargeScreenFluidMotion { automatic, drift, orbit, tide }
+
 class LargeScreenSettings {
   static const defaultMusicEffect = LargeScreenMusicEffect.aurora;
   static const minMusicEffectIntensity = .2;
@@ -46,6 +48,7 @@ class LargeScreenSettings {
     this.musicEffect = defaultMusicEffect,
     this.musicEffectIntensity = defaultMusicEffectIntensity,
     this.musicEffectLowPower = false,
+    this.fluidMotion = LargeScreenFluidMotion.automatic,
   });
 
   final LargeScreenLayout layout;
@@ -72,6 +75,7 @@ class LargeScreenSettings {
   final LargeScreenMusicEffect musicEffect;
   final double musicEffectIntensity;
   final bool musicEffectLowPower;
+  final LargeScreenFluidMotion fluidMotion;
 
   LargeScreenSettings copyWith({
     LargeScreenLayout? layout,
@@ -96,6 +100,7 @@ class LargeScreenSettings {
     LargeScreenMusicEffect? musicEffect,
     double? musicEffectIntensity,
     bool? musicEffectLowPower,
+    LargeScreenFluidMotion? fluidMotion,
   }) =>
       LargeScreenSettings(
         layout: layout ?? this.layout,
@@ -122,6 +127,7 @@ class LargeScreenSettings {
         musicEffectIntensity:
             _effectIntensity(musicEffectIntensity ?? this.musicEffectIntensity),
         musicEffectLowPower: musicEffectLowPower ?? this.musicEffectLowPower,
+        fluidMotion: fluidMotion ?? this.fluidMotion,
       );
 
   factory LargeScreenSettings.fromJson(Map<String, dynamic> json) {
@@ -168,6 +174,8 @@ class LargeScreenSettings {
           'musicEffect', LargeScreenMusicEffect.values, defaultMusicEffect),
       musicEffectIntensity: _effectIntensity(json['musicEffectIntensity']),
       musicEffectLowPower: json['musicEffectLowPower'] == true,
+      fluidMotion: choice('fluidMotion', LargeScreenFluidMotion.values,
+          LargeScreenFluidMotion.automatic),
     );
   }
 
@@ -199,6 +207,7 @@ class LargeScreenSettings {
         'musicEffect': musicEffect.name,
         'musicEffectIntensity': musicEffectIntensity,
         'musicEffectLowPower': musicEffectLowPower,
+        'fluidMotion': fluidMotion.name,
       };
 }
 

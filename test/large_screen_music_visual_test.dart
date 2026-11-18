@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -56,6 +58,21 @@ class _PcmToneSource implements SpectrumSource {
         ? null
         : logarithmicSpectrumBands(frame, bands, _sampleRate);
   }
+}
+
+class _TestArtwork extends ImageProvider<_TestArtwork> {
+  const _TestArtwork(this.frame);
+
+  final Future<ImageInfo> frame;
+
+  @override
+  Future<_TestArtwork> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture(this);
+
+  @override
+  ImageStreamCompleter loadImage(
+          _TestArtwork key, ImageDecoderCallback decode) =>
+      OneFrameImageStreamCompleter(key.frame);
 }
 
 Future<int> _rasterHash(WidgetTester tester, GlobalKey frame) async {
@@ -207,6 +224,127 @@ void main() {
     expect(treble.right, greaterThan(0));
     expect(treble.left, 0);
     expect(treble.top, closeTo(treble.bottom, 3));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+      'fluid follows the current artwork and falls back on load failure',
+      (tester) async {
+    final frame = GlobalKey();
+    Future<void> mount(ImageProvider<Object>? artwork) => tester.pumpWidget(
+          MaterialApp(
+            theme:
+                ThemeData.dark().copyWith(extensions: [ThmrTokens.reimuDark]),
+            home: RepaintBoundary(
+              key: frame,
+              child: LargeScreenMusicVisual(
+                effect: LargeScreenMusicEffect.fluid,
+                intensity: 1,
+                lowPower: false,
+                playing: false,
+                source: null,
+                artwork: artwork,
+              ),
+            ),
+          ),
+        );
+    Future<Color> sample() async {
+      final layer =
+          frame.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      return (await tester.runAsync(() async {
+        final image = await layer.toImage(pixelRatio: .05);
+        try {
+          final bytes = (await image.toByteData(
+              format: ui.ImageByteFormat.rawStraightRgba))!;
+          final i = (image.width + 1) * 4;
+          return Color.fromARGB(255, bytes.getUint8(i), bytes.getUint8(i + 1),
+              bytes.getUint8(i + 2));
+        } finally {
+          image.dispose();
+        }
+      }))!;
+    }
+
+    Future<ImageInfo> solidCover(Color color) async {
+      final recorder = ui.PictureRecorder();
+      Canvas(recorder).drawPaint(Paint()..color = color);
+      final picture = recorder.endRecording();
+      final image = (await tester.runAsync(() => picture.toImage(32, 32)))!;
+      picture.dispose();
+      return ImageInfo(image: image);
+    }
+
+    Future<Color> waitForColor(bool Function(Color) matches) async {
+      for (var i = 0; i < 24; i++) {
+        await tester.pump(const Duration(milliseconds: 80));
+        final color = await sample();
+        if (matches(color)) return color;
+      }
+      throw StateError('The expected artwork color did not render');
+    }
+
+    await tester.runAsync(
+        () => ui.FragmentProgram.fromAsset('shaders/large_screen_music.frag'));
+    await mount(null);
+    await tester.pumpAndSettle();
+    final fallback = await sample();
+    final first = Completer<ImageInfo>();
+    await mount(_TestArtwork(first.future));
+    final next = Completer<ImageInfo>();
+    await mount(_TestArtwork(next.future));
+    final staleImage = await solidCover(const Color(0xff0820ff));
+    first.complete(staleImage);
+    await tester.pump();
+    expect(await sample(), fallback);
+    next.complete(await solidCover(const Color(0xff06d883)));
+    final green = await waitForColor((c) => c.g > c.r + .1);
+    expect(green, isNot(fallback));
+
+    final broken = Completer<ImageInfo>();
+    await mount(_TestArtwork(broken.future));
+    broken.completeError(StateError('cover cannot be decoded'));
+    await waitForColor((c) => c == fallback);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('each fluid preset moves the gradient along its own trajectory',
+      (tester) async {
+    await tester.runAsync(
+        () => ui.FragmentProgram.fromAsset('shaders/large_screen_music.frag'));
+    final frame = GlobalKey();
+    final endFrames = <int>{};
+    for (final preset in LargeScreenFluidMotion.values.skip(1)) {
+      await tester.pumpWidget(MaterialApp(
+        home: Center(
+          child: RepaintBoundary(
+            key: frame,
+            child: SizedBox(
+              width: 480,
+              height: 270,
+              child: LargeScreenMusicVisual(
+                key: ValueKey(preset),
+                effect: LargeScreenMusicEffect.fluid,
+                intensity: .8,
+                lowPower: false,
+                playing: true,
+                source: null,
+                fluidMotion: preset,
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+      final start = await _rasterHash(tester, frame);
+      for (var i = 0; i < 28; i++) {
+        await tester.pump(const Duration(milliseconds: 34));
+      }
+      final end = await _rasterHash(tester, frame);
+      expect(end, isNot(start), reason: preset.name);
+      endFrames.add(end);
+    }
+    expect(endFrames.length, 3);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

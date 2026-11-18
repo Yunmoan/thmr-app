@@ -37,6 +37,7 @@ void main() {
       musicEffect: LargeScreenMusicEffect.fluid,
       musicEffectIntensity: .9,
       musicEffectLowPower: true,
+      fluidMotion: LargeScreenFluidMotion.tide,
     );
     await controller.update(chosen);
     final restored = LargeScreenSettingsController();
@@ -61,6 +62,7 @@ void main() {
         'showProgress': 'false',
         'musicEffect': 'missing-effect',
         'musicEffectIntensity': 2,
+        'fluidMotion': 'broken-motion',
       })
     });
     final bounded = LargeScreenSettingsController();
@@ -74,6 +76,7 @@ void main() {
     expect(bounded.state.musicEffect, LargeScreenMusicEffect.aurora);
     expect(bounded.state.musicEffectIntensity, 1);
     expect(bounded.state.musicEffectLowPower, isFalse);
+    expect(bounded.state.fluidMotion, LargeScreenFluidMotion.automatic);
     expect(LargeScreenSettings.fromJson(const {}).musicEffectIntensity, .6);
     bounded.dispose();
   });
@@ -87,6 +90,7 @@ void main() {
     await legacy.ready;
     expect(legacy.state.layout, LargeScreenLayout.coverRight);
     expect(legacy.state.musicEffect, LargeScreenMusicEffect.aurora);
+    expect(legacy.state.fluidMotion, LargeScreenFluidMotion.automatic);
     await legacy
         .update(legacy.state.copyWith(musicEffect: LargeScreenMusicEffect.off));
     final restored = LargeScreenSettingsController();
@@ -179,11 +183,19 @@ void main() {
         await tester.pumpAndSettle();
         expect(container.read(largeScreenSettingsProvider).musicEffect,
             LargeScreenMusicEffect.fluid);
+        final tide = find.widgetWithText(ChoiceChip, '潮汐');
+        await tester.ensureVisible(tide);
+        await tester.tap(tide);
+        await tester.pumpAndSettle();
+        expect(container.read(largeScreenSettingsProvider).fluidMotion,
+            LargeScreenFluidMotion.tide);
+        expect(tester.widget<ChoiceChip>(tide).selected, isTrue);
         final off = card(LargeScreenMusicEffect.off);
         await tester.ensureVisible(off);
         await tester.tap(off);
         await tester.pumpAndSettle();
         expect(find.text('动效强度'), findsNothing);
+        expect(find.text('流体运动'), findsNothing);
         final prism = card(LargeScreenMusicEffect.prism);
         await tester.ensureVisible(prism);
         await tester.tap(prism);

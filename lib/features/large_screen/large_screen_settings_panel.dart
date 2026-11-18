@@ -234,7 +234,7 @@ class LargeScreenSettingsPanel extends ConsumerWidget {
         ),
         _SettingRow(
           title: '音乐动效',
-          description: '配色随大屏主题变化，棱镜和频谱为轻量样式',
+          description: '流体从曲目封面取色，棱镜和频谱为轻量样式',
           stacked: true,
           child: _MusicEffectPicker(
             value: settings.musicEffect,
@@ -242,6 +242,21 @@ class LargeScreenSettingsPanel extends ConsumerWidget {
             onChanged: (v) => save(settings.copyWith(musicEffect: v)),
           ),
         ),
+        if (settings.musicEffect == LargeScreenMusicEffect.fluid)
+          _SettingRow(
+            title: '流体运动',
+            description: '自动模式在三种运动之间缓慢过渡',
+            child: _Choices(
+              value: settings.fluidMotion,
+              options: const [
+                (LargeScreenFluidMotion.automatic, '自动'),
+                (LargeScreenFluidMotion.drift, '漫流'),
+                (LargeScreenFluidMotion.orbit, '回旋'),
+                (LargeScreenFluidMotion.tide, '潮汐'),
+              ],
+              onChanged: (v) => save(settings.copyWith(fluidMotion: v)),
+            ),
+          ),
         if (settings.musicEffect != LargeScreenMusicEffect.off) ...[
           _SettingRow(
             title: '动效强度',

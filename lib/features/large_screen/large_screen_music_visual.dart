@@ -11,6 +11,7 @@ import 'package:flutter/scheduler.dart';
 import '../../core/player/spectrum.dart';
 import '../../core/state/large_screen_settings.dart';
 import '../../core/theme/thmr_theme.dart';
+import 'large_screen_fluid_colors.dart';
 
 const _spectrumBandCount = 96;
 
@@ -49,6 +50,8 @@ class LargeScreenMusicVisual extends StatefulWidget {
     required this.lowPower,
     required this.playing,
     required this.source,
+    this.artwork,
+    this.fluidMotion = LargeScreenFluidMotion.automatic,
     this.demo = false,
   });
 
@@ -57,6 +60,8 @@ class LargeScreenMusicVisual extends StatefulWidget {
   final bool lowPower;
   final bool playing;
   final SpectrumSource? source;
+  final ImageProvider<Object>? artwork;
+  final LargeScreenFluidMotion fluidMotion;
   final bool demo;
 
   @override
@@ -77,6 +82,12 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   bool _allowsMotion = false;
   bool _shaderRequested = false;
   bool _demoFinished = false;
+  ImageProvider<Object>? _watchedArtwork;
+  ({ImageStream stream, ImageStreamListener listener})? _artworkLoad;
+  FluidColors? _artworkColors;
+  int _artworkRevision = 0;
+
+  bool get _isFluid => widget.effect == LargeScreenMusicEffect.fluid;
 
   bool get _usesShader => switch (widget.effect) {
         LargeScreenMusicEffect.aurora ||
@@ -132,14 +143,24 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
     super.didChangeDependencies();
     final tickersEnabled = TickerMode.valuesOf(context).enabled;
     _allowsMotion = tickersEnabled && !MediaQuery.disableAnimationsOf(context);
+    _watchArtwork();
+    _refreshFluidColors();
     _sync();
   }
 
   @override
   void didUpdateWidget(covariant LargeScreenMusicVisual oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.effect != oldWidget.effect) _motion.clear();
-    if (widget.demo && (!oldWidget.demo || widget.effect != oldWidget.effect)) {
+    final effectChanged = widget.effect != oldWidget.effect;
+    if (effectChanged) _motion.clear();
+    if (effectChanged || widget.artwork != oldWidget.artwork) {
+      _watchArtwork();
+      _refreshFluidColors();
+    }
+    if (widget.demo &&
+        (!oldWidget.demo ||
+            effectChanged ||
+            (_isFluid && widget.fluidMotion != oldWidget.fluidMotion))) {
       _demoFinished = false;
       _ticker.stop();
     }
@@ -149,10 +170,87 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) => _sync();
 
+  void _watchArtwork() {
+    final artwork = _isFluid ? widget.artwork : null;
+    if (artwork == _watchedArtwork) return;
+    final revision = ++_artworkRevision;
+    _detachArtwork();
+    _watchedArtwork = artwork;
+    if (artwork == null) {
+      _artworkColors = null;
+      return;
+    }
+
+    // Keep the previous colors while the new cover is loading.
+    final stream = artwork.resolve(createLocalImageConfiguration(context));
+    final listener = ImageStreamListener((info, _) {
+      if (revision == _artworkRevision) _detachArtwork();
+      unawaited(_sampleArtwork(info, revision));
+    }, onError: (Object _, StackTrace? __) {
+      if (revision != _artworkRevision) return;
+      _detachArtwork();
+      _useArtwork(null, revision);
+    });
+    _artworkLoad = (stream: stream, listener: listener);
+    stream.addListener(listener);
+  }
+
+  void _detachArtwork() {
+    final load = _artworkLoad;
+    _artworkLoad = null;
+    load?.stream.removeListener(load.listener);
+  }
+
+  Future<void> _sampleArtwork(ImageInfo info, int revision) async {
+    FluidColors? colors;
+    try {
+      colors = await fluidColorsFromArtwork(info.image);
+    } catch (_) {
+      // An unreadable thumbnail uses the same theme fallback as a missing one.
+    } finally {
+      info.dispose();
+    }
+    _useArtwork(colors, revision);
+  }
+
+  void _useArtwork(FluidColors? colors, int revision) {
+    if (!mounted || revision != _artworkRevision) return;
+    _artworkColors = colors;
+    _refreshFluidColors();
+    _sync();
+  }
+
+  void _refreshFluidColors() {
+    if (!_isFluid) return;
+    final theme = Theme.of(context);
+    final palette = musicPaletteFor(theme, widget.effect);
+    final colors = _artworkColors ??
+        (
+          topLeft: palette.highlight,
+          topRight: palette.shade,
+          bottomLeft: palette.accent,
+          bottomRight: theme.thmr.pageBg,
+        );
+    _motion.setFluidColors(
+        toneFluidColors(
+            colors, theme.thmr, theme.brightness == Brightness.dark),
+        animate: _allowsMotion && _visible);
+  }
+
+  bool get _hasPendingFrame {
+    if (_isFluid &&
+        (_motion.blendingColors || (!widget.demo && widget.playing))) {
+      return true;
+    }
+    return widget.demo ? !_demoFinished : _capture != null || !_motion.isSilent;
+  }
+
   void _sync() {
     final visible = _allowsMotion && _visible;
     final source = !widget.demo && widget.playing ? widget.source : null;
-    if (visible && (widget.demo || source != null)) _loadShaderIfNeeded();
+    if (_isFluid || (visible && (widget.demo || source != null))) {
+      _loadShaderIfNeeded();
+    }
     final canAnimate = visible && (!_usesShader || _shader != null);
     final capture = canAnimate ? source : null;
     if (!identical(capture, _capture)) {
@@ -164,9 +262,8 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
       _motion.clear();
       _demoFinished = false;
     }
-    final shouldTick =
-        widget.demo ? !_demoFinished : _capture != null || !_motion.isSilent;
-    if (!canAnimate || !shouldTick) {
+    if (!visible) _motion.finishColorBlend();
+    if (!canAnimate || !_hasPendingFrame) {
       _ticker.stop();
     } else if (!_ticker.isActive) {
       _lastTick = Duration.zero;
@@ -188,16 +285,17 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
           seconds);
     } else {
       _motion.advance(
-          widget.demo ? _demoEnergy(elapsed) : _measureEnergy(bands),
-          seconds,
-          widget.intensity);
+        widget.demo && !_demoFinished
+            ? _demoEnergy(elapsed)
+            : _measureEnergy(bands),
+        seconds,
+        widget.intensity,
+        fluid: _isFluid,
+        flowing: _isFluid && (widget.demo ? !_demoFinished : widget.playing),
+      );
     }
-    if (widget.demo) {
-      _demoFinished = elapsed >= _demoDuration;
-      if (_demoFinished) _ticker.stop();
-    } else if (_capture == null && _motion.isSilent) {
-      _ticker.stop();
-    }
+    if (widget.demo && elapsed >= _demoDuration) _demoFinished = true;
+    if (!_hasPendingFrame) _ticker.stop();
   }
 
   _Energy _measureEnergy(Float32List? data) {
@@ -250,6 +348,7 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _detachArtwork();
     _ticker.dispose();
     _capture?.stop();
     _shader?.dispose();
@@ -273,6 +372,8 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
             intensity: widget.intensity,
             dark: theme.brightness == Brightness.dark,
             palette: musicPaletteFor(theme, widget.effect),
+            paper: theme.thmr.pageBg,
+            fluidMotion: widget.fluidMotion,
           ),
         ),
       ),
@@ -290,8 +391,39 @@ class _MusicMotion extends ChangeNotifier {
   double pulse = 0;
   double _bassFloor = 0;
   bool _hasSpectrum = false;
+  FluidColors? _fluidFrom, _fluidTo;
+  double _colorBlend = 1;
 
   bool get isSilent => energy == _silence && !_hasSpectrum;
+  bool get blendingColors => _colorBlend < 1;
+
+  FluidColors? get fluidColors {
+    final to = _fluidTo;
+    if (to == null || !blendingColors) return to;
+    final from = _fluidFrom!;
+    final t = Curves.easeInOut.transform(_colorBlend);
+    return (
+      topLeft: Color.lerp(from.topLeft, to.topLeft, t)!,
+      topRight: Color.lerp(from.topRight, to.topRight, t)!,
+      bottomLeft: Color.lerp(from.bottomLeft, to.bottomLeft, t)!,
+      bottomRight: Color.lerp(from.bottomRight, to.bottomRight, t)!,
+    );
+  }
+
+  void setFluidColors(FluidColors palette, {required bool animate}) {
+    if (palette == _fluidTo) return;
+    _fluidFrom = animate ? fluidColors : null;
+    _fluidTo = palette;
+    _colorBlend = _fluidFrom == null ? 1 : 0;
+    notifyListeners();
+  }
+
+  void finishColorBlend() {
+    if (!blendingColors) return;
+    _colorBlend = 1;
+    _fluidFrom = null;
+    notifyListeners();
+  }
 
   void updateSpectrum(Float32List? bands, double seconds) {
     final attack = 1 - math.exp(-seconds / .035);
@@ -312,8 +444,10 @@ class _MusicMotion extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
-  void advance(_Energy target, double seconds, double intensity) {
-    if (isSilent && target == _silence) return;
+  void advance(_Energy target, double seconds, double intensity,
+      {required bool fluid, required bool flowing}) {
+    final changeColors = fluid && blendingColors;
+    if (isSilent && target == _silence && !flowing && !changeColors) return;
     energy = (
       bass: _ease(energy.bass, target.bass, seconds, .055, .23),
       mids: _ease(energy.mids, target.mids, seconds, .10, .26),
@@ -324,11 +458,14 @@ class _MusicMotion extends ChangeNotifier {
     final transient = ((target.bass - _bassFloor - .035) * 3.4).clamp(0.0, 1.0);
     _bassFloor = _ease(_bassFloor, target.bass, seconds, .84, .46);
     pulse = _ease(pulse, transient, seconds, .045, .22);
-    if (target != _silence) {
+    if (flowing) {
+      time += seconds * (.86 + .41 * energy.mids + .13 * pulse);
+    } else if (!fluid && target != _silence) {
       time += seconds *
           (.28 + .92 * energy.mids + .27 * energy.treble) *
           (.48 + .52 * intensity);
     }
+    if (changeColors) _colorBlend = math.min(1, _colorBlend + seconds / .94);
     if (isSilent) pulse = _bassFloor = 0;
     notifyListeners();
   }
@@ -357,6 +494,8 @@ class _MusicVisualPainter extends CustomPainter {
     required this.intensity,
     required this.dark,
     required this.palette,
+    required this.paper,
+    required this.fluidMotion,
   }) : super(repaint: motion);
 
   final FragmentShader? shader;
@@ -365,12 +504,18 @@ class _MusicVisualPainter extends CustomPainter {
   final double intensity;
   final bool dark;
   final LargeScreenMusicPalette palette;
+  final Color paper;
+  final LargeScreenFluidMotion fluidMotion;
   late final _prism = _PrismMesh(palette);
   late final _spectrum = _MirroredSpectrum(palette, intensity);
+  final _shaderPaint = Paint();
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (motion.isSilent || size.isEmpty) return;
+    if (size.isEmpty ||
+        (motion.isSilent && effect != LargeScreenMusicEffect.fluid)) {
+      return;
+    }
     switch (effect) {
       case LargeScreenMusicEffect.off:
         return;
@@ -404,7 +549,38 @@ class _MusicVisualPainter extends CustomPainter {
     _setShaderColor(shader, 8, palette.accent);
     _setShaderColor(shader, 11, palette.shade);
     _setShaderColor(shader, 14, palette.highlight);
-    canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
+    if (effect == LargeScreenMusicEffect.fluid) {
+      final colors = motion.fluidColors!;
+      _setShaderColor(shader, 19, colors.topLeft);
+      _setShaderColor(shader, 22, colors.topRight);
+      _setShaderColor(shader, 25, colors.bottomLeft);
+      _setShaderColor(shader, 28, colors.bottomRight);
+      _setShaderColor(shader, 31, paper);
+      final (drift, orbit, tide) = _fluidWeights();
+      shader
+        ..setFloat(34, drift)
+        ..setFloat(35, orbit)
+        ..setFloat(36, tide);
+    }
+    canvas.drawRect(Offset.zero & size, _shaderPaint..shader = shader);
+  }
+
+  (double, double, double) _fluidWeights() {
+    if (fluidMotion == LargeScreenFluidMotion.automatic) {
+      final phase = (motion.time / 8) % 3;
+      final section = phase.floor();
+      final t = Curves.easeInOut.transform(phase - section);
+      return switch (section) {
+        0 => (1 - t, t, 0),
+        1 => (0, 1 - t, t),
+        _ => (t, 0, 1 - t),
+      };
+    }
+    return (
+      fluidMotion == LargeScreenFluidMotion.drift ? 1 : 0,
+      fluidMotion == LargeScreenFluidMotion.orbit ? 1 : 0,
+      fluidMotion == LargeScreenFluidMotion.tide ? 1 : 0,
+    );
   }
 
   void _setShaderColor(FragmentShader shader, int offset, Color color) {
@@ -419,7 +595,9 @@ class _MusicVisualPainter extends CustomPainter {
       effect != oldDelegate.effect ||
       intensity != oldDelegate.intensity ||
       dark != oldDelegate.dark ||
-      palette != oldDelegate.palette;
+      palette != oldDelegate.palette ||
+      paper != oldDelegate.paper ||
+      fluidMotion != oldDelegate.fluidMotion;
 }
 
 /// Symmetric bars use the individual FFT bands, in rising frequency order.

@@ -205,6 +205,7 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                   ),
                 ),
               ));
+          final coverUrl = station.status?.current?.coverUrl.trim() ?? '';
           final musicVisual = settings.musicEffect == LargeScreenMusicEffect.off
               ? null
               : LargeScreenMusicVisual(
@@ -212,6 +213,15 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                   effect: settings.musicEffect,
                   intensity: settings.musicEffectIntensity,
                   lowPower: settings.musicEffectLowPower,
+                  fluidMotion: settings.fluidMotion,
+                  artwork:
+                      settings.musicEffect == LargeScreenMusicEffect.fluid &&
+                              coverUrl.isNotEmpty
+                          ? ResizeImage(NetworkImage(coverUrl),
+                              width: 48,
+                              height: 48,
+                              policy: ResizeImagePolicy.fit)
+                          : null,
                   demo: widget.preview,
                   playing: !widget.preview &&
                       phase == PlaybackPhase.online &&
