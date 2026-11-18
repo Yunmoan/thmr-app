@@ -42,10 +42,12 @@ class LargeScreenPlayer extends ConsumerStatefulWidget {
       {super.key,
       this.safeInsets = EdgeInsets.zero,
       this.preview = false,
-      this.demoRun = 0});
+      this.demoRun = 0,
+      this.liveSpectrumPreview = false});
   final EdgeInsets safeInsets;
   final bool preview;
   final int demoRun;
+  final bool liveSpectrumPreview;
 
   @override
   ConsumerState<LargeScreenPlayer> createState() => _LargeScreenPlayerState();
@@ -206,6 +208,7 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                 ),
               ));
           final coverUrl = station.status?.current?.coverUrl.trim() ?? '';
+          final demoVisual = widget.preview && !widget.liveSpectrumPreview;
           final musicVisual = settings.musicEffect == LargeScreenMusicEffect.off
               ? null
               : LargeScreenMusicVisual(
@@ -222,12 +225,13 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                               height: 48,
                               policy: ResizeImagePolicy.fit)
                           : null,
-                  demo: widget.preview,
-                  playing: !widget.preview &&
+                  demo: demoVisual,
+                  playing: !demoVisual &&
                       phase == PlaybackPhase.online &&
-                      ref.watch(largeScreenProvider
-                          .select((state) => state.contentVisible)),
-                  source: widget.preview
+                      (widget.preview ||
+                          ref.watch(largeScreenProvider
+                              .select((state) => state.contentVisible))),
+                  source: demoVisual
                       ? null
                       : ref.watch(largeScreenSpectrumProvider),
                 );

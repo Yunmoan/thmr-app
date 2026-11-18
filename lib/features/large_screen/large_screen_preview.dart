@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/player/playback_controller.dart';
 import '../../core/state/large_screen_settings.dart';
 import '../../core/theme/thmr_motion.dart';
 import '../../core/theme/thmr_theme.dart';
@@ -56,14 +57,20 @@ class _LargeScreenPreviewState extends ConsumerState<LargeScreenPreview> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final frame = _frames[_frame];
-    final hasEffect = ref.watch(largeScreenSettingsProvider
-        .select((s) => s.musicEffect != LargeScreenMusicEffect.off));
+    final effect =
+        ref.watch(largeScreenSettingsProvider.select((s) => s.musicEffect));
+    final hasEffect = effect != LargeScreenMusicEffect.off;
+    final liveSpectrum = effect == LargeScreenMusicEffect.spectrum &&
+        ref.watch(
+            playbackProvider.select((s) => s.phase == PlaybackPhase.online));
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final previewHint = !hasEffect
         ? '修改会实时显示在预览中'
         : reduceMotion
             ? '系统已开启减少动态效果'
-            : '动效预览使用示例节奏';
+            : liveSpectrum
+                ? '频谱预览使用当前播放的音频'
+                : '动效预览使用示例节奏';
     return Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -102,7 +109,10 @@ class _LargeScreenPreviewState extends ConsumerState<LargeScreenPreview> {
           Flexible(
               fit: FlexFit.loose,
               child: _PreviewFrame(
-                  size: frame.$2, label: frame.$1, demoRun: _demoRun)),
+                  size: frame.$2,
+                  label: frame.$1,
+                  demoRun: _demoRun,
+                  liveSpectrum: liveSpectrum)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -112,7 +122,7 @@ class _LargeScreenPreviewState extends ConsumerState<LargeScreenPreview> {
               Text(previewHint,
                   style: theme.textTheme.labelSmall
                       ?.copyWith(color: theme.thmr.mutedInk)),
-              if (hasEffect && !reduceMotion)
+              if (hasEffect && !reduceMotion && !liveSpectrum)
                 TextButton.icon(
                   onPressed: () => setState(() => _demoRun++),
                   icon: const Icon(Icons.replay_rounded, size: 16),
@@ -126,10 +136,14 @@ class _LargeScreenPreviewState extends ConsumerState<LargeScreenPreview> {
 
 class _PreviewFrame extends StatelessWidget {
   const _PreviewFrame(
-      {required this.size, required this.label, required this.demoRun});
+      {required this.size,
+      required this.label,
+      required this.demoRun,
+      required this.liveSpectrum});
   final Size size;
   final String label;
   final int demoRun;
+  final bool liveSpectrum;
 
   @override
   Widget build(BuildContext context) =>
@@ -150,7 +164,10 @@ class _PreviewFrame extends StatelessWidget {
             size: size,
             child: MediaQuery(
                 data: media,
-                child: LargeScreenPlayer(preview: true, demoRun: demoRun)));
+                child: LargeScreenPlayer(
+                    preview: true,
+                    demoRun: demoRun,
+                    liveSpectrumPreview: liveSpectrum)));
         return Align(
             alignment: Alignment.topCenter,
             widthFactor: 1,

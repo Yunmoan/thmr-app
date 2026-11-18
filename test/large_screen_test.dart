@@ -514,11 +514,12 @@ void main() {
     });
   }
 
-  testWidgets('settings demo stays independent of the live spectrum',
+  testWidgets('spectrum uses live audio in the settings and on the stage',
       (tester) async {
     final source = _StageSpectrum();
     final h = _Harness(tester, spectrum: source)..resizeOnTransition = true;
     await h.mount(size: const Size(1440, 900), desktopRoot: true);
+    await h.playback.toggle(null);
     unawaited(h.navigator.currentState!.push(MaterialPageRoute<void>(
         builder: (_) => const LargeScreenSettingsPage())));
     await tester.pumpAndSettle();
@@ -541,25 +542,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(source.starts, 0);
 
+    await h.playback.toggle(null);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 70));
+    final live = tester.widget<LargeScreenMusicVisual>(visual);
+    expect(live.demo, isFalse);
+    expect(live.source, same(source));
+    expect(source.starts, 1);
+    expect(source.polls, greaterThan(0));
+    expect(find.text('频谱预览使用当前播放的音频'), findsOneWidget);
+    expect(find.text('重播动效'), findsNothing);
+
+    await h.playback.toggle(null);
+    await tester.pumpAndSettle();
+    expect(source.stops, 1);
+    expect(tester.widget<LargeScreenMusicVisual>(visual).demo, isTrue);
     h.navigator.currentState!.pop();
     await tester.pumpAndSettle();
-    await h.playback.toggle(null);
     await h.change(true);
     expect(tester.widget<LargeScreenMusicVisual>(visual).demo, isFalse);
-    expect(source.starts, 0, reason: 'the radio is paused');
+    expect(source.starts, 1, reason: 'the radio is paused');
 
     await h.playback.toggle(null);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 70));
-    expect(source.starts, 1);
-    expect(source.polls, greaterThan(0));
+    expect(source.starts, 2);
     final collapse = find.byTooltip('收起大屏幕模式').hitTestable();
     expect(collapse, findsOneWidget);
     await tester.tap(collapse, kind: PointerDeviceKind.mouse);
     await tester.pumpAndSettle();
     expect(visual, findsNothing);
     expect(find.text('main control').hitTestable(), findsOneWidget);
-    expect(source.stops, 1);
+    expect(source.stops, 2);
     expect(tester.takeException(), isNull);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
