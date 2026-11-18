@@ -19,7 +19,7 @@ enum LargeScreenIllustrationPosition { left, right }
 enum LargeScreenMusicEffect { off, aurora, nebula, prism, fluid, spectrum }
 
 class LargeScreenSettings {
-  static const defaultMusicEffect = LargeScreenMusicEffect.prism;
+  static const defaultMusicEffect = LargeScreenMusicEffect.aurora;
   static const minMusicEffectIntensity = .2;
   static const defaultMusicEffectIntensity = .6;
 

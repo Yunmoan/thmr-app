@@ -71,7 +71,7 @@ void main() {
     expect(bounded.state.textScale, .8);
     expect(bounded.state.showProgress, isTrue);
     expect(bounded.state.keepScreenOn, isFalse);
-    expect(bounded.state.musicEffect, LargeScreenMusicEffect.prism);
+    expect(bounded.state.musicEffect, LargeScreenMusicEffect.aurora);
     expect(bounded.state.musicEffectIntensity, 1);
     expect(bounded.state.musicEffectLowPower, isFalse);
     expect(LargeScreenSettings.fromJson(const {}).musicEffectIntensity, .6);
@@ -86,7 +86,7 @@ void main() {
     final legacy = LargeScreenSettingsController();
     await legacy.ready;
     expect(legacy.state.layout, LargeScreenLayout.coverRight);
-    expect(legacy.state.musicEffect, LargeScreenMusicEffect.prism);
+    expect(legacy.state.musicEffect, LargeScreenMusicEffect.aurora);
     await legacy
         .update(legacy.state.copyWith(musicEffect: LargeScreenMusicEffect.off));
     final restored = LargeScreenSettingsController();
@@ -168,11 +168,10 @@ void main() {
                   of: card(effect), matching: find.byType(SvgPicture)),
               findsOneWidget);
         }
-        final prism = card(LargeScreenMusicEffect.prism);
         final selected = find.descendant(
-            of: prism,
+            of: card(LargeScreenMusicEffect.aurora),
             matching: find.byWidgetPredicate(
-                (w) => w is Semantics && w.properties.label == '棱镜涟漪'));
+                (w) => w is Semantics && w.properties.label == '极光流场'));
         expect(tester.widget<Semantics>(selected).properties.selected, isTrue);
         final fluid = card(LargeScreenMusicEffect.fluid);
         await tester.ensureVisible(fluid);
@@ -185,6 +184,7 @@ void main() {
         await tester.tap(off);
         await tester.pumpAndSettle();
         expect(find.text('动效强度'), findsNothing);
+        final prism = card(LargeScreenMusicEffect.prism);
         await tester.ensureVisible(prism);
         await tester.tap(prism);
         await tester.pumpAndSettle();
