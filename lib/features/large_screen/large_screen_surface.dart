@@ -201,11 +201,15 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
           _previousFocus?.context == null) {
         _previousFocus = FocusManager.instance.primaryFocus;
       }
-      if (next.busy) return;
-      if (!next.active && next.contentVisible) {
+      // A native collapse can publish a complete ordinary page while the
+      // window is concealed. Paint it at full opacity before the raster fence.
+      if (!next.active &&
+          next.contentVisible &&
+          (!next.busy || previous?.active == true)) {
         _standardVisible = true;
         _standard.value = 1;
       }
+      if (next.busy) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || ref.read(largeScreenProvider).active != next.active) {
           return;

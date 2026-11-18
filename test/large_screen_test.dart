@@ -821,7 +821,7 @@ void main() {
     expect(find.text('main control'), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
-  testWidgets('both presentations animate and preserve the normal page element',
+  testWidgets('Windows collapse hands off between two fully visible pages',
       (tester) async {
     final h = _Harness(tester);
     await h.mount();
@@ -844,17 +844,18 @@ void main() {
     expect(h.container.read(largeScreenProvider).busy, isTrue);
     await tester.pumpAndSettle();
     await entering;
-    final exiting = h.controller.change(false);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 70));
-    expect(
-        tester
-            .widget<FadeTransition>(fade('large-mode-transition'))
-            .opacity
-            .value,
-        inExclusiveRange(0, 1));
-    await tester.pumpAndSettle();
-    await exiting;
+    double? stageAtConceal;
+    h.onConceal = () => stageAtConceal = (fade('large-mode-transition')
+            .evaluate()
+            .single
+            .widget as FadeTransition)
+        .opacity
+        .value;
+    await h.change(false);
+    expect(stageAtConceal, 1,
+        reason: 'The last exposed stage frame still has its content.');
+    expect(h.revealedOpacities.last, 1,
+        reason: 'The first exposed normal frame already has its content.');
     expect(tester.element(find.byKey(const ValueKey('retained-list'))),
         same(retained));
     expect(

@@ -151,7 +151,10 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
   Future<void> _change(_PresentationTarget target) async {
     if (hasMobilePresentation) return _changeMobile(target.active);
     final previous = state;
-    final switchingMode = previous.active != target.active;
+    // On Windows, keep the full stage visible until the native window is
+    // concealed. Its content-only fade would expose the backdrop on its own.
+    final animateSwitch =
+        previous.active != target.active && (!_windows || target.active);
     var previousFullScreen = previous.fullScreen;
     var concealed = false;
     String? errorMessage;
@@ -172,7 +175,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
               : _restoreFullScreen);
       _target = (active: target.active, fullScreen: targetFullScreen);
       Tooltip.dismissAllToolTips();
-      if (switchingMode) await _animate(false);
+      if (animateSwitch) await _animate(false);
       if (!mounted) return;
       if (_windows) {
         await _presentation.conceal();
@@ -199,7 +202,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
           active: target.active,
           fullScreen: targetFullScreen,
           busy: true,
-          contentVisible: !switchingMode);
+          contentVisible: !animateSwitch);
       await _paint(concealed: concealed);
     } catch (error, stack) {
       debugPrint('Large screen transition failed: $error\n$stack');
@@ -217,7 +220,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
         state = LargeScreenState(
             active: previous.active,
             fullScreen: previousFullScreen,
-            contentVisible: !switchingMode,
+            contentVisible: !animateSwitch,
             busy: true);
         try {
           await _paint(concealed: concealed);
@@ -229,7 +232,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
       // The first animation frame establishes its timestamp at opacity zero.
       // Fence the following frame as well so reveal exposes incoming content,
       // including on the first entry after native metrics have changed.
-      final entrance = mounted && switchingMode ? _animate(true) : null;
+      final entrance = mounted && animateSwitch ? _animate(true) : null;
       if (concealed) {
         try {
           await _paint(concealed: true);

@@ -184,6 +184,9 @@ Future<void> main() async {
             cycle.isEven ? LargeScreenFraming.fill : LargeScreenFraming.fit,
         startFullScreen: cycle.isEven,
         autoHideControls: false,
+        musicEffect: cycle.isEven
+            ? LargeScreenMusicEffect.fluid
+            : LargeScreenMusicEffect.aurora,
         widgets: const [
           LargeScreenWidgetSettings(id: 'time', format: 'HH:mm:ss'),
           LargeScreenWidgetSettings(
@@ -257,7 +260,7 @@ Future<void> main() async {
         }
         await _checkVisibleStage(binding);
       }
-      await controller.change(false).timeout(const Duration(seconds: 10));
+      await _checkCollapseFrames(binding, controller);
       if (container.read(largeScreenProvider).active ||
           await windowManager.isFullScreen()) {
         throw StateError('Ordinary window not restored');
@@ -304,7 +307,7 @@ Future<void> main() async {
         .read(largeScreenSettingsProvider.notifier)
         .update(const LargeScreenSettings(startFullScreen: true));
     await controller.change(true).timeout(const Duration(seconds: 10));
-    await controller.change(false).timeout(const Duration(seconds: 10));
+    await _checkCollapseFrames(binding, controller);
     if (!await windowManager.isMaximized() || scroll.offset != 750) {
       throw StateError('Maximized window or scroll not restored');
     }
@@ -399,22 +402,54 @@ Future<void> _checkEditor(WidgetsBinding binding, GlobalKey frame,
   }
 }
 
-Future<void> _checkVisibleStage(WidgetsBinding binding) async {
-  Element? find(Key key) {
-    Element? result;
-    void visit(Element element) {
-      if (element.widget.key == key) {
-        result = element;
-        return;
-      }
-      element.visitChildElements((child) {
-        if (result == null) visit(child);
-      });
+Element? _findFrameElement(WidgetsBinding binding, Key key) {
+  Element? result;
+  void visit(Element element) {
+    if (element.widget.key == key) {
+      result = element;
+      return;
     }
-
-    visit(binding.rootElement!);
-    return result;
+    element.visitChildElements((child) {
+      if (result == null) visit(child);
+    });
   }
+
+  visit(binding.rootElement!);
+  return result;
+}
+
+Future<void> _checkCollapseFrames(
+    WidgetsBinding binding, LargeScreenController controller) async {
+  var watching = true;
+  var sawStandard = false;
+  String? badFrame;
+  void sample(Duration _) {
+    if (!watching) return;
+    final stage =
+        _findFrameElement(binding, const ValueKey('large-mode-transition'));
+    final transition = stage ??
+        _findFrameElement(binding, const ValueKey('standard-mode-transition'));
+    final fade = transition?.widget;
+    if (fade is! ThmrFadeSlide || fade.animation.value != 1) {
+      badFrame ??= 'Incomplete ${stage == null ? 'ordinary' : 'stage'} frame';
+    }
+    if (stage == null && fade is ThmrFadeSlide) sawStandard = true;
+    binding.addPostFrameCallback(sample);
+  }
+
+  binding.addPostFrameCallback(sample);
+  try {
+    await controller.change(false).timeout(const Duration(seconds: 10));
+  } finally {
+    watching = false;
+  }
+  if (badFrame != null || !sawStandard) {
+    throw StateError(badFrame ?? 'No ordinary frame after collapsing');
+  }
+}
+
+Future<void> _checkVisibleStage(WidgetsBinding binding) async {
+  Element? find(Key key) => _findFrameElement(binding, key);
 
   final fade = find(const ValueKey('large-mode-transition'))?.widget;
   if (fade is! ThmrFadeSlide || fade.animation.value != 1) {
