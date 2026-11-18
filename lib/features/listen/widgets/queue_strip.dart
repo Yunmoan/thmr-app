@@ -43,11 +43,15 @@ void showQueueEntryDetail(BuildContext context, QueueEntry entry, int index,
               Center(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: entry.coverUrl.isEmpty
-                      ? Image.asset('assets/brand/cover-fallback.png',
-                          width: 180, fit: BoxFit.cover)
-                      : Image.network(entry.coverUrl,
-                          width: 180, fit: BoxFit.cover),
+                  child: SizedBox(
+                    width: 180,
+                    height: 180,
+                    child: TrackCoverImage(
+                      url: entry.coverUrl,
+                      cacheWidth: (180 * MediaQuery.devicePixelRatioOf(context))
+                          .round(),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 14),

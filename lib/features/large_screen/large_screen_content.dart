@@ -222,8 +222,6 @@ class _Cover extends StatelessWidget {
     final tokens = Theme.of(context).thmr;
     final cacheWidth =
         (size * MediaQuery.devicePixelRatioOf(context)).round().clamp(1, 4096);
-    Widget fallback() => Image.asset('assets/brand/cover-fallback.png',
-        fit: fit, cacheWidth: cacheWidth);
     return Container(
       key: const ValueKey('large-screen-cover'),
       width: size,
@@ -233,20 +231,16 @@ class _Cover extends StatelessWidget {
           color: tokens.fieldBg,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: tokens.panelBorder)),
-      child: ThmrAnimatedContent(
-          alignment: Alignment.center,
-          child: RepaintBoundary(
-              key: ValueKey(url),
-              child: SizedBox.expand(
-                  child: Image(
-                image: TrackCover.providerFor(url, cacheWidth: cacheWidth),
-                fit: fit,
-                gaplessPlayback: true,
-                filterQuality: FilterQuality.medium,
-                frameBuilder: (_, child, frame, synchronous) =>
-                    frame != null || synchronous ? child : fallback(),
-                errorBuilder: (_, __, ___) => fallback(),
-              )))),
+      child: RepaintBoundary(
+        child: SizedBox.expand(
+          child: TrackCoverImage(
+            url: url,
+            cacheWidth: cacheWidth,
+            fit: fit,
+            filterQuality: FilterQuality.medium,
+          ),
+        ),
+      ),
     );
   }
 }

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/thmr_motion.dart';
 import '../../core/theme/thmr_theme.dart';
 
-/// 曲目封面:圆角、细描边;无封面(空串 / 404)时使用官方占位图
+/// 曲目封面:圆角、细描边;加载中、无封面或加载失败时使用官方占位图
 /// (提取自 Web 端 public/assets/cover-fallback.svg 的内嵌 PNG)。
 class TrackCover extends StatelessWidget {
   const TrackCover({
@@ -38,16 +39,7 @@ class TrackCover extends StatelessWidget {
       child: SizedBox(
         width: size,
         height: size,
-        child: Image(
-          image: providerFor(url, cacheWidth: cacheWidth),
-          fit: BoxFit.cover,
-          filterQuality: FilterQuality.low,
-          gaplessPlayback: true,
-          errorBuilder: (_, __, ___) => Image.asset(
-              'assets/brand/cover-fallback.png',
-              fit: BoxFit.cover,
-              cacheWidth: cacheWidth),
-        ),
+        child: TrackCoverImage(url: url, cacheWidth: cacheWidth),
       ),
     );
     return DecoratedBox(
@@ -60,6 +52,55 @@ class TrackCover extends StatelessWidget {
         ],
       ),
       child: clip,
+    );
+  }
+}
+
+/// Shared loading behavior for covers with different sizes and decorations.
+class TrackCoverImage extends StatelessWidget {
+  const TrackCoverImage({
+    super.key,
+    required this.url,
+    required this.cacheWidth,
+    this.fit = BoxFit.cover,
+    this.filterQuality = FilterQuality.low,
+  });
+
+  final String url;
+  final int cacheWidth;
+  final BoxFit fit;
+  final FilterQuality filterQuality;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget placeholder() => Image(
+          image: TrackCover.providerFor('', cacheWidth: cacheWidth),
+          fit: fit,
+          filterQuality: filterQuality,
+        );
+
+    if (url.isEmpty) return placeholder();
+
+    return Image(
+      // A new source starts at the placeholder instead of retaining the old
+      // track's image or inheriting its completed fade animation.
+      key: ValueKey((url, cacheWidth)),
+      image: TrackCover.providerFor(url, cacheWidth: cacheWidth),
+      fit: fit,
+      filterQuality: filterQuality,
+      frameBuilder: (context, child, frame, synchronous) {
+        final ready = synchronous || frame != null;
+        return AnimatedSwitcher(
+          duration: ThmrMotion.of(context),
+          switchInCurve: ThmrMotion.enterCurve,
+          switchOutCurve: ThmrMotion.exitCurve,
+          child: SizedBox.expand(
+            key: ValueKey(ready),
+            child: ready ? child : placeholder(),
+          ),
+        );
+      },
+      errorBuilder: (_, __, ___) => placeholder(),
     );
   }
 }
