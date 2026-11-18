@@ -166,6 +166,9 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
     }
     final settings = ref.watch(largeScreenSettingsProvider);
     ref.listen(largeScreenSettingsProvider, (_, __) => _reveal());
+    final fullScreen = widget.preview
+        ? false
+        : ref.watch(largeScreenProvider.select((state) => state.fullScreen));
     final theme = settings.themeMode == ThemeMode.system
         ? Theme.of(context)
         : ref.watch(largeScreenThemeProvider(settings.themeMode));
@@ -302,6 +305,20 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                               : Alignment.bottomLeft,
                           child: content,
                         ),
+                        if (hasDesktopWindowControls &&
+                            !fullScreen &&
+                            !widget.preview)
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            height:
+                                (settings.contentMargin + 8).clamp(24.0, 64.0),
+                            child: const DragToMoveArea(
+                              key: ValueKey('large-screen-window-drag-strip'),
+                              child: SizedBox.expand(),
+                            ),
+                          ),
                         Positioned(
                             bottom: 16,
                             left: 16,

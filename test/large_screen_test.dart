@@ -924,8 +924,17 @@ void main() {
         .read(largeScreenSettingsProvider.notifier)
         .update(const LargeScreenSettings(startFullScreen: false));
     await h.change(true);
+    expect(find.byKey(const ValueKey('large-screen-window-drag-strip')),
+        findsOneWidget);
     h.nativeMethods.clear();
     await tester.drag(find.byKey(const ValueKey('large-screen-window-drag')),
+        const Offset(40, 20),
+        kind: PointerDeviceKind.mouse);
+    await tester.pumpAndSettle();
+    expect(h.nativeMethods, contains('startDragging'));
+    h.nativeMethods.clear();
+    await tester.drag(
+        find.byKey(const ValueKey('large-screen-window-drag-strip')),
         const Offset(40, 20),
         kind: PointerDeviceKind.mouse);
     await tester.pumpAndSettle();
