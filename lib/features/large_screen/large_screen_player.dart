@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:thmr_app/shared/widgets/volume_wheel_control.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/platform/desktop_window.dart';
@@ -504,15 +505,24 @@ class _PlaybackControls extends ConsumerWidget {
                 : playing
                     ? Icons.pause_rounded
                     : Icons.play_arrow_rounded)),
-        IconButton(
-            tooltip: volume > 0 ? '静音' : '恢复音量',
-            onPressed: preview
-                ? () {}
-                : () => ref.read(playbackProvider.notifier).setVolume(
-                    ref.read(playbackProvider).volumeAfterMuteToggle),
-            icon: Icon(volume > 0
-                ? Icons.volume_up_rounded
-                : Icons.volume_off_rounded)),
+        // @Aoralsfout: yma你忘了鼠标滚轮悬浮调整qwq...
+        VolumeWheelControl(
+            value: volume, 
+            onChanged:
+                    preview
+                    ? (_) {}
+                    : ref.read(playbackProvider.notifier).setVolume,
+            child:
+                IconButton(
+                    tooltip: volume > 0 ? '静音' : '恢复音量',
+                    onPressed: preview
+                        ? () {}
+                        : () => ref.read(playbackProvider.notifier).setVolume(
+                            ref.read(playbackProvider).volumeAfterMuteToggle),
+                    icon: Icon(volume > 0
+                        ? Icons.volume_up_rounded
+                        : Icons.volume_off_rounded)),
+        ),
         Expanded(
             child: VolumeSlider(
                 value: volume,
