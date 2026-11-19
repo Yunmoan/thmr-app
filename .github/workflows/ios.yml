@@ -1,42 +1,132 @@
 name: Build iOS
+run-name: THMR 0.2.0 TestFlight recovery (${{ github.ref_name }})
 
 on:
-  pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 env:
-  # file_picker's CocoaPods configuration limits this app to document export.
   FLUTTER_SWIFT_PACKAGE_MANAGER: 'false'
 
 jobs:
-  build:
+  queue_upload:
+    if: github.repository == 'Yunmoan/thmr-app' && github.ref == 'refs/heads/codex/testflight-v0.2.0'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: queue-testflight-0.2.0
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Dispatch the iOS upload on the recovery tag
+        run: |
+          tag='v0.2.0-testflight-recovery'
+          tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq '.object.sha' 2>/dev/null || true)
+          if [[ -z "$tag_sha" ]]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" --jq '.ref'
+          elif [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
+            echo '::error::Recovery tag points to a different commit.'
+            exit 1
+          fi
+          count=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ios.yml/runs?branch=$tag&event=workflow_dispatch&per_page=1" --jq '.total_count')
+          if [[ "$count" == 0 ]]; then
+            gh workflow run ios.yml --repo "$GITHUB_REPOSITORY" --ref "$tag"
+          fi
+
+  upload:
+    if: github.repository == 'Yunmoan/thmr-app' && github.ref == 'refs/tags/v0.2.0-testflight-recovery'
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 60
+    environment: testflight
+    concurrency:
+      group: testflight-0.2.0
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ffe4c31568e2eb6380d0037b3d38902053a19562
           persist-credentials: false
+      - name: Exclude desktop updater scripts from the iOS app
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          pubspec = Path("pubspec.yaml")
+          contents = pubspec.read_text(encoding="utf-8")
+          asset = "    - assets/updater/\n"
+          if contents.count(asset) != 1:
+              raise SystemExit("Expected exactly one desktop updater asset entry")
+          pubspec.write_text(contents.replace(
+              asset,
+              "    - path: assets/updater/\n"
+              "      platforms: [android, linux, macos, web, windows]\n",
+          ), encoding="utf-8")
+          PY
+      - name: Prepare Apple signing
+        id: signing
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          IOS_APP_STORE_CONNECT_KEY_ID: ${{ secrets.IOS_APP_STORE_CONNECT_KEY_ID }}
+          IOS_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.IOS_APP_STORE_CONNECT_ISSUER_ID }}
+          IOS_APP_STORE_CONNECT_KEY_P8: ${{ secrets.IOS_APP_STORE_CONNECT_KEY_P8 }}
+        run: python3 tool/prepare_ios_signing.py
+      - name: Require signing credentials
+        if: steps.signing.outputs.enabled != 'true'
+        run: |
+          echo '::error::The testflight environment did not provide signing credentials.'
+          exit 1
       - uses: subosito/flutter-action@v2
+        if: steps.signing.outputs.enabled == 'true'
         with:
           flutter-version-file: .fvmrc
           cache: true
-      - name: Check the iOS toolchain
-        run: |
-          xcodebuild -version
-          xcrun --sdk iphoneos --show-sdk-version
-          pod --version
-      - name: Resolve the iOS version
-        id: version
-        run: python3 tool/resolve_version.py
-      - run: flutter pub get --enforce-lockfile
-      - name: Build the unsigned device app
+      - name: Install Flutter dependencies
+        if: steps.signing.outputs.enabled == 'true'
+        run: flutter pub get --enforce-lockfile
+      - name: Archive and export the signed IPA
+        if: steps.signing.outputs.enabled == 'true'
         env:
-          CLIENT_VERSION: ${{ steps.version.outputs.version }}
-          IOS_VERSION: ${{ steps.version.outputs.ios_version }}
-          IOS_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
-        run: bash tool/build_ios.sh
+          CLIENT_VERSION: '0.2.0'
+          IOS_VERSION: '0.2.0'
+          IOS_BUILD_NUMBER: '9901'
+          IOS_BUNDLE_ID: ${{ steps.signing.outputs.bundle_id }}
+        run: |
+          bash tool/build_ios.sh --testflight
+          assets=build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app/Frameworks/App.framework/flutter_assets/assets
+          if [[ -e "$assets/updater" ]]; then
+            echo '::error::The iOS archive contains desktop updater scripts.'
+            exit 1
+          fi
+      - name: Upload the IPA to App Store Connect
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          IOS_APP_STORE_CONNECT_KEY_ID: ${{ secrets.IOS_APP_STORE_CONNECT_KEY_ID }}
+          IOS_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.IOS_APP_STORE_CONNECT_ISSUER_ID }}
+          IOS_APP_STORE_CONNECT_KEY_P8: ${{ secrets.IOS_APP_STORE_CONNECT_KEY_P8 }}
+        run: |
+          shopt -s nullglob
+          packages=("$PWD"/build/ios/ipa/*.ipa)
+          if [[ ${#packages[@]} -ne 1 ]]; then
+            echo '::error::Expected exactly one exported iOS IPA.'
+            exit 1
+          fi
+          if [[ ! "$IOS_APP_STORE_CONNECT_KEY_ID" =~ ^[A-Z0-9]+$ ]]; then
+            echo '::error::Invalid App Store Connect API key ID.'
+            exit 1
+          fi
+          umask 077
+          api_dir=$(mktemp -d "$RUNNER_TEMP/testflight-api.XXXXXX")
+          trap 'rm -rf "$api_dir"' EXIT
+          cd "$api_dir"
+          mkdir private_keys
+          printf '%s\n' "$IOS_APP_STORE_CONNECT_KEY_P8" > "private_keys/AuthKey_$IOS_APP_STORE_CONNECT_KEY_ID.p8"
+          xcrun altool --upload-app --type ios -f "${packages[0]}" \
+            --apiKey "$IOS_APP_STORE_CONNECT_KEY_ID" --apiIssuer "$IOS_APP_STORE_CONNECT_ISSUER_ID"
