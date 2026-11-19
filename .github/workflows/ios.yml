@@ -25,7 +25,7 @@ jobs:
     steps:
       - name: Dispatch the iOS upload on the recovery tag
         run: |
-          tag='v0.2.0-testflight-recovery'
+          tag='v0.2.0-testflight-recovery-2'
           if tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq '.object.sha' 2>/dev/null); then
             if [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
               echo '::error::Recovery tag points to a different commit.'
@@ -41,7 +41,7 @@ jobs:
           fi
 
   upload:
-    if: github.repository == 'Yunmoan/thmr-app' && github.ref == 'refs/tags/v0.2.0-testflight-recovery'
+    if: github.repository == 'Yunmoan/thmr-app' && github.ref == 'refs/tags/v0.2.0-testflight-recovery-2'
     runs-on: macos-26
     timeout-minutes: 60
     environment: testflight
@@ -69,6 +69,14 @@ jobs:
               "      platforms: [android, linux, macos, web, windows]\n",
           ), encoding="utf-8")
           PY
+      - name: Check out the verified TestFlight signing helper
+        uses: actions/checkout@v7
+        with:
+          ref: 197303406d8a6b6778a33ec30ec6c68aab6d1007
+          path: .testflight-tools
+          sparse-checkout: tool/prepare_ios_signing.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
       - name: Prepare Apple signing
         id: signing
         env:
@@ -78,7 +86,7 @@ jobs:
           IOS_APP_STORE_CONNECT_KEY_ID: ${{ secrets.IOS_APP_STORE_CONNECT_KEY_ID }}
           IOS_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.IOS_APP_STORE_CONNECT_ISSUER_ID }}
           IOS_APP_STORE_CONNECT_KEY_P8: ${{ secrets.IOS_APP_STORE_CONNECT_KEY_P8 }}
-        run: python3 tool/prepare_ios_signing.py
+        run: python3 .testflight-tools/tool/prepare_ios_signing.py
       - name: Require signing credentials
         if: steps.signing.outputs.enabled != 'true'
         run: |
