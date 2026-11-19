@@ -339,12 +339,11 @@ class _TrackInfo extends StatelessWidget {
                         LargeScreenProgress(
                             current: current, updatedAt: station.updatedAt),
                       ],
-                      if (message != null) ...[
-                        const SizedBox(height: 12),
-                        Text(message,
-                            style: theme.textTheme.bodySmall
-                                ?.copyWith(color: theme.thmr.mutedInk)),
-                      ],
+                      // @Aoralsfout: 始终加载message框，无信息使用空字符串，确保更新message不更新布局，维持视觉稳定
+                      const SizedBox(height: 12),
+                      Text(message ?? "",
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: theme.thmr.mutedInk)),
                     ],
                   )),
             )));
