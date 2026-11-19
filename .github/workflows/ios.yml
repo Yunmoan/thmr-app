@@ -26,13 +26,14 @@ jobs:
       - name: Dispatch the iOS upload on the recovery tag
         run: |
           tag='v0.2.0-testflight-recovery'
-          tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq '.object.sha' 2>/dev/null || true)
-          if [[ -z "$tag_sha" ]]; then
+          if tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq '.object.sha' 2>/dev/null); then
+            if [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
+              echo '::error::Recovery tag points to a different commit.'
+              exit 1
+            fi
+          else
             gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
               -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" --jq '.ref'
-          elif [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
-            echo '::error::Recovery tag points to a different commit.'
-            exit 1
           fi
           count=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ios.yml/runs?branch=$tag&event=workflow_dispatch&per_page=1" --jq '.total_count')
           if [[ "$count" == 0 ]]; then
