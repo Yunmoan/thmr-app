@@ -460,6 +460,7 @@ class _ThmrNavBar extends StatelessWidget {
             children: [
               for (var i = 0; i < destinations.length; i++)
                 Expanded(
+                  key: ValueKey('bottom-nav-item-$i'),
                   child: FocusOutline(
                       child: Material(
                     color: Colors.transparent,
@@ -468,6 +469,15 @@ class _ThmrNavBar extends StatelessWidget {
                       button: true,
                       child: InkWell(
                         onTap: () => onChanged(i),
+                        // This pill animation is shared by every platform,
+                        // including Android, so Material's tap splash and
+                        // highlight would be a second feedback layer rather
+                        // than a platform cue.
+                        splashFactory: NoSplash.splashFactory,
+                        splashColor: Colors.transparent,
+                        highlightColor: Colors.transparent,
+                        hoverColor: Colors.transparent,
+                        focusColor: Colors.transparent,
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
