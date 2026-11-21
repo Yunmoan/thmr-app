@@ -1,6 +1,13 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+typedef WindowDisplay = ({Rect bounds, Rect workArea});
+typedef MiniWindowGeometry = ({
+  Rect bounds,
+  double scale,
+  List<WindowDisplay> displays,
+});
+
 /// Windows keeps composing a cloaked HWND, including its Flutter surface, but
 /// does not expose either its client content or its DWM decorations.
 class WindowPresentation {
@@ -19,6 +26,42 @@ class WindowPresentation {
 
   Future<void> fullscreenHint(bool fullscreen) =>
       _channel.invokeMethod<void>('fullscreenHint', fullscreen);
+
+  /// Screen and window rectangles share the same physical desktop coordinates.
+  Future<MiniWindowGeometry> miniWindowGeometry() async {
+    final data = (await _channel
+        .invokeMapMethod<String, Object?>('miniWindowGeometry'))!;
+    return (
+      bounds: _pixelRect(data['bounds']),
+      scale: (data['dpi'] as int) / 96,
+      displays: (data['displays'] as List<Object?>).map((entry) {
+        final display = entry as Map<Object?, Object?>;
+        return (
+          bounds: _pixelRect(display['bounds']),
+          workArea: _pixelRect(display['workArea']),
+        );
+      }).toList(),
+    );
+  }
+
+  Future<Rect> windowBoundsInPixels() async =>
+      _pixelRect(await _channel.invokeMethod<Object?>('windowBoundsInPixels'));
+
+  Future<void> setWindowPositionInPixels(Offset position) =>
+      _channel.invokeMethod<void>('setWindowPositionInPixels', {
+        'x': position.dx.round(),
+        'y': position.dy.round(),
+      });
+
+  Rect _pixelRect(Object? value) {
+    final rect = value as Map<Object?, Object?>;
+    return Rect.fromLTRB(
+      (rect['left'] as num).toDouble(),
+      (rect['top'] as num).toDouble(),
+      (rect['right'] as num).toDouble(),
+      (rect['bottom'] as num).toDouble(),
+    );
+  }
 
   /// Windows does not report taskbar/work-area insets through MediaQuery.
   Future<EdgeInsets> workAreaInsets() async {

@@ -11,6 +11,33 @@
 namespace {
 constexpr UINT_PTR kPresentationFrameTimer = 0x54484D52;
 constexpr UINT kPresentationFrameTimeoutMs = 5000;
+
+flutter::EncodableMap EncodePixelRect(const RECT& rect) {
+  return {
+      {flutter::EncodableValue("left"),
+       flutter::EncodableValue(static_cast<int32_t>(rect.left))},
+      {flutter::EncodableValue("top"),
+       flutter::EncodableValue(static_cast<int32_t>(rect.top))},
+      {flutter::EncodableValue("right"),
+       flutter::EncodableValue(static_cast<int32_t>(rect.right))},
+      {flutter::EncodableValue("bottom"),
+       flutter::EncodableValue(static_cast<int32_t>(rect.bottom))},
+  };
+}
+
+BOOL CALLBACK CollectDisplay(HMONITOR monitor, HDC, LPRECT, LPARAM data) {
+  MONITORINFO info{};
+  info.cbSize = sizeof(info);
+  if (!GetMonitorInfo(monitor, &info)) return FALSE;
+  auto* displays = reinterpret_cast<flutter::EncodableList*>(data);
+  displays->emplace_back(flutter::EncodableMap{
+      {flutter::EncodableValue("bounds"),
+       flutter::EncodableValue(EncodePixelRect(info.rcMonitor))},
+      {flutter::EncodableValue("workArea"),
+       flutter::EncodableValue(EncodePixelRect(info.rcWork))},
+  });
+  return TRUE;
+}
 }  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -127,6 +154,54 @@ void FlutterWindow::RegisterWindowPresentation() {
           }
           if (FAILED(hr)) {
             result->Error("fullscreen_hint_failed", "Cannot notify Windows shell");
+          } else {
+            result->Success();
+          }
+        } else if (method == "miniWindowGeometry" ||
+                   method == "windowBoundsInPixels") {
+          RECT bounds{};
+          if (!GetWindowRect(GetHandle(), &bounds)) {
+            result->Error("window_bounds_failed", "Cannot read window bounds");
+            return;
+          }
+          if (method == "windowBoundsInPixels") {
+            result->Success(flutter::EncodableValue(EncodePixelRect(bounds)));
+            return;
+          }
+          flutter::EncodableList displays;
+          const auto dpi = GetDpiForWindow(GetHandle());
+          if (dpi == 0 ||
+              !EnumDisplayMonitors(nullptr, nullptr, CollectDisplay,
+                                   reinterpret_cast<LPARAM>(&displays))) {
+            result->Error("display_metrics_failed", "Cannot read display layout");
+            return;
+          }
+          result->Success(flutter::EncodableValue(flutter::EncodableMap{
+              {flutter::EncodableValue("bounds"),
+               flutter::EncodableValue(EncodePixelRect(bounds))},
+              {flutter::EncodableValue("dpi"),
+               flutter::EncodableValue(static_cast<int32_t>(dpi))},
+              {flutter::EncodableValue("displays"),
+               flutter::EncodableValue(std::move(displays))},
+          }));
+        } else if (method == "setWindowPositionInPixels") {
+          const auto* position = call.arguments()
+              ? std::get_if<flutter::EncodableMap>(call.arguments()) : nullptr;
+          if (!position) {
+            result->Error("invalid_argument", "Expected a pixel position");
+            return;
+          }
+          const auto x = position->find(flutter::EncodableValue("x"));
+          const auto y = position->find(flutter::EncodableValue("y"));
+          const auto* left = x == position->end() ? nullptr
+                                                : std::get_if<int32_t>(&x->second);
+          const auto* top = y == position->end() ? nullptr
+                                               : std::get_if<int32_t>(&y->second);
+          if (!left || !top) {
+            result->Error("invalid_argument", "Expected integer x and y");
+          } else if (!SetWindowPos(GetHandle(), nullptr, *left, *top, 0, 0,
+                                   SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)) {
+            result->Error("window_move_failed", "Cannot move the window");
           } else {
             result->Success();
           }
