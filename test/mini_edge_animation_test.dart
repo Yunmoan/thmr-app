@@ -45,6 +45,24 @@ void main() {
     await mouse.removePointer();
   });
 
+  for (final dpi in [96, 120, 168, 192]) {
+    testWidgets('compact summary meets the desktop edge at DPI $dpi',
+        (tester) async {
+      final harness = _EdgeHarness(tester)..position = const Offset(100, 5);
+      await harness.mount(dpi: dpi);
+      harness.listener.onWindowMoved();
+      await harness.advance(420);
+
+      final summary = find.byWidgetPredicate(
+        (widget) => widget.runtimeType.toString() == '_MiniCompactSummary',
+      );
+      expect(summary, findsOneWidget);
+      final logicalTop = tester.getTopLeft(summary).dy;
+      final desktopTop = harness.position.dy + logicalTop * (dpi / 96);
+      expect(desktopTop, closeTo(0, 1e-6));
+    });
+  }
+
   testWidgets('blue edge tab fades in after tucking and can reverse mid-fade',
       (tester) async {
     final harness = _EdgeHarness(tester);

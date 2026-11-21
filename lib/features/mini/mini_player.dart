@@ -273,8 +273,14 @@ class MiniEdgePlacement {
   final Size _size;
   final double _scale;
 
+  double _physicalExtent(double logicalExtent) =>
+      (logicalExtent * _scale).roundToDouble();
+
+  double _pixelAlignedExtent(double logicalExtent) =>
+      _physicalExtent(logicalExtent) / _scale;
+
   Offset tuckedAt(double logicalExtent) {
-    final extent = (logicalExtent * _scale).roundToDouble();
+    final extent = _physicalExtent(logicalExtent);
     return switch (edge) {
       MiniEdge.top => expanded.translate(0, extent - _size.height),
       MiniEdge.left => expanded.translate(extent - _size.width, 0),
@@ -544,13 +550,18 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     });
   }
 
-  double _visibleExtent(MiniEdgeHideMode mode, MiniEdge? edge) =>
-      switch (mode) {
-        MiniEdgeHideMode.compact when edge == MiniEdge.top =>
-          miniSummaryHeight(MediaQuery.textScalerOf(context)),
-        MiniEdgeHideMode.hidden => _miniHiddenExtent,
-        _ => 16.0,
-      };
+  double _visibleExtent(MiniEdgeHideMode mode, MiniEdgePlacement? placement) {
+    if (mode == MiniEdgeHideMode.compact &&
+        placement != null &&
+        placement.edge == MiniEdge.top) {
+      // Match the physical height exposed by the HWND when the summary is
+      // bottom-aligned in the Flutter view.
+      return placement._pixelAlignedExtent(
+        miniSummaryHeight(MediaQuery.textScalerOf(context)),
+      );
+    }
+    return mode == MiniEdgeHideMode.hidden ? _miniHiddenExtent : 16.0;
+  }
 
   Future<void> _tuck(MiniEdgePlacement placement) async {
     if (!mounted || _transitioning) return;
@@ -560,7 +571,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     }
     _tuckRequested = true;
     final mode = ref.read(settingsProvider).miniEdgeHideMode;
-    final extent = _visibleExtent(mode, placement.edge);
+    final extent = _visibleExtent(mode, placement);
     final target = placement.tuckedAt(extent);
     _tuckedTarget = target;
     final movement = _setPosition(target);
@@ -676,7 +687,9 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
         (previous, next) {
       if (_tucked && _placement != null) unawaited(_tuck(_placement!));
     });
-    final edge = _placement?.edge;
+    final placement = _placement;
+    final edge = placement?.edge;
+    final visibleExtent = _visibleExtent(mode, placement);
     final tabAlignment = switch (edge) {
       MiniEdge.top => Alignment.bottomCenter,
       MiniEdge.left => Alignment.centerRight,
@@ -718,7 +731,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
                   // The native window retains room for the summary/hover strip.
                   // Slide the body through that last extent too, so removing it
                   // at rest cannot erase a still-visible slice of the player.
-                  final remaining = _visibleExtent(mode, edge) * progress;
+                  final remaining = visibleExtent * progress;
                   final offset = switch (edge) {
                     MiniEdge.top => Offset(0, -remaining),
                     MiniEdge.left => Offset(-remaining, 0),
@@ -732,6 +745,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
               _edgeHandle(Align(
                 alignment: Alignment.bottomCenter,
                 child: _MiniCompactSummary(
+                  height: visibleExtent,
                   stationState: widget.stationState,
                   onTap: () => unawaited(_reveal()),
                 ),
@@ -807,8 +821,13 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
 }
 
 class _MiniCompactSummary extends ConsumerWidget {
-  const _MiniCompactSummary({this.stationState, required this.onTap});
+  const _MiniCompactSummary({
+    required this.height,
+    this.stationState,
+    required this.onTap,
+  });
 
+  final double height;
   final StationUiState? stationState;
   final VoidCallback onTap;
 
@@ -822,7 +841,7 @@ class _MiniCompactSummary extends ConsumerWidget {
     final track = station.status?.current;
     return SizedBox(
       width: double.infinity,
-      height: miniSummaryHeight(MediaQuery.textScalerOf(context)),
+      height: height,
       child: Material(
         color: Colors.transparent,
         child: ClipRRect(
