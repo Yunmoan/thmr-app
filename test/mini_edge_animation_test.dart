@@ -1,16 +1,68 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:thmr_app/core/player/playback_controller.dart';
+import 'package:thmr_app/core/platform/window_presentation.dart';
 import 'package:thmr_app/core/state/settings_provider.dart';
 import 'package:thmr_app/core/state/station_provider.dart';
 import 'package:thmr_app/features/mini/mini_player.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'fixtures/mini_window_mock.dart';
+
 void main() {
+  testWidgets('a mixed-DPI seam stays open and the outer edge still tucks',
+      (tester) async {
+    final harness = _EdgeHarness(tester)..position = const Offset(1928, 180);
+    await harness.mount(dpi: 144, displays: const [
+      primaryMiniDisplay,
+      (
+        bounds: Rect.fromLTWH(1920, 0, 2560, 1440),
+        workArea: Rect.fromLTWH(1920, 0, 2560, 1380),
+      ),
+    ]);
+    final body = find.text('暂无播放');
+
+    harness.listener.onWindowMoved();
+    await harness.advance(420);
+    expect(harness.movePositions, isEmpty);
+    expect(body, findsOneWidget);
+
+    // 24 physical pixels from the right edge is within 18 logical pixels.
+    harness.position = const Offset(3940, 180);
+    harness.listener.onWindowMoved();
+    await harness.advance(420);
+    expect(harness.position, const Offset(4456, 180));
+    expect(body, findsNothing);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(8, 55));
+    await harness.advance(220);
+    expect(harness.position, const Offset(3964, 180));
+    expect(body, findsOneWidget);
+    await mouse.removePointer();
+  });
+
+  for (final dpi in [96, 120, 168, 192]) {
+    testWidgets('compact summary meets the desktop edge at DPI $dpi',
+        (tester) async {
+      final harness = _EdgeHarness(tester)..position = const Offset(100, 5);
+      await harness.mount(dpi: dpi);
+      harness.listener.onWindowMoved();
+      await harness.advance(420);
+
+      final summary = find.byWidgetPredicate(
+        (widget) => widget.runtimeType.toString() == '_MiniCompactSummary',
+      );
+      expect(summary, findsOneWidget);
+      final logicalTop = tester.getTopLeft(summary).dy;
+      final desktopTop = harness.position.dy + logicalTop * (dpi / 96);
+      expect(desktopTop, closeTo(0, 1e-6));
+    });
+  }
+
   testWidgets('blue edge tab fades in after tucking and can reverse mid-fade',
       (tester) async {
     final harness = _EdgeHarness(tester);
@@ -208,57 +260,36 @@ class _EdgeHarness {
   Future<void> mount({
     bool reducedMotion = false,
     MiniEdgeHideMode hideMode = MiniEdgeHideMode.compact,
+    int dpi = 96,
+    List<WindowDisplay> displays = const [primaryMiniDisplay],
   }) async {
     _clockOrigin = tester.binding.clock.now();
     SharedPreferences.setMockInitialValues({'miniEdgeHideMode': hideMode.name});
-    tester.view.physicalSize = kMiniWindowSize;
-    tester.view.devicePixelRatio = 1;
-    const window = MethodChannel('window_manager');
-    const screen = MethodChannel('dev.leanflutter.plugins/screen_retriever');
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(window,
-        (call) async {
-      if (call.method == 'getBounds') {
-        return {
-          'x': position.dx,
-          'y': position.dy,
-          'width': kMiniWindowSize.width,
-          'height': kMiniWindowSize.height,
-        };
-      }
-      if (call.method == 'setBounds') {
+    final scale = dpi / 96;
+    final physicalSize = kMiniWindowSize * scale;
+    tester.view.physicalSize = physicalSize;
+    tester.view.devicePixelRatio = scale;
+    mockMiniWindow(
+      tester,
+      bounds: () => position & physicalSize,
+      dpi: dpi,
+      displays: displays,
+      move: (target) async {
         pendingMoves++;
         if (pendingMoves > maxPendingMoves) maxPendingMoves = pendingMoves;
         if (nativeLatency != Duration.zero) {
           await Future<void>.delayed(nativeLatency);
         }
-        final args = call.arguments as Map;
-        position = Offset(args['x'] as double, args['y'] as double);
+        position = target;
         moveTimes.add(tester.binding.clock.now().difference(_clockOrigin));
         movePositions.add(position);
         pendingMoves--;
-      }
-      return null;
-    });
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        screen,
-        (call) async => {
-              'displays': [
-                {
-                  'id': '1',
-                  'size': {'width': 1920.0, 'height': 1080.0},
-                  'visiblePosition': {'dx': 0.0, 'dy': 0.0},
-                  'visibleSize': {'width': 1920.0, 'height': 1040.0},
-                },
-              ],
-            });
+      },
+    );
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox.shrink());
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
-      tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(window, null);
-      tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(screen, null);
     });
     await tester.pumpWidget(ProviderScope(
       child: MaterialApp(

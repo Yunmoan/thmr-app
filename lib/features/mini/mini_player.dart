@@ -12,7 +12,6 @@ import 'package:flutter/material.dart';
 import '../../core/theme/thmr_motion.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/player/playback_controller.dart';
@@ -264,79 +263,87 @@ class _MiniPlayerTransitionState extends ConsumerState<MiniPlayerTransition>
 /// 迷你播放窗:全区域可拖动,双击还原,置顶显示。
 enum MiniEdge { top, left, right }
 
+const _miniHiddenExtent = 3.0;
+
 class MiniEdgePlacement {
-  const MiniEdgePlacement(this.edge, this.expanded, this.tucked);
+  const MiniEdgePlacement(this.edge, this.expanded, this._size, this._scale);
 
   final MiniEdge edge;
   final Offset expanded;
-  final Offset tucked;
+  final Size _size;
+  final double _scale;
 
-  Offset tuckedAt(double visibleExtent) => switch (edge) {
-        MiniEdge.top => tucked.translate(0, visibleExtent - 16),
-        MiniEdge.left => tucked.translate(visibleExtent - 16, 0),
-        MiniEdge.right => tucked.translate(16 - visibleExtent, 0),
-      };
+  double _physicalExtent(double logicalExtent) =>
+      (logicalExtent * _scale).roundToDouble();
+
+  double _pixelAlignedExtent(double logicalExtent) =>
+      _physicalExtent(logicalExtent) / _scale;
+
+  Offset tuckedAt(double logicalExtent) {
+    final extent = _physicalExtent(logicalExtent);
+    return switch (edge) {
+      MiniEdge.top => expanded.translate(0, extent - _size.height),
+      MiniEdge.left => expanded.translate(extent - _size.width, 0),
+      MiniEdge.right => expanded.translate(_size.width - extent, 0),
+    };
+  }
 }
 
-MiniEdgePlacement? miniEdgePlacement(Rect window, Rect workArea) {
-  const threshold = 18.0;
-  const revealedWidth = 16.0;
-  if (window.bottom <= workArea.top ||
-      window.top >= workArea.bottom ||
-      window.right <= workArea.left ||
-      window.left >= workArea.right) {
+MiniEdgePlacement? miniEdgePlacement(MiniWindowGeometry geometry) {
+  final (bounds: window, :scale, :displays) = geometry;
+  final display = _miniDisplayForWindow(window, displays);
+  if (display == null) return null;
+  final workArea = display.workArea;
+  if (!window.overlaps(workArea) ||
+      window.width > workArea.width ||
+      window.height > workArea.height) {
     return null;
   }
+
+  final threshold = 18 * scale;
   final topGap = (window.top - workArea.top).abs();
   final leftGap = (window.left - workArea.left).abs();
   final rightGap = (window.right - workArea.right).abs();
-  if (topGap > threshold && leftGap > threshold && rightGap > threshold) {
-    return null;
+  final x = window.left.clamp(workArea.left, workArea.right - window.width);
+  final y = window.top.clamp(workArea.top, workArea.bottom - window.height);
+  final left = (MiniEdge.left, leftGap, Offset(workArea.left, y));
+  final right =
+      (MiniEdge.right, rightGap, Offset(workArea.right - window.width, y));
+  for (final (edge, gap, expanded) in [
+    (MiniEdge.top, topGap, Offset(x, workArea.top)),
+    if (leftGap <= rightGap) ...[left, right] else ...[right, left],
+  ]) {
+    if (gap > threshold) continue;
+    final placement = MiniEdgePlacement(edge, expanded, window.size, scale);
+    // The hidden mode travels furthest. Include the drag endpoint and the
+    // reveal position as well, so all hide modes share a safe path.
+    final swept = window
+        .expandToInclude(expanded & window.size)
+        .expandToInclude(placement.tuckedAt(_miniHiddenExtent) & window.size);
+    final crossesDisplay = displays.any((other) =>
+        other.bounds != display.bounds && swept.overlaps(other.bounds));
+    if (!crossesDisplay) return placement;
   }
-  final x = window.left.clamp(
-    workArea.left,
-    (workArea.right - window.width).clamp(workArea.left, workArea.right),
-  );
-  final y = window.top.clamp(
-    workArea.top,
-    (workArea.bottom - window.height).clamp(workArea.top, workArea.bottom),
-  );
-  if (topGap <= threshold) {
-    return MiniEdgePlacement(
-      MiniEdge.top,
-      Offset(x, workArea.top),
-      Offset(x, workArea.top - window.height + revealedWidth),
-    );
-  }
-  if (leftGap <= rightGap) {
-    return MiniEdgePlacement(
-      MiniEdge.left,
-      Offset(workArea.left, y),
-      Offset(workArea.left - window.width + revealedWidth, y),
-    );
-  }
-  return MiniEdgePlacement(
-    MiniEdge.right,
-    Offset(workArea.right - window.width, y),
-    Offset(workArea.right - revealedWidth, y),
-  );
+  return null;
 }
 
 /// Select the display containing the largest part of the mini window.
-Rect? miniWorkAreaForWindow(Rect window, Iterable<Rect> workAreas) {
-  Rect? best;
+WindowDisplay? _miniDisplayForWindow(
+    Rect window, List<WindowDisplay> displays) {
+  WindowDisplay? best;
   var bestOverlap = 0.0;
   var nearestDistance = double.infinity;
-  for (final area in workAreas) {
+  for (final display in displays) {
+    final area = display.bounds;
     final intersection = window.intersect(area);
-    final overlap = intersection.width.clamp(0.0, double.infinity) *
-        intersection.height.clamp(0.0, double.infinity);
+    if (intersection.isEmpty) continue;
+    final overlap = intersection.width * intersection.height;
     final dx = window.center.dx.clamp(area.left, area.right) - window.center.dx;
     final dy = window.center.dy.clamp(area.top, area.bottom) - window.center.dy;
     final distance = dx * dx + dy * dy;
     if (overlap > bestOverlap ||
         (overlap == bestOverlap && distance < nearestDistance)) {
-      best = area;
+      best = display;
       bestOverlap = overlap;
       nearestDistance = distance;
     }
@@ -357,6 +364,7 @@ class MiniPlayerWindow extends ConsumerStatefulWidget {
 
 class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     with SingleTickerProviderStateMixin, WindowListener {
+  final _presentation = WindowPresentation();
   MiniEdgePlacement? _placement;
   Timer? _hideTimer;
   bool _tucked = false;
@@ -428,30 +436,21 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
 
   Future<void> _snapAfterMove(int serial) async {
     if (!mounted || _transitioning || _settingPosition || _dragging) return;
-    final bounds = await windowManager.getBounds();
-    final displays = await screenRetriever.getAllDisplays();
+    final geometry = await _presentation.miniWindowGeometry();
     if (!mounted ||
         _transitioning ||
+        _settingPosition ||
         _dragging ||
-        serial != _moveSerial ||
-        displays.isEmpty) {
+        serial != _moveSerial) {
       return;
     }
     final currentTarget = _tucked ? _tuckedTarget : _placement?.expanded;
     if (currentTarget != null &&
-        (bounds.topLeft - currentTarget).distance < 2) {
+        (geometry.bounds.topLeft - currentTarget).distance < 2) {
       return;
     }
-    final workAreas = <Rect>[];
-    for (final display in displays) {
-      final position = display.visiblePosition;
-      final size = display.visibleSize;
-      if (position == null || size == null) continue;
-      workAreas.add(position & size);
-    }
-    final nearest = miniWorkAreaForWindow(bounds, workAreas);
-    if (nearest == null) return;
-    final placement = miniEdgePlacement(bounds, nearest);
+    final placement = miniEdgePlacement(geometry);
+    _hideTimer?.cancel();
     if (placement == null) {
       _edgeProgress.value = 0;
       setState(() {
@@ -462,7 +461,6 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
       });
       return;
     }
-    _hideTimer?.cancel();
     setState(() {
       _placement = placement;
       _tucked = false;
@@ -481,7 +479,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
       // Finish the one outstanding write before sampling that position.
       await _positionWrite;
       if (!mounted || _transitioning || serial != _positionSerial) return;
-      final start = (await windowManager.getBounds()).topLeft;
+      final start = (await _presentation.windowBoundsInPixels()).topLeft;
       if (!mounted || _transitioning || serial != _positionSerial) return;
       _positionStart = start;
       _positionTarget = position;
@@ -521,7 +519,8 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     _pendingPosition = null;
     // Only one platform call may be in flight. If it takes longer than a
     // frame, replace intermediate samples with the latest frame's position.
-    _positionWrite = windowManager.setPosition(position).then((_) {
+    _positionWrite =
+        _presentation.setWindowPositionInPixels(position).then((_) {
       if (!mounted || serial != _positionSerial || _transitioning) return;
       final placement = _placement;
       final target = _tuckedTarget;
@@ -551,13 +550,18 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     });
   }
 
-  double _visibleExtent(MiniEdgeHideMode mode, MiniEdge? edge) =>
-      switch (mode) {
-        MiniEdgeHideMode.compact when edge == MiniEdge.top =>
-          miniSummaryHeight(MediaQuery.textScalerOf(context)),
-        MiniEdgeHideMode.hidden => 3.0,
-        _ => 16.0,
-      };
+  double _visibleExtent(MiniEdgeHideMode mode, MiniEdgePlacement? placement) {
+    if (mode == MiniEdgeHideMode.compact &&
+        placement != null &&
+        placement.edge == MiniEdge.top) {
+      // Match the physical height exposed by the HWND when the summary is
+      // bottom-aligned in the Flutter view.
+      return placement._pixelAlignedExtent(
+        miniSummaryHeight(MediaQuery.textScalerOf(context)),
+      );
+    }
+    return mode == MiniEdgeHideMode.hidden ? _miniHiddenExtent : 16.0;
+  }
 
   Future<void> _tuck(MiniEdgePlacement placement) async {
     if (!mounted || _transitioning) return;
@@ -567,7 +571,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     }
     _tuckRequested = true;
     final mode = ref.read(settingsProvider).miniEdgeHideMode;
-    final extent = _visibleExtent(mode, placement.edge);
+    final extent = _visibleExtent(mode, placement);
     final target = placement.tuckedAt(extent);
     _tuckedTarget = target;
     final movement = _setPosition(target);
@@ -683,7 +687,9 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
         (previous, next) {
       if (_tucked && _placement != null) unawaited(_tuck(_placement!));
     });
-    final edge = _placement?.edge;
+    final placement = _placement;
+    final edge = placement?.edge;
+    final visibleExtent = _visibleExtent(mode, placement);
     final tabAlignment = switch (edge) {
       MiniEdge.top => Alignment.bottomCenter,
       MiniEdge.left => Alignment.centerRight,
@@ -725,7 +731,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
                   // The native window retains room for the summary/hover strip.
                   // Slide the body through that last extent too, so removing it
                   // at rest cannot erase a still-visible slice of the player.
-                  final remaining = _visibleExtent(mode, edge) * progress;
+                  final remaining = visibleExtent * progress;
                   final offset = switch (edge) {
                     MiniEdge.top => Offset(0, -remaining),
                     MiniEdge.left => Offset(-remaining, 0),
@@ -739,6 +745,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
               _edgeHandle(Align(
                 alignment: Alignment.bottomCenter,
                 child: _MiniCompactSummary(
+                  height: visibleExtent,
                   stationState: widget.stationState,
                   onTap: () => unawaited(_reveal()),
                 ),
@@ -814,8 +821,13 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
 }
 
 class _MiniCompactSummary extends ConsumerWidget {
-  const _MiniCompactSummary({this.stationState, required this.onTap});
+  const _MiniCompactSummary({
+    required this.height,
+    this.stationState,
+    required this.onTap,
+  });
 
+  final double height;
   final StationUiState? stationState;
   final VoidCallback onTap;
 
@@ -829,7 +841,7 @@ class _MiniCompactSummary extends ConsumerWidget {
     final track = station.status?.current;
     return SizedBox(
       width: double.infinity,
-      height: miniSummaryHeight(MediaQuery.textScalerOf(context)),
+      height: height,
       child: Material(
         color: Colors.transparent,
         child: ClipRRect(
