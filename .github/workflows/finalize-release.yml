@@ -20,11 +20,6 @@ on:
         required: false
         default: false
         type: boolean
-      testflight_only:
-        description: 'Retry TestFlight for the build already published on the stable Release'
-        required: false
-        default: false
-        type: boolean
 
 concurrency:
   group: finalize-release-${{ inputs.version }}
@@ -48,7 +43,6 @@ jobs:
           SOURCE_RUN: ${{ inputs.run_id }}
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_BUILD: ${{ inputs.build_number }}
-          TESTFLIGHT_ONLY: ${{ inputs.testflight_only }}
         run: |
           python3 - <<'PY'
           import json, os, re, subprocess
@@ -76,36 +70,27 @@ jobs:
           first_sha = tag_commit(version_tag)
           sha = source['head_sha']
           build_update = source['head_branch'] != version_tag
-          testflight_only = os.environ['TESTFLIGHT_ONLY'] == 'true'
           if build_update:
               assert source['conclusion'] == 'success'
               assert source['head_branch'] == api('')['default_branch']
               build_tag = f'{version_tag}+{build}'
-              dispatch_tag = f'{build_tag}-testflight' if testflight_only else build_tag
-              assert os.environ['GITHUB_REF'] == f'refs/tags/{dispatch_tag}'
-              if testflight_only:
-                  assert tag_commit(build_tag) == sha
-              else:
-                  assert os.environ['GITHUB_SHA'] == sha
+              assert os.environ['GITHUB_REF'] == f'refs/tags/{build_tag}'
+              assert os.environ['GITHUB_SHA'] == sha
               assert api(f'compare/{first_sha}...{sha}')['status'] == 'ahead'
               current = api(f'releases/tags/{version_tag}')
-              assert not current['draft'] and not current['prerelease']
+              assert not current['draft'] and not current['prerelease'] and not current['immutable']
               title, _, current_build = current['name'].rpartition('+')
-              if testflight_only:
-                  assert current['name'] == f'THMR {version}+{build}'
-              elif current['immutable']:
-                  raise SystemExit('The stable Release is immutable.')
-              elif (title == f'THMR {version}' and current_build.isdecimal()
+              if (title == f'THMR {version}' and current_build.isdecimal()
                       and int(current_build) > int(build)):
                   raise SystemExit('The stable Release already contains a newer build.')
           else:
-              assert not testflight_only and first_sha == sha
+              assert first_sha == sha
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write(f"sha={sha}\nbuild_update={str(build_update).lower()}\n")
           PY
 
   windows:
-    if: inputs.rebuild_windows && !inputs.testflight_only
+    if: inputs.rebuild_windows
     needs: source
     runs-on: windows-latest
     permissions:
@@ -159,7 +144,7 @@ jobs:
           overwrite: true
 
   publish:
-    if: ${{ !cancelled() && !inputs.testflight_only && needs.source.result == 'success' && (needs.windows.result == 'success' || needs.windows.result == 'skipped') }}
+    if: ${{ !cancelled() && needs.source.result == 'success' && (needs.windows.result == 'success' || needs.windows.result == 'skipped') }}
     needs: [source, windows]
     runs-on: ubuntu-latest
     steps:
@@ -259,11 +244,17 @@ jobs:
           PY
 
   ios_testflight:
-    if: ${{ !cancelled() && needs.source.result == 'success' && needs.source.outputs.build_update == 'true' && (inputs.testflight_only || needs.publish.result == 'success') }}
+    if: ${{ !cancelled() && needs.source.result == 'success' && needs.source.outputs.build_update == 'true' && needs.publish.result == 'success' }}
     needs: [source, publish]
-    uses: ./.github/workflows/ios-testflight.yml
-    with:
-      version: ${{ inputs.version }}
-      build_number: ${{ inputs.build_number }}
-      source_sha: ${{ needs.source.outputs.sha }}
-      require_signing: true
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Start the TestFlight upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_BUILD: ${{ inputs.build_number }}
+        run: |
+          gh workflow run ios-testflight.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" \
+            -f version="$RELEASE_VERSION" -f build_number="$RELEASE_BUILD" -f require_signing=true

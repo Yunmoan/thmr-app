@@ -454,7 +454,15 @@ jobs:
   ios_testflight:
     if: github.ref_type == 'tag' && needs.validate.outputs.prerelease == 'false'
     needs: [validate, release]
-    uses: ./.github/workflows/ios-testflight.yml
-    with:
-      version: ${{ needs.validate.outputs.version }}
-      build_number: ${{ needs.validate.outputs.build_number }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Start the TestFlight upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_BUILD: ${{ needs.validate.outputs.build_number }}
+        run: |
+          gh workflow run ios-testflight.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" \
+            -f version="$RELEASE_VERSION" -f build_number="$RELEASE_BUILD" -f require_signing=false

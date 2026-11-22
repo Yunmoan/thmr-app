@@ -1,19 +1,21 @@
 name: Upload iOS to TestFlight
+run-name: TestFlight ${{ inputs.version }}+${{ inputs.build_number }}
 
 on:
-  workflow_call:
+  workflow_dispatch:
     inputs:
       version:
+        description: 'Published client version'
         required: true
         type: string
       build_number:
+        description: 'Build number on the stable Release'
         required: true
         type: string
-      source_sha:
-        type: string
       require_signing:
+        description: 'Fail if signing credentials are unavailable'
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: read
@@ -30,9 +32,41 @@ jobs:
       group: testflight-${{ inputs.version }}
       cancel-in-progress: false
     steps:
+      - name: Resolve and verify the published source
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_BUILD: ${{ inputs.build_number }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          version, build = (os.environ[n] for n in ('RELEASE_VERSION', 'RELEASE_BUILD'))
+          assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version)
+          assert re.fullmatch(r'[1-9][0-9]*', build)
+          version_tag = f'v{version}'
+          build_tag = f'{version_tag}+{build}'
+          ref = os.environ['GITHUB_REF']
+          if ref == f'refs/tags/{version_tag}':
+              source = ref
+          elif ref == f'refs/tags/{build_tag}' or re.fullmatch(
+              re.escape(f'refs/tags/{build_tag}-testflight') + r'(?:\.[1-9][0-9]*)?', ref
+          ):
+              source = f'refs/tags/{build_tag}'
+          else:
+              raise SystemExit('Run the upload on the published version or build tag.')
+          repo = os.environ['GITHUB_REPOSITORY']
+          release = json.loads(subprocess.check_output([
+              'gh', 'api', f'repos/{repo}/releases/tags/{version_tag}',
+          ]))
+          assert not release['draft'] and not release['prerelease']
+          assert release['name'] == f'THMR {version}+{build}'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f'ref={source}\n')
+          PY
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.source_sha || github.sha }}
+          ref: ${{ steps.source.outputs.ref }}
           persist-credentials: false
       - name: Prepare Apple signing
         id: signing

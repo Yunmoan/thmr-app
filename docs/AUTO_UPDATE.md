@@ -175,7 +175,7 @@ git push origin v0.2.0
 
 同一正式版本发布新构建时，先等待默认分支上的 **Build Clients** 成功。把该次运行的提交标记为 `v版本号+构建号`，在此标签上运行 **Finalize Existing Release**，填入 Build Clients 的运行 ID、版本号和构建号。工作流更新原正式 Release 的各平台包、日志和签名清单，再将同一版本和构建号上传到 TestFlight。更新日志在原版本下补充后续构建的改动，并保留首个构建的内容。
 
-补传已发布的构建时，在含有发布工作流的提交上创建 `v版本号+构建号-testflight` 标签，运行 **Finalize Existing Release** 并启用 `testflight_only`。工作流校验正式 Release 的构建号，并从原构建标签对应的提交打包 iOS。
+补传已发布的构建时，可在含有上传工作流的提交上创建 `v版本号+构建号-testflight` 标签，再运行 **Upload iOS to TestFlight**。工作流校验正式 Release 的构建号，并从原构建标签对应的提交打包 iOS。
 
 普通预览构建（包括 fork）未配置更新签名私钥和公钥时，仍上传安装包、校验和及更新说明，但不生成更新清单。只配置其中一项或密钥不匹配仍会报错；`v*` 标签发布仍要求完整的签名配置。
 
