@@ -22,4 +22,8 @@ plist="$app/Info.plist"
 test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$plist")" = "$IOS_VERSION"
 test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$plist")" = "$IOS_BUILD_NUMBER"
 test "$(/usr/libexec/PlistBuddy -c 'Print ITSAppUsesNonExemptEncryption' "$plist")" = false
+if [[ -e "$app/Frameworks/App.framework/flutter_assets/assets/updater" ]]; then
+  echo '::error::The iOS app contains desktop updater scripts.'
+  exit 1
+fi
 lipo "$app/Frameworks/Mpv.framework/Mpv" -verify_arch arm64

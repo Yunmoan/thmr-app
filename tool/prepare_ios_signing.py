@@ -68,7 +68,11 @@ def prepare_signing():
             r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*", bundle_id
         ):
             raise SystemExit("Use a provisioning profile for an explicit iOS App ID")
-        profile_id = str(uuid.UUID(profile["UUID"])).upper()
+        profile_id = profile["UUID"]
+        if str(uuid.UUID(profile_id)) != profile_id.lower():
+            raise SystemExit("The iOS provisioning profile has an invalid UUID")
+        profile_name = profile["Name"]
+        profile_specifier = profile_name if re.fullmatch(r"[\w .-]+", profile_name) else profile_id
         certificate, = profile["DeveloperCertificates"]
         fingerprint = hashlib.sha1(certificate).hexdigest().upper()
 
@@ -84,15 +88,16 @@ def prepare_signing():
             raise SystemExit("The P12 must contain the provisioning profile's signing identity and private key")
         security("list-keychains", "-d", "user", "-s", keychain)
 
-        profiles = Path.home() / "Library/Developer/Xcode/UserData/Provisioning Profiles"
-        profiles.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(profile_file, profiles / f"{profile_id}.mobileprovision")
+        for location in ("Developer/Xcode/UserData", "MobileDevice"):
+            profiles = Path.home() / "Library" / location / "Provisioning Profiles"
+            profiles.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(profile_file, profiles / f"{profile_id}.mobileprovision")
 
     Path("ios/Flutter/TestFlightSigning.xcconfig").write_text(
         "CODE_SIGN_STYLE = Manual\n"
         f"DEVELOPMENT_TEAM = {team_id}\n"
         f"CODE_SIGN_IDENTITY[sdk=iphoneos*] = {fingerprint}\n"
-        f"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*] = {profile_id}\n",
+        f"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*] = {profile_specifier}\n",
         encoding="utf-8",
     )
     (runner_temp / "ios-export-options.plist").write_bytes(plistlib.dumps({

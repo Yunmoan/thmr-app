@@ -9,6 +9,9 @@ on:
       build_number:
         required: true
         type: string
+      require_signing:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -38,6 +41,11 @@ jobs:
           IOS_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.IOS_APP_STORE_CONNECT_ISSUER_ID }}
           IOS_APP_STORE_CONNECT_KEY_P8: ${{ secrets.IOS_APP_STORE_CONNECT_KEY_P8 }}
         run: python3 tool/prepare_ios_signing.py
+      - name: Require signing credentials for the requested upload
+        if: inputs.require_signing && steps.signing.outputs.enabled != 'true'
+        run: |
+          echo '::error::The testflight environment did not provide signing credentials.'
+          exit 1
       - uses: subosito/flutter-action@v2
         if: steps.signing.outputs.enabled == 'true'
         with:

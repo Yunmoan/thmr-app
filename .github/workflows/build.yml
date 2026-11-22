@@ -11,7 +11,7 @@ on:
   pull_request:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ['v*', '!v*\+*']
 
 permissions:
   contents: read

@@ -21,6 +21,10 @@ on:
         default: false
         type: boolean
 
+concurrency:
+  group: finalize-release-${{ inputs.version }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
   actions: read
@@ -30,6 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.source.outputs.sha }}
+      build_update: ${{ steps.source.outputs.build_update }}
     steps:
       - name: Check the source build and release tag
         id: source
@@ -47,18 +52,37 @@ jobs:
           assert re.fullmatch(r'[1-9][0-9]*', build)
           repo = os.environ['GITHUB_REPOSITORY']
           def api(endpoint):
-              return json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/{endpoint}']))
+              path = '/'.join(filter(None, ('repos', repo, endpoint)))
+              return json.loads(subprocess.check_output(['gh', 'api', path]))
           source = api(f'actions/runs/{run}')
-          assert source['name'] == 'Build Clients' and source['event'] == 'push'
-          assert source['status'] == 'completed' and source['head_branch'] == f'v{version}'
+          assert source['path'] == '.github/workflows/build.yml' and source['event'] == 'push'
+          assert source['status'] == 'completed'
           assert source['head_repository']['full_name'] == repo
-          assert int(build) == source['run_number'] * 100 + source['run_attempt']
-          tag = api(f'git/ref/tags/v{version}')['object']
+          run_number, attempt = divmod(int(build), 100)
+          assert run_number == source['run_number'] and 1 <= attempt <= source['run_attempt']
+          version_tag = f'v{version}'
+          tag = api(f'git/ref/tags/{version_tag}')['object']
           if tag['type'] == 'tag':
               tag = api(f"git/tags/{tag['sha']}")['object']
-          assert tag['type'] == 'commit' and tag['sha'] == source['head_sha']
+          assert tag['type'] == 'commit'
+          sha = source['head_sha']
+          build_update = source['head_branch'] != version_tag
+          if build_update:
+              assert source['conclusion'] == 'success'
+              assert source['head_branch'] == api('')['default_branch']
+              assert os.environ['GITHUB_REF'] == f'refs/tags/{version_tag}+{build}'
+              assert os.environ['GITHUB_SHA'] == sha
+              assert api(f"compare/{tag['sha']}...{sha}")['status'] == 'ahead'
+              current = api(f'releases/tags/{version_tag}')
+              assert not current['draft'] and not current['prerelease'] and not current['immutable']
+              title, _, current_build = current['name'].rpartition('+')
+              if (title == f'THMR {version}' and current_build.isdecimal()
+                      and int(current_build) > int(build)):
+                  raise SystemExit('The stable Release already contains a newer build.')
+          else:
+              assert tag['sha'] == sha
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
-              out.write(f"sha={source['head_sha']}\n")
+              out.write(f"sha={sha}\nbuild_update={str(build_update).lower()}\n")
           PY
 
   windows:
@@ -196,7 +220,9 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_BUILD: ${{ inputs.build_number }}
         run: |
-          gh release upload "v$RELEASE_VERSION" release/thmr-app-* release/metadata/* --clobber
+          gh release upload "v$RELEASE_VERSION" release/thmr-app-* \
+            release/metadata/RELEASE_NOTES.md release/metadata/SHA256SUMS --clobber
+          gh release upload "v$RELEASE_VERSION" release/metadata/thmr-update.json --clobber
           python3 - <<'PY'
           import json, os, subprocess
           from pathlib import Path
@@ -212,3 +238,12 @@ jobs:
           subprocess.run(['gh', 'api', '--method', 'PATCH', f"repos/{repo}/releases/{release['id']}",
               '--input', '-', '--jq', '.html_url'], input=json.dumps(payload), text=True, check=True)
           PY
+
+  ios_testflight:
+    if: needs.source.outputs.build_update == 'true'
+    needs: [source, publish]
+    uses: ./.github/workflows/ios-testflight.yml
+    with:
+      version: ${{ inputs.version }}
+      build_number: ${{ inputs.build_number }}
+      require_signing: true
