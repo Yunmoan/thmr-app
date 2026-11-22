@@ -9,6 +9,8 @@ on:
       build_number:
         required: true
         type: string
+      source_sha:
+        type: string
       require_signing:
         type: boolean
         default: false
@@ -30,6 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
       - name: Prepare Apple signing
         id: signing

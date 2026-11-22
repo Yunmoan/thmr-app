@@ -20,6 +20,11 @@ on:
         required: false
         default: false
         type: boolean
+      testflight_only:
+        description: 'Retry TestFlight for the build already published on the stable Release'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: finalize-release-${{ inputs.version }}
@@ -43,6 +48,7 @@ jobs:
           SOURCE_RUN: ${{ inputs.run_id }}
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_BUILD: ${{ inputs.build_number }}
+          TESTFLIGHT_ONLY: ${{ inputs.testflight_only }}
         run: |
           python3 - <<'PY'
           import json, os, re, subprocess
@@ -54,6 +60,12 @@ jobs:
           def api(endpoint):
               path = '/'.join(filter(None, ('repos', repo, endpoint)))
               return json.loads(subprocess.check_output(['gh', 'api', path]))
+          def tag_commit(name):
+              tag = api(f'git/ref/tags/{name}')['object']
+              if tag['type'] == 'tag':
+                  tag = api(f"git/tags/{tag['sha']}")['object']
+              assert tag['type'] == 'commit'
+              return tag['sha']
           source = api(f'actions/runs/{run}')
           assert source['path'] == '.github/workflows/build.yml' and source['event'] == 'push'
           assert source['status'] == 'completed'
@@ -61,32 +73,39 @@ jobs:
           run_number, attempt = divmod(int(build), 100)
           assert run_number == source['run_number'] and 1 <= attempt <= source['run_attempt']
           version_tag = f'v{version}'
-          tag = api(f'git/ref/tags/{version_tag}')['object']
-          if tag['type'] == 'tag':
-              tag = api(f"git/tags/{tag['sha']}")['object']
-          assert tag['type'] == 'commit'
+          first_sha = tag_commit(version_tag)
           sha = source['head_sha']
           build_update = source['head_branch'] != version_tag
+          testflight_only = os.environ['TESTFLIGHT_ONLY'] == 'true'
           if build_update:
               assert source['conclusion'] == 'success'
               assert source['head_branch'] == api('')['default_branch']
-              assert os.environ['GITHUB_REF'] == f'refs/tags/{version_tag}+{build}'
-              assert os.environ['GITHUB_SHA'] == sha
-              assert api(f"compare/{tag['sha']}...{sha}")['status'] == 'ahead'
+              build_tag = f'{version_tag}+{build}'
+              dispatch_tag = f'{build_tag}-testflight' if testflight_only else build_tag
+              assert os.environ['GITHUB_REF'] == f'refs/tags/{dispatch_tag}'
+              if testflight_only:
+                  assert tag_commit(build_tag) == sha
+              else:
+                  assert os.environ['GITHUB_SHA'] == sha
+              assert api(f'compare/{first_sha}...{sha}')['status'] == 'ahead'
               current = api(f'releases/tags/{version_tag}')
-              assert not current['draft'] and not current['prerelease'] and not current['immutable']
+              assert not current['draft'] and not current['prerelease']
               title, _, current_build = current['name'].rpartition('+')
-              if (title == f'THMR {version}' and current_build.isdecimal()
+              if testflight_only:
+                  assert current['name'] == f'THMR {version}+{build}'
+              elif current['immutable']:
+                  raise SystemExit('The stable Release is immutable.')
+              elif (title == f'THMR {version}' and current_build.isdecimal()
                       and int(current_build) > int(build)):
                   raise SystemExit('The stable Release already contains a newer build.')
           else:
-              assert tag['sha'] == sha
+              assert not testflight_only and first_sha == sha
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write(f"sha={sha}\nbuild_update={str(build_update).lower()}\n")
           PY
 
   windows:
-    if: inputs.rebuild_windows
+    if: inputs.rebuild_windows && !inputs.testflight_only
     needs: source
     runs-on: windows-latest
     permissions:
@@ -140,7 +159,7 @@ jobs:
           overwrite: true
 
   publish:
-    if: ${{ !cancelled() && needs.source.result == 'success' && (needs.windows.result == 'success' || needs.windows.result == 'skipped') }}
+    if: ${{ !cancelled() && !inputs.testflight_only && needs.source.result == 'success' && (needs.windows.result == 'success' || needs.windows.result == 'skipped') }}
     needs: [source, windows]
     runs-on: ubuntu-latest
     steps:
@@ -240,10 +259,11 @@ jobs:
           PY
 
   ios_testflight:
-    if: needs.source.outputs.build_update == 'true'
+    if: ${{ !cancelled() && needs.source.result == 'success' && needs.source.outputs.build_update == 'true' && (inputs.testflight_only || needs.publish.result == 'success') }}
     needs: [source, publish]
     uses: ./.github/workflows/ios-testflight.yml
     with:
       version: ${{ inputs.version }}
       build_number: ${{ inputs.build_number }}
+      source_sha: ${{ needs.source.outputs.sha }}
       require_signing: true
