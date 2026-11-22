@@ -20,12 +20,15 @@ import UIKit
       binaryMessenger: registrar.messenger()
     )
     channel.setMethodCallHandler { call, result in
-      guard call.method == "setKeepScreenOn" else {
+      switch call.method {
+      case "isIPad":
+        result(UIDevice.current.userInterfaceIdiom == .pad)
+      case "setKeepScreenOn":
+        UIApplication.shared.isIdleTimerDisabled = call.arguments as? Bool ?? false
+        result(nil)
+      default:
         result(FlutterMethodNotImplemented)
-        return
       }
-      UIApplication.shared.isIdleTimerDisabled = call.arguments as? Bool ?? false
-      result(nil)
     }
   }
 }

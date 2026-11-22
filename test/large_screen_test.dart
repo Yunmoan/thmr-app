@@ -127,7 +127,6 @@ class _Harness {
   bool nativeFullScreen = false;
   bool failEnter = false;
   bool failExit = false;
-  bool failOrientation = false;
   bool resizeOnTransition = false;
   bool deferFullScreenEvent = false;
   EdgeInsets workAreaInsets = EdgeInsets.zero;
@@ -145,6 +144,8 @@ class _Harness {
       double scale = 1,
       bool desktopRoot = false,
       bool reducedMotion = false,
+      bool isIPad = false,
+      FakeViewPadding padding = const FakeViewPadding(),
       bool startFullScreen = true}) async {
     // The stage tests exercise native fullscreen paths; opt in explicitly now
     // that the product default is windowed.
@@ -152,24 +153,20 @@ class _Harness {
       'largeScreen': '{"startFullScreen":$startFullScreen}',
     });
     tester.view.devicePixelRatio = 1;
+    tester.view.display.size = size;
     tester.view.physicalSize = size;
+    tester.view.padding = padding;
+    tester.view.viewPadding = padding;
     tester.binding.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
       if (call.method == 'SystemChrome.setPreferredOrientations') {
-        final values = List<dynamic>.from(call.arguments as List);
-        orientations.add(values);
-        if (values.isNotEmpty && failOrientation) {
-          throw PlatformException(code: 'orientation_unavailable');
-        }
-        if (resizeOnTransition) {
-          tester.view.physicalSize =
-              values.isEmpty ? size : Size(size.height, size.width);
-        }
+        orientations.add(List<dynamic>.from(call.arguments as List));
       }
       return null;
     });
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         const MethodChannel('thmr/mobile_presentation'), (call) async {
+      if (call.method == 'isIPad') return isIPad;
       if (call.method == 'setKeepScreenOn') {
         keepScreenOnCalls.add(call.arguments as bool);
       }
@@ -250,6 +247,9 @@ class _Harness {
       surfaceRevision.dispose();
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
+      tester.view.display.resetSize();
+      tester.view.resetPadding();
+      tester.view.resetViewPadding();
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
           const MethodChannel('window_manager'), null);
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -505,15 +505,21 @@ void main() {
         await tester.tap(find.text('预览'));
         await tester.pumpAndSettle();
       }
-      for (final ratio in ['16:10', '4:3', '9:16', '16:9']) {
+      for (final (label, ratio) in [
+        ('16:10', 16 / 10),
+        ('4:3', 4 / 3),
+        ('9:16', 9 / 16),
+        ('手机横屏', 844 / 390),
+        ('手机竖屏', 390 / 844),
+        ('16:9', 16 / 9),
+      ]) {
         await tester.tap(find.byTooltip('预览比例'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text(ratio).last);
+        await tester.tap(find.text(label).last);
         await tester.pumpAndSettle();
         final frame = tester
             .getSize(find.byKey(const ValueKey('large-screen-preview-frame')));
-        final parts = ratio.split(':').map(double.parse).toList();
-        expect(frame.width / frame.height, closeTo(parts[0] / parts[1], .01));
+        expect(frame.width / frame.height, closeTo(ratio, .01));
         expect(tester.takeException(), isNull);
       }
     });
@@ -1420,36 +1426,135 @@ void main() {
     expect(h.container.read(largeScreenProvider).active, isFalse);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
-  for (final size in [const Size(390, 844), const Size(768, 1024)]) {
-    testWidgets(
-        'mobile enters from its button and restores orientation at $size',
-        (tester) async {
-      final h = _Harness(tester)..resizeOnTransition = true;
-      await h.mount(size: size);
-      h.scroll.jumpTo(750);
-      await tester.tap(find.byTooltip('大屏幕模式'));
-      await tester.pumpAndSettle();
-      expect(h.container.read(largeScreenProvider).active, isTrue);
-      expect(h.orientations.single, [
-        'DeviceOrientation.landscapeLeft',
-        'DeviceOrientation.landscapeRight',
-      ]);
-      expect(find.byType(LargeScreenPlayer), findsOneWidget);
-      expect(find.byTooltip('进入全屏'), findsNothing);
-      expect(find.byType(DragToMoveArea), findsNothing);
-      expect(h.nativeMethods, isEmpty);
-      expect(h.keepScreenOnCalls, isEmpty);
-      await h.navigator.currentState!.maybePop();
-      await tester.pumpAndSettle();
-      expect(h.container.read(largeScreenProvider).active, isFalse);
-      expect(h.orientations.last, isEmpty);
-      expect(tester.view.physicalSize, size);
-      expect(h.scroll.offset, 750);
-      expect(tester.takeException(), isNull);
-    },
-        variant: const TargetPlatformVariant(
-            {TargetPlatform.android, TargetPlatform.iOS}));
-  }
+  testWidgets('phones enter in portrait and reflow in landscape without a lock',
+      (tester) async {
+    final h = _Harness(tester);
+    const portrait = Size(390, 844);
+    const landscape = Size(844, 390);
+    await h.mount(
+        size: portrait, padding: const FakeViewPadding(top: 54, bottom: 34));
+    await h.container
+        .read(largeScreenSettingsProvider.notifier)
+        .update(const LargeScreenSettings(
+          musicEffect: LargeScreenMusicEffect.off,
+          autoHideControls: false,
+        ));
+    h.scroll.jumpTo(750);
+    await tester.tap(find.byTooltip('大屏幕模式'));
+    await tester.pumpAndSettle();
+    final cover = find.byKey(const ValueKey('large-screen-cover'));
+    final title = find.byKey(const ValueKey('large-screen-title'));
+    final controls = find.byKey(const ValueKey('large-screen-controls-slot'));
+    final exit = find.byTooltip('收起大屏幕模式');
+    expect(h.container.read(largeScreenProvider).active, isTrue);
+    expect(tester.view.physicalSize, portrait);
+    expect(
+        tester.getBottomLeft(cover).dy, lessThan(tester.getTopLeft(title).dy));
+    expect(tester.getTopLeft(exit).dy, greaterThanOrEqualTo(54));
+    expect(tester.getBottomLeft(controls).dy, lessThanOrEqualTo(810));
+    expect(find.byTooltip('进入全屏'), findsNothing);
+    expect(find.byType(DragToMoveArea), findsNothing);
+    expect(h.nativeMethods, isEmpty);
+    expect(h.keepScreenOnCalls, isEmpty);
+
+    const landscapePadding = FakeViewPadding(left: 47, right: 47, bottom: 21);
+    tester.view.display.size = landscape;
+    tester.view.physicalSize = landscape;
+    tester.view.padding = landscapePadding;
+    tester.view.viewPadding = landscapePadding;
+    await tester.pumpAndSettle();
+    expect(tester.getTopRight(cover).dx, lessThan(tester.getTopLeft(title).dx));
+    expect(tester.getTopLeft(cover).dx, greaterThanOrEqualTo(47));
+    expect(tester.getBottomLeft(controls).dy, lessThanOrEqualTo(369));
+    final scrollArea = find.byKey(const ValueKey('large-screen-phone-scroll'));
+    final queue = find.byKey(const ValueKey('large-screen-queue'));
+    expect(tester.getBottomLeft(queue).dy,
+        lessThanOrEqualTo(tester.getBottomLeft(scrollArea).dy));
+    final art = find.descendant(
+      of: find.byKey(const ValueKey('background-illustration')),
+      matching: find.byType(FractionallySizedBox),
+    );
+    expect(tester.getTopRight(exit).dx, lessThan(tester.getTopLeft(art).dx));
+    expect(tester.getTopRight(find.byType(LinearProgressIndicator)).dx,
+        lessThan(tester.getTopLeft(art).dx));
+
+    await h.navigator.currentState!.maybePop();
+    await tester.pumpAndSettle();
+    expect(h.container.read(largeScreenProvider).active, isFalse);
+    expect(h.orientations, isEmpty);
+    expect(tester.view.physicalSize, landscape);
+    expect(h.scroll.offset, 750);
+    expect(tester.takeException(), isNull);
+  },
+      variant: const TargetPlatformVariant(
+          {TargetPlatform.android, TargetPlatform.iOS}));
+
+  testWidgets('short phone landscape scrolls its queue with controls pinned',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount(size: const Size(568, 320), scale: 2);
+    h.station.update(StationUiState(
+      status: _status(
+        title: '幽雅に咲かせ、墨染の桜 ${List.filled(6, 'Long track title').join(' ')}',
+        queueCount: 40,
+      ),
+      initialLoading: false,
+    ));
+    await h.container
+        .read(largeScreenSettingsProvider.notifier)
+        .update(const LargeScreenSettings(
+          musicEffect: LargeScreenMusicEffect.off,
+          queue: LargeScreenQueue.list,
+          autoHideControls: false,
+          cardLayout: true,
+          layout: LargeScreenLayout.coverRight,
+        ));
+    await h.change(true);
+    final cover = find.byKey(const ValueKey('large-screen-cover'));
+    final title = find.byKey(const ValueKey('large-screen-title'));
+    expect(tester.getTopRight(title).dx, lessThan(tester.getTopLeft(cover).dx));
+    final controls = find.byKey(const ValueKey('large-screen-controls-slot'));
+    final before = tester.getRect(controls);
+    final endOfQueue = find.text('接下来 39');
+    expect(endOfQueue, findsNothing);
+    await tester.scrollUntilVisible(
+      endOfQueue,
+      160,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('large-screen-phone-scroll')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(endOfQueue.hitTestable(), findsOneWidget);
+    expect(tester.getRect(controls), before);
+    await tester.tap(find.byTooltip('暂停播放'));
+    await tester.pumpAndSettle();
+    expect(h.playback.toggles, 1);
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+  testWidgets('iPad keeps its stage layout even in a phone-sized split window',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount(size: const Size(390, 700), isIPad: true);
+    await h.container.read(largeScreenSettingsProvider.notifier).update(
+        const LargeScreenSettings(musicEffect: LargeScreenMusicEffect.off));
+    await h.change(true);
+    final tabletFrame =
+        find.byKey(const ValueKey('large-screen-centered-frame'));
+    expect(tabletFrame, findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('large-screen-phone-scroll')), findsNothing);
+    tester.view.physicalSize = const Size(1180, 820);
+    await tester.pumpAndSettle();
+    final cover = find.byKey(const ValueKey('large-screen-cover'));
+    final title = find.byKey(const ValueKey('large-screen-title'));
+    expect(tester.getTopRight(cover).dx, lessThan(tester.getTopLeft(title).dx));
+    expect(tabletFrame, findsOneWidget);
+    expect(h.orientations, isEmpty);
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets(
       'mobile keeps the screen awake only while opted in and foreground',
@@ -1484,21 +1589,6 @@ void main() {
   },
       variant: const TargetPlatformVariant(
           {TargetPlatform.android, TargetPlatform.iOS}));
-
-  testWidgets('failed mobile orientation recovers and permits retry',
-      (tester) async {
-    final h = _Harness(tester)..failOrientation = true;
-    await h.mount();
-    await h.change(true);
-    expect(h.container.read(largeScreenProvider).active, isFalse);
-    expect(h.container.read(largeScreenProvider).busy, isFalse);
-    expect(h.orientations.last, isEmpty);
-    h.failOrientation = false;
-    await h.change(true);
-    expect(h.container.read(largeScreenProvider).active, isTrue);
-    await h.change(false);
-    expect(tester.takeException(), isNull);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('window reveals only after the stage entrance has started',
       (tester) async {

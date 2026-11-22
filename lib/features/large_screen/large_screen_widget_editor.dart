@@ -8,6 +8,7 @@ import '../../core/state/large_screen_settings.dart';
 import '../../core/state/station_provider.dart';
 import '../../core/theme/thmr_motion.dart';
 import '../../core/theme/thmr_theme.dart';
+import '../../shared/widgets/thmr_menu.dart';
 import '../../shared/widgets/thmr_slider.dart';
 import 'large_screen_symbols.dart';
 import 'large_screen_widgets.dart';
@@ -170,10 +171,9 @@ class _LargeScreenWidgetEditorState
           spacing: 12,
           children: [
             Text('小组件 ${items.length}/8', style: theme.textTheme.titleSmall),
-            PopupMenuButton<LargeScreenWidgetKind>(
+            ThmrMenuButton<LargeScreenWidgetKind>(
               tooltip: '添加小组件',
               enabled: items.length < 8,
-              popUpAnimationStyle: ThmrMotion.menuStyle(context),
               onSelected: _add,
               itemBuilder: (_) => [
                 for (final kind in LargeScreenWidgetKind.values)
@@ -182,11 +182,13 @@ class _LargeScreenWidgetEditorState
                       child: Row(children: [
                         LargeScreenGlyph(_symbol(kind), size: 18),
                         const SizedBox(width: 10),
-                        Text(switch (kind) {
-                          LargeScreenWidgetKind.clock => '时间',
-                          LargeScreenWidgetKind.date => '日期',
-                          LargeScreenWidgetKind.text => '文本'
-                        }),
+                        Flexible(
+                          child: Text(switch (kind) {
+                            LargeScreenWidgetKind.clock => '时间',
+                            LargeScreenWidgetKind.date => '日期',
+                            LargeScreenWidgetKind.text => '文本'
+                          }),
+                        ),
                       ]))
               ],
               child: Padding(

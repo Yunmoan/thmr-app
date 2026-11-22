@@ -12,6 +12,8 @@ class ThmrBackground extends StatelessWidget {
     this.underlayAboveWash = false,
     this.illustration,
     this.illustrationTint,
+    this.illustrationWidthFactor,
+    this.illustrationHeightFactor,
     this.alignment = Alignment.bottomLeft,
     this.showIllustration = true,
     this.illustrationOpacity = .9,
@@ -26,6 +28,8 @@ class ThmrBackground extends StatelessWidget {
   /// Defaults to the current character theme's illustration.
   final String? illustration;
   final Color? illustrationTint;
+  final double? illustrationWidthFactor;
+  final double? illustrationHeightFactor;
   final Alignment alignment;
   final bool showIllustration;
   final double illustrationOpacity;
@@ -66,7 +70,8 @@ class ThmrBackground extends StatelessWidget {
               child: Align(
                 alignment: alignment,
                 child: FractionallySizedBox(
-                  heightFactor: compact ? 0.8 : 0.9,
+                  widthFactor: illustrationWidthFactor,
+                  heightFactor: illustrationHeightFactor ?? (compact ? .8 : .9),
                   alignment: alignment,
                   child: Opacity(
                     opacity: illustrationOpacity,

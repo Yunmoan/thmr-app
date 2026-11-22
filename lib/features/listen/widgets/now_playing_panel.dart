@@ -19,6 +19,7 @@ import '../../../core/state/channel_provider.dart';
 import '../../../core/state/station_provider.dart';
 import '../../../core/theme/thmr_theme.dart';
 import '../../../shared/widgets/player_panel_layout.dart';
+import '../../../shared/widgets/thmr_menu.dart';
 import '../../../shared/widgets/track_cover.dart';
 import '../../../shared/widgets/volume_slider.dart';
 import '../../../shared/widgets/focus_outline.dart';
@@ -224,23 +225,10 @@ class NowPlayingTrackInfo extends ConsumerWidget {
       onFavorite!();
       return;
     }
-    // Multiple collections: anchored pick menu, mirrors web fav-menu.
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null || !box.attached) {
-      onFavorite!();
-      return;
-    }
-    final pos = box.localToGlobal(Offset.zero);
-    final size = box.size;
-    final picked = await showMenu<FavCollectionRef>(
-      popUpAnimationStyle: ThmrMotion.menuStyle(context),
+    final picked = await showThmrMenu<FavCollectionRef>(
       context: context,
-      position: RelativeRect.fromLTRB(
-        pos.dx,
-        pos.dy + size.height + 6,
-        pos.dx + size.width,
-        pos.dy + size.height,
-      ),
+      ref: ref,
+      label: '选择收藏夹',
       items: [
         for (final c in cols)
           PopupMenuItem(
@@ -259,6 +247,7 @@ class NowPlayingTrackInfo extends ConsumerWidget {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
+                  flex: 3,
                   child: Text(c.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -267,12 +256,16 @@ class NowPlayingTrackInfo extends ConsumerWidget {
                           color: Theme.of(context).thmr.ink)),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  c.favorited ? '已收藏' : '收藏',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: c.favorited
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).thmr.mutedInk),
+                Flexible(
+                  child: Text(
+                    c.favorited ? '已收藏' : '收藏',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: c.favorited
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).thmr.mutedInk),
+                  ),
                 ),
               ],
             )),

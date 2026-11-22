@@ -7,6 +7,7 @@ import 'package:thmr_app/shared/widgets/volume_wheel_control.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/platform/desktop_window.dart';
+import '../../core/platform/mobile_presentation.dart';
 import '../../core/player/playback_controller.dart';
 import '../../core/player/spectrum.dart';
 import '../../core/models/models.dart';
@@ -44,10 +45,12 @@ class LargeScreenPlayer extends ConsumerStatefulWidget {
       {super.key,
       this.safeInsets = EdgeInsets.zero,
       this.preview = false,
+      this.phonePreview = false,
       this.demoRun = 0,
       this.liveSpectrumPreview = false});
   final EdgeInsets safeInsets;
   final bool preview;
+  final bool phonePreview;
   final int demoRun;
   final bool liveSpectrumPreview;
 
@@ -176,6 +179,17 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
     return Theme(
         data: theme,
         child: Builder(builder: (context) {
+          final phone = widget.preview
+              ? widget.phonePreview
+              : usesPhoneLayout(context, ref);
+          final landscape =
+              MediaQuery.orientationOf(context) == Orientation.landscape;
+          final artOnRight = settings.illustrationPosition ==
+              LargeScreenIllustrationPosition.right;
+          final artOnTop = phone && !landscape;
+          final illustrationAlignment = artOnTop
+              ? (artOnRight ? Alignment.topRight : Alignment.topLeft)
+              : (artOnRight ? Alignment.bottomRight : Alignment.bottomLeft);
           final currentStation = ref.watch(stationProvider);
           final switching = currentStation.status == null &&
               currentStation.initialLoading &&
@@ -208,7 +222,8 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                         : ThmrMotion.exitCurve,
                     child: Focus(
                         focusNode: _controlsFocus,
-                        child: _PlaybackControls(preview: widget.preview)),
+                        child: _PlaybackControls(
+                            preview: widget.preview, phone: phone)),
                   ),
                 ),
               ));
@@ -251,8 +266,9 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                 station: station,
                 phase: phase,
                 playbackError: error,
-                header: _Header(preview: widget.preview),
+                header: _Header(preview: widget.preview, phone: phone),
                 controls: controls,
+                phone: phone,
               ),
             ),
           );
@@ -296,14 +312,16 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                           underlayAboveWash: fluidStage,
                           showIllustration: settings.showIllustration,
                           illustrationTint: illustrationTint(artworkColors),
-                          // The fluid surface is busy; keep the portrait as a
-                          // quiet presence instead of competing with it.
+                          illustrationWidthFactor: phone
+                              ? (landscape
+                                  ? phoneLandscapeIllustrationWidth
+                                  : .54)
+                              : null,
+                          illustrationHeightFactor: artOnTop ? .44 : null,
                           illustrationOpacity: settings.illustrationOpacity *
-                              (fluidStage ? .55 : 1),
-                          alignment: settings.illustrationPosition ==
-                                  LargeScreenIllustrationPosition.right
-                              ? Alignment.bottomRight
-                              : Alignment.bottomLeft,
+                              (fluidStage ? .55 : 1) *
+                              (artOnTop ? .32 : 1),
+                          alignment: illustrationAlignment,
                           child: content,
                         ),
                         if (hasDesktopWindowControls &&
@@ -324,10 +342,13 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                             bottom: 16,
                             left: 16,
                             right: 16,
-                            child: StatusNotice(
-                                message: switching ? '正在切换频道…' : null,
-                                busy: switching,
-                                duration: null)),
+                            child: SafeArea(
+                              top: false,
+                              child: StatusNotice(
+                                  message: switching ? '正在切换频道…' : null,
+                                  busy: switching,
+                                  duration: null),
+                            )),
                       ]),
                     ),
                   ),
@@ -340,8 +361,9 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
 }
 
 class _Header extends ConsumerWidget {
-  const _Header({this.preview = false});
+  const _Header({this.preview = false, this.phone = false});
   final bool preview;
+  final bool phone;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -351,11 +373,14 @@ class _Header extends ConsumerWidget {
             fullScreen: ref.watch(
                 largeScreenSettingsProvider.select((s) => s.startFullScreen)))
         : ref.watch(largeScreenProvider);
+    final logo = ClipRRect(
+        borderRadius: BorderRadius.circular(7),
+        child: Image.asset('assets/brand/logo.png',
+            width: phone ? 30 : 42,
+            height: phone ? 30 : 42,
+            excludeFromSemantics: true));
     final brand = Row(children: [
-      ClipRRect(
-          borderRadius: BorderRadius.circular(7),
-          child: Image.asset('assets/brand/logo.png',
-              width: 42, height: 42, excludeFromSemantics: true)),
+      logo,
       const SizedBox(width: 12),
       Expanded(
           child: Column(
@@ -386,13 +411,41 @@ class _Header extends ConsumerWidget {
                     border: Border.all(color: theme.thmr.panelBorder),
                     borderRadius: BorderRadius.circular(7)),
                 child: Text(
-                    '频道  ${ref.watch(stationProvider).status?.station.name ?? '东方综合频道'}',
+                    '${phone ? '' : '频道  '}${ref.watch(stationProvider).status?.station.name ?? '东方综合频道'}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.labelMedium))
             : ChannelSwitcher(
+                compact: phone,
                 station: ref
                     .watch(stationProvider.select((s) => s.status?.station))));
+    final collapse = IconButton(
+      tooltip: '收起大屏幕模式',
+      style: phone
+          ? IconButton.styleFrom(
+              backgroundColor: theme.thmr.solidPanel,
+              minimumSize: const Size.square(44),
+            )
+          : null,
+      onPressed: preview
+          ? () {}
+          : state.busy
+              ? null
+              : () => unawaited(
+                  ref.read(largeScreenProvider.notifier).change(false)),
+      icon: const LargeScreenGlyph(LargeScreenSymbol.collapse),
+    );
+    if (phone) {
+      return Row(
+        spacing: 8,
+        children: [
+          logo,
+          Expanded(
+              child: Align(alignment: Alignment.centerLeft, child: channels)),
+          collapse,
+        ],
+      );
+    }
     final actions = [
       if (hasDesktopWindowControls)
         IconButton(
@@ -407,15 +460,7 @@ class _Header extends ConsumerWidget {
             icon: LargeScreenGlyph(state.fullScreen
                 ? LargeScreenSymbol.windowed
                 : LargeScreenSymbol.fullscreen)),
-      IconButton(
-          tooltip: '收起大屏幕模式',
-          onPressed: preview
-              ? () {}
-              : state.busy
-                  ? null
-                  : () => unawaited(
-                      ref.read(largeScreenProvider.notifier).change(false)),
-          icon: const LargeScreenGlyph(LargeScreenSymbol.collapse)),
+      collapse,
     ];
     return LayoutBuilder(builder: (context, constraints) {
       final narrow = constraints.maxWidth < 760 ||
@@ -471,8 +516,9 @@ final _previewStation = StationUiState(
     }));
 
 class _PlaybackControls extends ConsumerWidget {
-  const _PlaybackControls({this.preview = false});
+  const _PlaybackControls({this.preview = false, this.phone = false});
   final bool preview;
+  final bool phone;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -483,6 +529,7 @@ class _PlaybackControls extends ConsumerWidget {
         phase == PlaybackPhase.reconnecting;
     final playing =
         phase == PlaybackPhase.online || phase == PlaybackPhase.buffering;
+    final theme = Theme.of(context);
     return ThmrPanel(
       enabled:
           ref.watch(largeScreenSettingsProvider.select((s) => s.cardLayout)),
@@ -490,6 +537,13 @@ class _PlaybackControls extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: Row(children: [
         IconButton(
+            style: phone
+                ? IconButton.styleFrom(
+                    minimumSize: const Size.square(44),
+                    backgroundColor: theme.thmr.accentSoft,
+                    foregroundColor: theme.thmr.ink,
+                  )
+                : null,
             tooltip: connecting
                 ? '取消连接'
                 : playing
@@ -507,33 +561,35 @@ class _PlaybackControls extends ConsumerWidget {
                     : Icons.play_arrow_rounded)),
         // @Aoralsfout: yma你忘了鼠标滚轮悬浮调整qwq...
         VolumeWheelControl(
-            value: volume, 
-            onChanged:
-                    preview
-                    ? (_) {}
-                    : ref.read(playbackProvider.notifier).setVolume,
-            child:
-                IconButton(
-                    tooltip: volume > 0 ? '静音' : '恢复音量',
-                    onPressed: preview
-                        ? () {}
-                        : () => ref.read(playbackProvider.notifier).setVolume(
-                            ref.read(playbackProvider).volumeAfterMuteToggle),
-                    icon: Icon(volume > 0
-                        ? Icons.volume_up_rounded
-                        : Icons.volume_off_rounded)),
+          value: volume,
+          onChanged:
+              preview ? (_) {} : ref.read(playbackProvider.notifier).setVolume,
+          child: IconButton(
+              style: phone
+                  ? IconButton.styleFrom(minimumSize: const Size.square(44))
+                  : null,
+              tooltip: volume > 0 ? '静音' : '恢复音量',
+              onPressed: preview
+                  ? () {}
+                  : () => ref.read(playbackProvider.notifier).setVolume(
+                      ref.read(playbackProvider).volumeAfterMuteToggle),
+              icon: Icon(volume > 0
+                  ? Icons.volume_up_rounded
+                  : Icons.volume_off_rounded)),
         ),
         Expanded(
             child: VolumeSlider(
                 value: volume,
+                height: phone ? 44 : 34,
                 onChanged: preview
                     ? (_) {}
                     : ref.read(playbackProvider.notifier).setVolume)),
-        SizedBox(
-            width: 42,
-            child: Text('${volume.round()}%',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.labelSmall)),
+        if (!phone || MediaQuery.textScalerOf(context).scale(11) <= 20)
+          SizedBox(
+              width: 42,
+              child: Text('${volume.round()}%',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelSmall)),
       ]),
     );
   }

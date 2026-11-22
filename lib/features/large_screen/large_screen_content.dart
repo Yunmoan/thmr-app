@@ -13,6 +13,8 @@ import '../../shared/widgets/track_cover.dart';
 import 'large_screen_progress.dart';
 import 'large_screen_widgets.dart';
 
+const phoneLandscapeIllustrationWidth = .22;
+
 class LargeScreenContent extends StatelessWidget {
   const LargeScreenContent(
       {super.key,
@@ -21,7 +23,8 @@ class LargeScreenContent extends StatelessWidget {
       required this.phase,
       required this.playbackError,
       required this.header,
-      required this.controls});
+      required this.controls,
+      this.phone = false});
 
   final LargeScreenSettings settings;
   final StationUiState station;
@@ -29,9 +32,12 @@ class LargeScreenContent extends StatelessWidget {
   final String? playbackError;
   final Widget header;
   final Widget controls;
+  final bool phone;
 
   @override
   Widget build(BuildContext context) {
+    if (phone) return BackdropGroup(child: _phoneCanvas(context));
+
     Widget canvas(BuildContext context, BoxConstraints outer) {
       final inset = settings.contentMargin;
       final hasTopWidgets = settings.widgets.any((w) => w.enabled && w.atTop);
@@ -131,6 +137,163 @@ class LargeScreenContent extends StatelessWidget {
       ),
     );
   }
+
+  Widget _phoneCanvas(BuildContext context) {
+    final landscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final horizontal = (settings.contentMargin * .55).clamp(12.0, 32.0);
+    final vertical = (settings.contentMargin * .28).clamp(8.0, 18.0);
+    final gap = landscape ? 12.0 : 16.0;
+    final stacked = !landscape || settings.layout == LargeScreenLayout.centered;
+    final coverRight = settings.layout == LargeScreenLayout.coverRight;
+    final showQueue = settings.queue != LargeScreenQueue.hidden;
+    final listQueue = settings.queue == LargeScreenQueue.list;
+    final hasTopWidgets = settings.widgets.any((w) => w.enabled && w.atTop);
+    final hasBottomWidgets = settings.widgets.any((w) => w.enabled && !w.atTop);
+    final artWidth =
+        MediaQuery.sizeOf(context).width * phoneLandscapeIllustrationWidth;
+
+    return LayoutBuilder(builder: (context, constraints) {
+      final gutter = landscape && settings.showIllustration
+          ? math.min(artWidth, constraints.maxWidth * .35)
+          : 0.0;
+      final artOnRight = settings.illustrationPosition ==
+          LargeScreenIllustrationPosition.right;
+      return Padding(
+        padding: EdgeInsets.fromLTRB(
+          horizontal + (artOnRight ? 0 : gutter),
+          vertical,
+          horizontal + (artOnRight ? gutter : 0),
+          vertical,
+        ),
+        child: Column(
+          children: [
+            header,
+            SizedBox(height: gap),
+            Expanded(
+              child: LayoutBuilder(builder: (context, body) {
+                final coverHeightFraction =
+                    switch ((landscape, stacked, showQueue)) {
+                  (false, _, _) => .38,
+                  (_, true, _) => .44,
+                  (_, _, true) => .52,
+                  _ => .66,
+                };
+                final maxCoverWidth = body.maxWidth * (stacked ? .76 : .31);
+                final coverSize = math.min(
+                  maxCoverWidth,
+                  (body.maxHeight * coverHeightFraction).clamp(
+                    landscape ? 84.0 : 108.0,
+                    landscape ? 210.0 : 304.0,
+                  ),
+                );
+                final cover = _Cover(
+                  url: station.status?.current?.coverUrl ?? '',
+                  size: coverSize,
+                  fit: settings.coverFit == LargeScreenCoverFit.cover
+                      ? BoxFit.cover
+                      : BoxFit.contain,
+                );
+                final info = _AnimatedTrackInfo(
+                  station: station,
+                  phase: phase,
+                  playbackError: playbackError,
+                  fontSize: (body.maxWidth * (landscape ? .052 : .082))
+                          .clamp(22.0, 34.0) *
+                      settings.textScale,
+                  centered: stacked,
+                  showProgress: settings.showProgress,
+                  phone: true,
+                );
+                final hero = ThmrPanel(
+                  enabled: settings.cardLayout,
+                  frost: false,
+                  padding: settings.cardLayout
+                      ? EdgeInsets.all(gap)
+                      : EdgeInsets.zero,
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: stacked
+                        ? Column(children: [cover, SizedBox(height: gap), info])
+                        : Row(
+                            spacing: gap,
+                            children: [
+                              if (!coverRight) cover,
+                              Expanded(child: info),
+                              if (coverRight) cover,
+                            ],
+                          ),
+                  ),
+                );
+                Widget strip(bool atTop) => LargeScreenWidgetStrip(
+                      key: ValueKey(atTop),
+                      components: settings.widgets,
+                      station: station,
+                      atTop: atTop,
+                      singleColumn: !landscape,
+                    );
+                return KeyedSubtree(
+                  key: ValueKey(station.status?.station.id),
+                  child: CustomScrollView(
+                    key: const ValueKey('large-screen-phone-scroll'),
+                    primary: false,
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: listQueue ? 0 : body.maxHeight,
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            spacing: gap,
+                            children: [
+                              if (hasTopWidgets) strip(true),
+                              hero,
+                              if (!listQueue && showQueue)
+                                _QueuePanel(
+                                  status: station.status,
+                                  settings: settings,
+                                  vertical: false,
+                                  phone: true,
+                                ),
+                              if (!listQueue && hasBottomWidgets) strip(false),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (listQueue) ...[
+                        SliverPadding(
+                          padding: EdgeInsets.only(top: gap),
+                          sliver: _PhoneQueueList(
+                            status: station.status,
+                            settings: settings,
+                          ),
+                        ),
+                        if (hasBottomWidgets)
+                          SliverPadding(
+                            padding: EdgeInsets.only(top: gap),
+                            sliver: SliverToBoxAdapter(child: strip(false)),
+                          ),
+                      ],
+                    ],
+                  ),
+                );
+              }),
+            ),
+            if (settings.showControls) ...[
+              SizedBox(height: gap),
+              SizedBox(
+                key: const ValueKey('large-screen-controls-slot'),
+                width: 360,
+                child: controls,
+              ),
+            ],
+          ],
+        ),
+      );
+    });
+  }
 }
 
 class _Hero extends StatelessWidget {
@@ -174,20 +337,14 @@ class _Hero extends StatelessWidget {
               fit: settings.coverFit == LargeScreenCoverFit.cover
                   ? BoxFit.cover
                   : BoxFit.contain);
-          final info = ThmrAnimatedContent(
-              child: _TrackInfo(
-                  key: ValueKey((
-                    station.status?.current?.trackId,
-                    station.status?.current?.startedAtMs,
-                    station.status?.current?.title,
-                    station.status?.current?.artist
-                  )),
-                  station: station,
-                  phase: phase,
-                  playbackError: playbackError,
-                  fontSize: fontSize * settings.textScale,
-                  centered: stacked,
-                  showProgress: settings.showProgress));
+          final info = _AnimatedTrackInfo(
+            station: station,
+            phase: phase,
+            playbackError: playbackError,
+            fontSize: fontSize * settings.textScale,
+            centered: stacked,
+            showProgress: settings.showProgress,
+          );
           if (stacked) {
             return Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -245,6 +402,44 @@ class _Cover extends StatelessWidget {
   }
 }
 
+class _AnimatedTrackInfo extends StatelessWidget {
+  const _AnimatedTrackInfo({
+    required this.station,
+    required this.phase,
+    required this.playbackError,
+    required this.fontSize,
+    required this.centered,
+    required this.showProgress,
+    this.phone = false,
+  });
+
+  final StationUiState station;
+  final PlaybackPhase phase;
+  final String? playbackError;
+  final double fontSize;
+  final bool centered;
+  final bool showProgress;
+  final bool phone;
+
+  @override
+  Widget build(BuildContext context) {
+    final track = station.status?.current;
+    return ThmrAnimatedContent(
+      child: _TrackInfo(
+        key: ValueKey(
+            (track?.trackId, track?.startedAtMs, track?.title, track?.artist)),
+        station: station,
+        phase: phase,
+        playbackError: playbackError,
+        fontSize: fontSize,
+        centered: centered,
+        showProgress: showProgress,
+        phone: phone,
+      ),
+    );
+  }
+}
+
 class _TrackInfo extends StatelessWidget {
   const _TrackInfo(
       {super.key,
@@ -253,19 +448,23 @@ class _TrackInfo extends StatelessWidget {
       required this.playbackError,
       required this.fontSize,
       required this.centered,
-      required this.showProgress});
+      required this.showProgress,
+      required this.phone});
   final StationUiState station;
   final PlaybackPhase phase;
   final String? playbackError;
   final double fontSize;
   final bool centered;
   final bool showProgress;
+  final bool phone;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final current = station.status?.current;
     final title = current?.title.trim();
+    final artist = current?.artist.trim();
+    final align = centered ? TextAlign.center : TextAlign.start;
     final message = playbackError != null
         ? '播放异常，请检查网络后重试'
         : station.error != null
@@ -279,6 +478,72 @@ class _TrackInfo extends StatelessWidget {
                 PlaybackPhase.buffering => '正在缓冲',
                 PlaybackPhase.reconnecting => '正在重新连接',
               };
+    final titleText = Text(
+      title?.isNotEmpty == true
+          ? title!
+          : station.initialLoading && station.status == null
+              ? '正在获取放送信息…'
+              : '等待音乐响起',
+      key: const ValueKey('large-screen-title'),
+      textAlign: align,
+      maxLines: phone ? 3 : 4,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.headlineLarge?.copyWith(
+        fontSize: fontSize,
+        fontWeight: FontWeight.w800,
+        height: 1.2,
+      ),
+    );
+    final artistText = Text(
+      artist ?? '',
+      textAlign: align,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.titleLarge?.copyWith(
+        fontSize: phone
+            ? (fontSize * .52).clamp(14.0, 20.0)
+            : (fontSize * .45).clamp(18.0, 34.0),
+        color: theme.thmr.mutedInk,
+      ),
+    );
+    final live = LiveBadge(active: phase == PlaybackPhase.online);
+    final progress =
+        LargeScreenProgress(current: current, updatedAt: station.updatedAt);
+    final messageStyle =
+        theme.textTheme.bodySmall?.copyWith(color: theme.thmr.mutedInk);
+
+    if (phone) {
+      final showMessage = message != null &&
+          (phase != PlaybackPhase.idle ||
+              playbackError != null ||
+              station.error != null);
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment:
+            centered ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+        children: [
+          titleText,
+          if (artist?.isNotEmpty == true) ...[
+            const SizedBox(height: 4),
+            artistText,
+          ],
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: centered ? WrapAlignment.center : WrapAlignment.start,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              live,
+              if (showMessage)
+                Text(message, style: messageStyle, textAlign: align),
+            ],
+          ),
+          if (showProgress) ...[const SizedBox(height: 12), progress],
+        ],
+      );
+    }
+
     return LayoutBuilder(
         builder: (context, constraints) => Center(
             heightFactor: 1,
@@ -299,51 +564,24 @@ class _TrackInfo extends StatelessWidget {
                           style: theme.textTheme.labelMedium?.copyWith(
                               color: theme.thmr.mutedInk, letterSpacing: 2)),
                       const SizedBox(height: 14),
-                      Text(
-                          title?.isNotEmpty == true
-                              ? title!
-                              : station.initialLoading && station.status == null
-                                  ? '正在获取放送信息…'
-                                  : '等待音乐响起',
-                          key: const ValueKey('large-screen-title'),
-                          textAlign:
-                              centered ? TextAlign.center : TextAlign.left,
-                          maxLines: 4,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.headlineLarge?.copyWith(
-                              fontSize: fontSize,
-                              fontWeight: FontWeight.w800,
-                              height: 1.2)),
+                      titleText,
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          if (current?.artist.trim().isNotEmpty == true) ...[
-                            Expanded(
-                              child: Text(current!.artist,
-                                  textAlign: centered
-                                      ? TextAlign.center
-                                      : TextAlign.left,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.titleLarge?.copyWith(
-                                      fontSize: (fontSize * .45).clamp(18, 34),
-                                      color: theme.thmr.mutedInk)),
-                            ),
+                          if (artist?.isNotEmpty == true) ...[
+                            Expanded(child: artistText),
                             const SizedBox(width: 12),
                           ],
-                          LiveBadge(active: phase == PlaybackPhase.online),
+                          live,
                         ],
                       ),
                       if (showProgress) ...[
                         const SizedBox(height: 26),
-                        LargeScreenProgress(
-                            current: current, updatedAt: station.updatedAt),
+                        progress,
                       ],
                       // @Aoralsfout: 始终加载message框，无信息使用空字符串，确保更新message不更新布局，维持视觉稳定
                       const SizedBox(height: 12),
-                      Text(message ?? "",
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: theme.thmr.mutedInk)),
+                      Text(message ?? '', style: messageStyle),
                     ],
                   )),
             )));
@@ -351,11 +589,16 @@ class _TrackInfo extends StatelessWidget {
 }
 
 class _QueuePanel extends StatefulWidget {
-  const _QueuePanel(
-      {required this.status, required this.settings, required this.vertical});
+  const _QueuePanel({
+    required this.status,
+    required this.settings,
+    required this.vertical,
+    this.phone = false,
+  });
   final StationStatus? status;
   final LargeScreenSettings settings;
   final bool vertical;
+  final bool phone;
   @override
   State<_QueuePanel> createState() => _QueuePanelState();
 }
@@ -391,62 +634,136 @@ class _QueuePanelState extends State<_QueuePanel> {
             : settings.queueCount;
     final entries = queue.take(count).toList();
     final theme = Theme.of(context);
+    final empty =
+        Align(alignment: Alignment.centerLeft, child: _emptyQueue(context));
+    Widget tile(int index) => _QueueTile(
+        track: entries[index], index: index, covers: settings.showQueueCovers);
+    Widget divider() => Divider(height: 18, color: theme.thmr.panelBorder);
+    final list = entries.isEmpty
+        ? empty
+        : LayoutBuilder(builder: (context, constraints) {
+            final visible =
+                math.min(entries.length, constraints.maxWidth < 600 ? 1 : 3);
+            final extent =
+                (constraints.maxWidth - (visible - 1) * 16) / visible;
+            return Scrollbar(
+              controller: _scroll,
+              thumbVisibility: vertical,
+              child: ListView.separated(
+                key: const ValueKey('large-screen-queue'),
+                controller: _scroll,
+                primary: false,
+                scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
+                itemCount: entries.length,
+                separatorBuilder: (_, __) =>
+                    vertical ? divider() : const SizedBox(width: 16),
+                itemBuilder: (context, index) => vertical
+                    ? tile(index)
+                    : SizedBox(width: extent, child: tile(index)),
+              ),
+            );
+          });
     return ThmrPanel(
       enabled: settings.cardLayout,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Text('接下来',
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w700)),
-          if (vertical) ...[
-            const Spacer(),
-            Text('${queue.length} 首',
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: theme.thmr.mutedInk))
-          ],
-        ]),
-        const SizedBox(height: 8),
-        Expanded(
-            child: entries.isEmpty
-                ? Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('等待下一首放送',
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: theme.thmr.mutedInk)))
-                : LayoutBuilder(builder: (context, constraints) {
-                    final visible = math.min(
-                        entries.length, constraints.maxWidth < 600 ? 1 : 3);
-                    final extent =
-                        (constraints.maxWidth - (visible - 1) * 16) / visible;
-                    return Scrollbar(
-                      controller: _scroll,
-                      thumbVisibility: vertical,
-                      child: ListView.separated(
-                        key: const ValueKey('large-screen-queue'),
-                        controller: _scroll,
-                        primary: false,
-                        scrollDirection:
-                            vertical ? Axis.vertical : Axis.horizontal,
-                        itemCount: entries.length,
-                        separatorBuilder: (_, __) => vertical
-                            ? Divider(height: 18, color: theme.thmr.panelBorder)
-                            : const SizedBox(width: 16),
-                        itemBuilder: (context, index) {
-                          final tile = _QueueTile(
-                              track: entries[index],
-                              index: index,
-                              covers: settings.showQueueCovers);
-                          return vertical
-                              ? tile
-                              : SizedBox(width: extent, child: tile);
-                        },
-                      ),
-                    );
-                  })),
-      ]),
+      padding: EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: widget.phone ? 6 : 10,
+      ),
+      child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _QueueHeading(count: vertical ? queue.length : null),
+            const SizedBox(height: 8),
+            if (widget.phone)
+              SizedBox(
+                height: math.max(
+                    44, MediaQuery.textScalerOf(context).scale(38) + 4),
+                child: list,
+              )
+            else
+              Expanded(child: list),
+          ]),
     );
   }
+}
+
+class _PhoneQueueList extends StatelessWidget {
+  const _PhoneQueueList({required this.status, required this.settings});
+
+  final StationStatus? status;
+  final LargeScreenSettings settings;
+
+  @override
+  Widget build(BuildContext context) {
+    final queue = status?.queue ?? const <QueueEntry>[];
+    final tokens = Theme.of(context).thmr;
+    final list = SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      sliver: SliverMainAxisGroup(slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _QueueHeading(count: queue.length),
+          ),
+        ),
+        if (queue.isEmpty)
+          SliverToBoxAdapter(child: _emptyQueue(context))
+        else
+          SliverList.separated(
+            key: const ValueKey('large-screen-queue'),
+            itemCount: queue.length,
+            itemBuilder: (context, index) => _QueueTile(
+              track: queue[index],
+              index: index,
+              covers: settings.showQueueCovers,
+            ),
+            separatorBuilder: (_, __) =>
+                Divider(height: 18, color: tokens.panelBorder),
+          ),
+      ]),
+    );
+    return settings.cardLayout
+        ? DecoratedSliver(
+            decoration: BoxDecoration(
+              color: tokens.solidPanel.withValues(alpha: .86),
+              border: Border.all(color: tokens.panelBorder),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            sliver: list,
+          )
+        : list;
+  }
+}
+
+class _QueueHeading extends StatelessWidget {
+  const _QueueHeading({this.count});
+
+  final int? count;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(children: [
+      Flexible(
+        child: Text('接下来',
+            style: theme.textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.w700)),
+      ),
+      if (count != null) ...[
+        const Spacer(),
+        Text('$count 首',
+            style: theme.textTheme.labelSmall
+                ?.copyWith(color: theme.thmr.mutedInk)),
+      ],
+    ]);
+  }
+}
+
+Widget _emptyQueue(BuildContext context) {
+  final theme = Theme.of(context);
+  return Text('等待下一首放送',
+      style: theme.textTheme.bodySmall?.copyWith(color: theme.thmr.mutedInk));
 }
 
 class _QueueTile extends StatelessWidget {

@@ -293,26 +293,12 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
       Tooltip.dismissAllToolTips();
       await _animate(false);
       if (!mounted) return;
-      if (active) {
-        // Retain the ordinary page's portrait metrics before rotation starts.
-        state = const LargeScreenState(
-            active: true, busy: true, contentVisible: false);
-        await _presentation.submitFrame();
-      }
-      await MobilePresentation().setLandscape(active);
-      await _presentation.submitFrame();
-      if (!mounted) return;
       state =
           LargeScreenState(active: active, busy: true, contentVisible: false);
       await _presentation.submitFrame();
     } catch (error, stack) {
       debugPrint('Mobile presentation failed: $error\n$stack');
       errorMessage = '无法切换大屏幕模式，请重试。';
-      try {
-        await MobilePresentation().setLandscape(previous.active);
-      } catch (rollbackError) {
-        debugPrint('Screen orientation recovery failed: $rollbackError');
-      }
       if (mounted) {
         state = LargeScreenState(
             active: previous.active, busy: true, contentVisible: false);
@@ -353,12 +339,6 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
   void dispose() {
     final waiter = _nativeFullScreenWaiter;
     if (waiter != null && !waiter.isCompleted) waiter.complete();
-    if (hasMobilePresentation && (state.active || _inFlight != null)) {
-      unawaited(
-          MobilePresentation().setLandscape(false).catchError((Object error) {
-        debugPrint('Screen orientation cleanup failed: $error');
-      }));
-    }
     super.dispose();
   }
 }

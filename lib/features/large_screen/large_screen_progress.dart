@@ -73,18 +73,29 @@ class _LargeScreenProgressState extends State<LargeScreenProgress> {
             : '直播进度，等待放送',
       ),
       const SizedBox(height: 8),
-      Row(children: [
-        Text('直播进度',
-            style: Theme.of(context)
-                .textTheme
-                .labelSmall
-                ?.copyWith(color: tokens.mutedInk)),
-        const Spacer(),
-        Text(duration > 0 ? '${clock(position)} / ${clock(duration)}' : '— / —',
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: tokens.mutedInk,
-                fontFeatures: const [FontFeature.tabularFigures()])),
-      ]),
+      SizedBox(
+        width: double.infinity,
+        child: Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            Text('直播进度',
+                style: Theme.of(context)
+                    .textTheme
+                    .labelSmall
+                    ?.copyWith(color: tokens.mutedInk)),
+            Text(
+                duration > 0
+                    ? '${clock(position)} / ${clock(duration)}'
+                    : '— / —',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: tokens.mutedInk,
+                    fontFeatures: const [FontFeature.tabularFigures()])),
+          ],
+        ),
+      ),
     ]);
   }
 }

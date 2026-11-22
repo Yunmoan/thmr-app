@@ -8,10 +8,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/widgets/focus_outline.dart';
 import '../../core/api/network_failure.dart';
 import '../../core/models/models.dart';
+import '../../core/platform/mobile_presentation.dart';
 import '../../core/state/channel_provider.dart';
 import '../../core/state/radio_source_provider.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/network_notice.dart';
+import '../../shared/widgets/thmr_menu.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import '../../shared/widgets/track_cover.dart';
 import '../listen/widgets/queue_strip.dart' show showQueueEntryDetail;
@@ -78,32 +80,61 @@ class _YesterdayPlaylistState extends ConsumerState<YesterdayPlaylist> {
       ref.invalidate(provider);
     }
 
+    void selectChannel(String? id) => setState(() => _selectedChannelId = id);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Expanded(
-              child: Semantics(
-                label: '频道',
-                child: FocusOutline(
-                    child: DropdownButton<String>(
-                  isExpanded: true,
-                  value: channel.id,
-                  items: [
-                    for (final entry in channels)
-                      DropdownMenuItem(
-                        value: entry.id,
-                        child: AncestorFocusOutline(
-                            child: Text(entry.name,
-                                overflow: TextOverflow.ellipsis)),
+              child: hasIosPresentation
+                  ? ThmrMenuButton<String>(
+                      tooltip: '昨日歌单频道',
+                      enabled: channels.length > 1,
+                      initialValue: channel.id,
+                      onSelected: selectChannel,
+                      itemBuilder: (_) => [
+                        for (final entry in channels)
+                          PopupMenuItem(
+                            value: entry.id,
+                            child:
+                                AncestorFocusOutline(child: Text(entry.name)),
+                          ),
+                      ],
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Row(
+                          spacing: 8,
+                          children: [
+                            Flexible(
+                              child: Text(channel.name,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                            ),
+                            if (channels.length > 1)
+                              const Icon(Icons.expand_more_rounded, size: 18),
+                          ],
+                        ),
                       ),
-                  ],
-                  onChanged: channels.length > 1
-                      ? (id) => setState(() => _selectedChannelId = id)
-                      : null,
-                )),
-              ),
+                    )
+                  : Semantics(
+                      label: '频道',
+                      child: FocusOutline(
+                          child: DropdownButton<String>(
+                        isExpanded: true,
+                        value: channel.id,
+                        items: [
+                          for (final entry in channels)
+                            DropdownMenuItem(
+                              value: entry.id,
+                              child: AncestorFocusOutline(
+                                  child: Text(entry.name,
+                                      overflow: TextOverflow.ellipsis)),
+                            ),
+                        ],
+                        onChanged: channels.length > 1 ? selectChannel : null,
+                      )),
+                    ),
             ),
             if (playlist.hasValue && !playlist.hasError)
               IconButton(

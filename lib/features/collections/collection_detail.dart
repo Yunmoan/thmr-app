@@ -12,12 +12,14 @@ import '../../shared/widgets/focus_outline.dart';
 import '../../core/config.dart';
 import '../../core/api/network_failure.dart';
 import '../../core/models/models.dart';
+import '../../core/platform/mobile_presentation.dart';
 import '../../core/state/app_providers.dart';
 import '../../core/state/auth_provider.dart';
 import '../../core/state/collection_cache.dart';
 import '../../core/theme/thmr_colors.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/thmr_panel.dart';
+import '../../shared/widgets/thmr_menu.dart';
 import '../../shared/widgets/track_cover.dart';
 import '../../shared/widgets/network_notice.dart';
 import '../listen/widgets/feedback_sheet.dart';
@@ -236,9 +238,9 @@ class _CollectionDetailScreenState
       appBar: AppBar(
         title: Text(widget.name),
         actions: [
-          PopupMenuButton<String>(
-            popUpAnimationStyle: ThmrMotion.menuStyle(context),
+          ThmrMenuButton<String>(
             tooltip: '排序',
+            initialValue: hasIosPresentation ? _sort : null,
             icon: const Icon(Icons.sort_rounded),
             onSelected: (v) {
               setState(() {
@@ -262,8 +264,7 @@ class _CollectionDetailScreenState
                   child: AncestorFocusOutline(child: Text('添加时间'))),
             ],
           ),
-          PopupMenuButton<String>(
-            popUpAnimationStyle: ThmrMotion.menuStyle(context),
+          ThmrMenuButton<String>(
             tooltip: '导出',
             enabled: !_offline,
             icon: const Icon(Icons.ios_share_rounded),

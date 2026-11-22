@@ -5,6 +5,7 @@ import '../../shared/widgets/loading_skeleton.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/widgets/focus_outline.dart';
+import '../../shared/widgets/thmr_menu.dart';
 import '../../core/api/radio_api.dart';
 import '../../core/input/app_commands.dart';
 import '../../core/api/network_failure.dart';
@@ -120,8 +121,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   )),
                 ),
                 const SizedBox(width: 8),
-                PopupMenuButton<String>(
-                  popUpAnimationStyle: ThmrMotion.menuStyle(context),
+                ThmrMenuButton<String>(
                   initialValue: _sort,
                   tooltip: '排序',
                   onSelected: (v) {

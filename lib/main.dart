@@ -13,6 +13,7 @@ import 'core/platform/window_presentation.dart';
 import 'core/platform/desktop_window.dart';
 import 'core/platform/desktop_tray.dart';
 import 'core/platform/application_exit.dart';
+import 'core/platform/mobile_presentation.dart';
 import 'core/player/audio_engine.dart';
 import 'core/player/shared_radio_stream.dart';
 import 'core/player/spectrum_linux.dart';
@@ -59,6 +60,7 @@ Future<void> main(List<String> args) async {
   }
 
   final container = ProviderContainer();
+  if (hasIosPresentation) unawaited(container.read(iosIsPadProvider.future));
   await Future.wait([
     container.read(settingsProvider.notifier).ready,
     container.read(largeScreenSettingsProvider.notifier).ready,

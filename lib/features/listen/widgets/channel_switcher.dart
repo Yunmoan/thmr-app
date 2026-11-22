@@ -3,14 +3,16 @@ import '../../../core/theme/thmr_motion.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/widgets/focus_outline.dart';
+import '../../../shared/widgets/thmr_menu.dart';
 import '../../../core/config.dart';
 import '../../../core/models/models.dart';
+import '../../../core/platform/mobile_presentation.dart';
 import '../../../core/state/channel_provider.dart';
 import '../../../core/state/settings_provider.dart';
 import '../../../core/theme/thmr_theme.dart';
 
 class ChannelSwitcher extends ConsumerWidget {
-  const ChannelSwitcher({super.key, this.station});
+  const ChannelSwitcher({super.key, this.station, this.compact = false});
 
   static const _groupPadding = EdgeInsets.fromLTRB(8, 2, 2, 2);
   static const _choicePadding = EdgeInsets.symmetric(horizontal: 8);
@@ -19,6 +21,7 @@ class ChannelSwitcher extends ConsumerWidget {
   static const _menuRowHeight = 36.0;
 
   final StationInfo? station;
+  final bool compact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -35,11 +38,12 @@ class ChannelSwitcher extends ConsumerWidget {
     final canOpen =
         catalog.hasError || channels.any((channel) => channel.id != stationId);
     final theme = Theme.of(context);
+    final ios = hasIosPresentation;
     final tokens = theme.thmr;
     final accent = theme.colorScheme.primary;
     final radius = BorderRadius.circular(7);
     final decoration = BoxDecoration(
-      color: tokens.panelSoft,
+      color: compact ? tokens.solidPanel : tokens.panelSoft,
       borderRadius: radius,
       border: Border.all(color: tokens.panelBorder),
     );
@@ -60,6 +64,22 @@ class ChannelSwitcher extends ConsumerWidget {
       IconData? icon,
       VoidCallback? onTap,
     }) {
+      if (ios) {
+        return PopupMenuItem<String>(
+          key: value == null ? null : ValueKey('channel-menu-$value'),
+          value: value,
+          onTap: onTap,
+          child: AncestorFocusOutline(
+            child: Row(
+              spacing: 8,
+              children: [
+                if (icon != null) Icon(icon, size: 18, color: tokens.mutedInk),
+                Expanded(child: Text(label)),
+              ],
+            ),
+          ),
+        );
+      }
       return PopupMenuItem<String>(
         key: value == null ? null : ValueKey('channel-menu-$value'),
         value: value,
@@ -106,8 +126,33 @@ class ChannelSwitcher extends ConsumerWidget {
       );
     }
 
+    List<PopupMenuItem<String>> items(BuildContext context) => [
+          for (final channel in channels)
+            menuItem(
+              value: channel.id,
+              selected: channel.id == stationId,
+              label: channel.name,
+            ),
+          if (canReset)
+            menuItem(
+              value: appConfig.stationId,
+              label: '恢复默认频道',
+              icon: Icons.restore_rounded,
+            ),
+          if (catalog.hasError)
+            menuItem(
+              onTap: () {
+                if (context.mounted) ref.invalidate(channelCatalogProvider);
+              },
+              label: '重新加载频道',
+              icon: Icons.refresh_rounded,
+            ),
+        ];
+
     return LayoutBuilder(builder: (context, constraints) {
-      if (!catalog.hasError &&
+      if (!ios &&
+          !compact &&
+          !catalog.hasError &&
           current != null &&
           channels.length >= 2 &&
           channels.length <= 3 &&
@@ -155,13 +200,15 @@ class ChannelSwitcher extends ConsumerWidget {
         constraints: _menuWidth,
         child: DecoratedBox(
           decoration: decoration,
-          child: Padding(
+          child: Container(
+            constraints: BoxConstraints(minHeight: ios || compact ? 44 : 0),
             padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               spacing: 6,
               children: [
-                Text('频道', style: labelStyle),
+                if (!compact && constraints.maxWidth >= 140)
+                  Text('频道', style: labelStyle),
                 Flexible(
                   child: Text(
                     name,
@@ -184,6 +231,15 @@ class ChannelSwitcher extends ConsumerWidget {
         ),
       );
       if (!canOpen) return trigger;
+      if (ios) {
+        return ThmrMenuButton<String>(
+          tooltip: '切换频道',
+          initialValue: stationId,
+          onSelected: select,
+          itemBuilder: items,
+          child: trigger,
+        );
+      }
 
       return FocusOutline(
           radius: 7,
@@ -206,26 +262,7 @@ class ChannelSwitcher extends ConsumerWidget {
             clipBehavior: Clip.antiAlias,
             requestFocus: true,
             onSelected: select,
-            itemBuilder: (context) => [
-              for (final channel in channels)
-                menuItem(
-                  value: channel.id,
-                  selected: channel.id == stationId,
-                  label: channel.name,
-                ),
-              if (canReset)
-                menuItem(
-                  value: appConfig.stationId,
-                  label: '恢复默认频道',
-                  icon: Icons.restore_rounded,
-                ),
-              if (catalog.hasError)
-                menuItem(
-                  onTap: () => ref.invalidate(channelCatalogProvider),
-                  label: '重新加载频道',
-                  icon: Icons.refresh_rounded,
-                ),
-            ],
+            itemBuilder: items,
             child: trigger,
           ));
     });

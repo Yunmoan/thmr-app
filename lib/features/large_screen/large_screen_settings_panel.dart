@@ -139,6 +139,14 @@ class LargeScreenSettingsPanel extends ConsumerWidget {
     return ThmrPanel(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('布局', style: Theme.of(context).textTheme.titleSmall),
+        if (usesPhoneLayout(context, ref)) ...[
+          const SizedBox(height: 4),
+          Text('手机竖屏采用上下布局，横屏按所选布局显示。',
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: Theme.of(context).thmr.mutedInk)),
+        ],
         const SizedBox(height: 12),
         LayoutBuilder(builder: (context, constraints) {
           final columns = constraints.maxWidth >= 560 ? 4 : 2;

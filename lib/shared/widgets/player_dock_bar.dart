@@ -2,9 +2,9 @@
 // Mirrors the web dock bar: cover / title / bitrate / play / volume / open.
 
 import 'package:flutter/material.dart';
-import '../../core/theme/thmr_motion.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/platform/mobile_presentation.dart';
 import '../../core/player/playback_controller.dart';
 import '../../core/state/settings_provider.dart';
 import '../../core/state/station_provider.dart';
@@ -12,6 +12,7 @@ import '../../core/theme/thmr_theme.dart';
 import 'track_cover.dart';
 import 'volume_slider.dart';
 import 'focus_outline.dart';
+import 'thmr_menu.dart';
 import 'volume_wheel_control.dart';
 
 /// 非收听页时的窗口底部播放条(参照 Web 端 dock bar)。
@@ -222,8 +223,9 @@ class _DockBitrate extends ConsumerWidget {
 
     return FocusOutline(
         radius: 6,
-        child: PopupMenuButton<String>(
-          popUpAnimationStyle: ThmrMotion.menuStyle(context),
+        child: ThmrMenuButton<String>(
+          tooltip: '播放码率',
+          initialValue: hasIosPresentation ? selected.id : null,
           position: PopupMenuPosition.over,
           onSelected: (id) =>
               ref.read(settingsProvider.notifier).setBitrate(stationId, id),

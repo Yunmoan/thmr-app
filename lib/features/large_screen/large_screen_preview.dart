@@ -3,17 +3,24 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/platform/mobile_presentation.dart';
 import '../../core/player/playback_controller.dart';
 import '../../core/state/large_screen_settings.dart';
 import '../../core/theme/thmr_motion.dart';
 import '../../core/theme/thmr_theme.dart';
+import '../../shared/widgets/thmr_menu.dart';
 import 'large_screen_player.dart';
 
-const _frames = <(String, Size)>[
-  ('16:9', Size(1280, 720)),
-  ('16:10', Size(1280, 800)),
-  ('4:3', Size(1024, 768)),
-  ('9:16', Size(720, 1280)),
+const _tabletFrame = ('4:3', Size(1024, 768), false);
+const _phonePortrait = ('手机竖屏', Size(390, 844), true);
+const _phoneLandscape = ('手机横屏', Size(844, 390), true);
+const _frames = <(String, Size, bool)>[
+  ('16:9', Size(1280, 720), false),
+  ('16:10', Size(1280, 800), false),
+  _tabletFrame,
+  ('9:16', Size(720, 1280), false),
+  _phonePortrait,
+  _phoneLandscape,
 ];
 
 /// The actual stage at a virtual display size. It never owns the real window's
@@ -50,13 +57,20 @@ class LargeScreenPreview extends ConsumerStatefulWidget {
 }
 
 class _LargeScreenPreviewState extends ConsumerState<LargeScreenPreview> {
-  int _frame = 0;
+  (String, Size, bool)? _selectedFrame;
   int _demoRun = 0;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final frame = _frames[_frame];
+    final frame = _selectedFrame ??
+        (usesPhoneLayout(context, ref)
+            ? MediaQuery.orientationOf(context) == Orientation.portrait
+                ? _phonePortrait
+                : _phoneLandscape
+            : hasMobilePresentation
+                ? _tabletFrame
+                : _frames.first);
     final effect =
         ref.watch(largeScreenSettingsProvider.select((s) => s.musicEffect));
     final hasEffect = effect != LargeScreenMusicEffect.off;
@@ -82,15 +96,15 @@ class _LargeScreenPreviewState extends ConsumerState<LargeScreenPreview> {
               children: [
                 Text('画面预览', style: theme.textTheme.titleSmall),
                 Row(mainAxisSize: MainAxisSize.min, children: [
-                  PopupMenuButton<int>(
+                  ThmrMenuButton<(String, Size, bool)>(
                       tooltip: '预览比例',
-                      popUpAnimationStyle: ThmrMotion.menuStyle(context),
-                      initialValue: _frame,
-                      onSelected: (value) => setState(() => _frame = value),
+                      initialValue: frame,
+                      onSelected: (value) =>
+                          setState(() => _selectedFrame = value),
                       itemBuilder: (_) => [
-                            for (var i = 0; i < _frames.length; i++)
+                            for (final choice in _frames)
                               PopupMenuItem(
-                                  value: i, child: Text(_frames[i].$1)),
+                                  value: choice, child: Text(choice.$1)),
                           ],
                       child: Padding(
                           padding: const EdgeInsets.all(8),
@@ -111,6 +125,7 @@ class _LargeScreenPreviewState extends ConsumerState<LargeScreenPreview> {
               child: _PreviewFrame(
                   size: frame.$2,
                   label: frame.$1,
+                  phone: frame.$3,
                   demoRun: _demoRun,
                   liveSpectrum: liveSpectrum)),
           const SizedBox(height: 8),
@@ -138,10 +153,12 @@ class _PreviewFrame extends StatelessWidget {
   const _PreviewFrame(
       {required this.size,
       required this.label,
+      required this.phone,
       required this.demoRun,
       required this.liveSpectrum});
   final Size size;
   final String label;
+  final bool phone;
   final int demoRun;
   final bool liveSpectrum;
 
@@ -166,6 +183,7 @@ class _PreviewFrame extends StatelessWidget {
                 data: media,
                 child: LargeScreenPlayer(
                     preview: true,
+                    phonePreview: phone,
                     demoRun: demoRun,
                     liveSpectrumPreview: liveSpectrum)));
         return Align(

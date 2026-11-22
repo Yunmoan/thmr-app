@@ -9,6 +9,7 @@ import 'package:thmr_app/core/api/radio_api.dart';
 import 'package:thmr_app/core/api/thmr_api.dart';
 import 'package:thmr_app/core/config.dart';
 import 'package:thmr_app/core/models/models.dart';
+import 'package:thmr_app/core/platform/mobile_presentation.dart';
 import 'package:thmr_app/core/player/playback_controller.dart';
 import 'package:thmr_app/core/state/app_providers.dart';
 import 'package:thmr_app/core/state/auth_provider.dart';
@@ -178,6 +179,89 @@ void main() {
     expect(find.text('东方综合精选频道'), findsOneWidget);
     expect(first, findsNothing);
   });
+
+  for (final pad in [false, true]) {
+    testWidgets('iOS channel menu adapts to the device idiom (iPad: $pad)',
+        (tester) async {
+      tester.view.physicalSize =
+          pad ? const Size(375, 670) : const Size(650, 330);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          iosIsPadProvider.overrideWith((ref) async => pad),
+          channelCatalogProvider.overrideWith((ref) async => [
+                RadioChannel(id: appConfig.stationId, name: '东方综合频道'),
+                const RadioChannel(id: _curated, name: '东方综合精选频道'),
+                for (var i = 2; i < 12; i++)
+                  RadioChannel(id: 'test-$i', name: '东方音乐频道 $i'),
+              ]),
+        ],
+        child: MaterialApp(
+          theme: ThemeData.dark(),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.6)),
+            child: child!,
+          ),
+          home: const Scaffold(
+            body: Padding(
+              padding: EdgeInsets.all(16),
+              child:
+                  Align(alignment: Alignment.topLeft, child: ChannelSwitcher()),
+            ),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      final trigger = find.byTooltip('切换频道');
+      final triggerBounds = tester.getRect(trigger);
+      expect(triggerBounds.height, greaterThanOrEqualTo(44));
+      await tester.tap(trigger);
+      await tester.pumpAndSettle();
+      final sheet = find.byType(BottomSheet);
+      final current =
+          find.byKey(ValueKey('channel-menu-${appConfig.stationId}'));
+      expect(tester.getSize(current).height, greaterThanOrEqualTo(48));
+      expect(
+        find.descendant(
+            of: current, matching: find.byIcon(Icons.check_rounded)),
+        findsOneWidget,
+      );
+      if (pad) {
+        expect(sheet, findsNothing);
+        expect(tester.getTopLeft(current).dx, closeTo(triggerBounds.left, 8));
+        await tester.tap(find.byKey(const ValueKey('channel-menu-$_curated')));
+        await tester.pumpAndSettle();
+        expect(find.text('东方综合精选频道'), findsOneWidget);
+      } else {
+        expect(sheet, findsOneWidget);
+        expect(tester.getBottomLeft(sheet).dy, closeTo(330, 1));
+        final row = tester.getRect(current);
+        expect(row.width, lessThanOrEqualTo(460));
+        expect(row.center.dx, closeTo(325, 1));
+        final scrollable =
+            find.descendant(of: sheet, matching: find.byType(Scrollable));
+        final last = find.byKey(const ValueKey('channel-menu-test-11'));
+        await tester.scrollUntilVisible(last, 100, scrollable: scrollable);
+        await tester.pumpAndSettle();
+        expect(last.hitTestable(), findsOneWidget);
+        await tester.tap(last);
+        await tester.pumpAndSettle();
+        expect(sheet, findsNothing);
+        expect(find.text('东方音乐频道 11'), findsOneWidget);
+        await tester.tap(trigger);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('关闭菜单'));
+        await tester.pumpAndSettle();
+        expect(find.text('东方音乐频道 11'), findsOneWidget);
+      }
+      expect(current, findsNothing);
+      expect(tester.takeException(), isNull);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+  }
 
   for (final width in [360.0, 430.0, 1100.0]) {
     testWidgets('channel switch and online voting at ${width.toInt()} px',
