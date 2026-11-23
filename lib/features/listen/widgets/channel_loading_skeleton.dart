@@ -216,7 +216,6 @@ class ChannelLoadingSkeleton extends StatelessWidget {
                       itemBuilder: (_, __) => SizedBox(
                           width: 264,
                           child: ThmrPanel(
-                              frost: false,
                               padding: const EdgeInsets.all(10),
                               child: Row(children: [
                                 const SkeletonBlock(width: 72, height: 72),

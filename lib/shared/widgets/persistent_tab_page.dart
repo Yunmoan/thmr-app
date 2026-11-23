@@ -19,25 +19,12 @@ class PersistentTabPage extends StatefulWidget {
 class _PersistentTabPageState extends State<PersistentTabPage>
     with SingleTickerProviderStateMixin {
   final _backdropKey = BackdropKey();
-  late bool _visible = widget.active;
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: ThmrMotion.duration,
-    reverseDuration: ThmrMotion.exitDuration,
-    value: 0,
   );
-
-  @override
-  void initState() {
-    super.initState();
-    _controller.addStatusListener(_statusChanged);
-  }
-
-  void _statusChanged(AnimationStatus status) {
-    if (status == AnimationStatus.dismissed && !widget.active && _visible) {
-      setState(() => _visible = false);
-    }
-  }
+  late final _progress =
+      _controller.drive(CurveTween(curve: ThmrMotion.enterCurve));
 
   @override
   void didChangeDependencies() {
@@ -46,22 +33,20 @@ class _PersistentTabPageState extends State<PersistentTabPage>
   }
 
   void _updateAnimation() {
-    if (MediaQuery.disableAnimationsOf(context) ||
+    if (!widget.active) {
+      _controller.value = 0;
+    } else if (MediaQuery.disableAnimationsOf(context) ||
         !TickerMode.valuesOf(context).enabled) {
-      _visible = widget.active;
-      _controller.value = widget.active ? 1 : 0;
-    } else if (widget.active) {
-      _visible = true;
+      _controller.value = 1;
+    } else {
       _controller.forward();
-    } else if (_visible) {
-      _controller.reverse();
     }
   }
 
   @override
   void didUpdateWidget(covariant PersistentTabPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _updateAnimation();
+    if (widget.active != oldWidget.active) _updateAnimation();
   }
 
   @override
@@ -74,16 +59,13 @@ class _PersistentTabPageState extends State<PersistentTabPage>
   Widget build(BuildContext context) {
     final content = RepaintBoundary(
         child: BackdropGroup(backdropKey: _backdropKey, child: widget.child));
-    final animation = ThmrFadeSlide(animation: _controller, child: content);
     return Offstage(
-      offstage: !_visible,
+      offstage: !widget.active,
       child: ExcludeFocus(
         excluding: !widget.active,
-        child: ExcludeSemantics(
-            excluding: !widget.active,
-            child: IgnorePointer(
-                ignoring: !widget.active,
-                child: TickerMode(enabled: widget.active, child: animation))),
+        child: TickerMode(
+            enabled: widget.active,
+            child: ThmrSlide(progress: _progress, child: content)),
       ),
     );
   }

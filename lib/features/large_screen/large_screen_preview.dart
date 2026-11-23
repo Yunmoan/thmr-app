@@ -31,6 +31,7 @@ class LargeScreenPreview extends ConsumerStatefulWidget {
   static Future<void> open(BuildContext context) => showThmrDialog<void>(
       context: context,
       animationStyle: ThmrMotion.style(context),
+      fade: false,
       builder: (context) => Dialog(
           insetPadding: const EdgeInsets.all(24),
           child: ConstrainedBox(

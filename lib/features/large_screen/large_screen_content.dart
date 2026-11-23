@@ -54,6 +54,7 @@ class LargeScreenContent extends StatelessWidget {
       final sideQueue =
           settings.queue == LargeScreenQueue.list && outer.maxWidth >= 1040;
       final hero = ThmrAnimatedContent(
+          fade: false,
           child: _Hero(
               key: ValueKey(settings.layout),
               settings: settings,
@@ -207,7 +208,6 @@ class LargeScreenContent extends StatelessWidget {
                 );
                 final hero = ThmrPanel(
                   enabled: settings.cardLayout,
-                  frost: false,
                   padding: settings.cardLayout
                       ? EdgeInsets.all(gap)
                       : EdgeInsets.zero,
@@ -699,41 +699,50 @@ class _PhoneQueueList extends StatelessWidget {
   Widget build(BuildContext context) {
     final queue = status?.queue ?? const <QueueEntry>[];
     final tokens = Theme.of(context).thmr;
-    final list = SliverPadding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+    final cards = settings.cardLayout;
+    Widget section(Widget child) => ThmrPanel(
+          enabled: cards,
+          padding: cards
+              ? const EdgeInsets.symmetric(horizontal: 16, vertical: 6)
+              : EdgeInsets.zero,
+          child: child,
+        );
+
+    return SliverPadding(
+      padding: cards
+          ? EdgeInsets.zero
+          : const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       sliver: SliverMainAxisGroup(slivers: [
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _QueueHeading(count: queue.length),
+            padding: EdgeInsets.only(bottom: queue.isEmpty ? 0 : 8),
+            child: section(Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _QueueHeading(count: queue.length),
+                if (queue.isEmpty) ...[
+                  const SizedBox(height: 8),
+                  _emptyQueue(context),
+                ],
+              ],
+            )),
           ),
         ),
-        if (queue.isEmpty)
-          SliverToBoxAdapter(child: _emptyQueue(context))
-        else
+        if (queue.isNotEmpty)
           SliverList.separated(
             key: const ValueKey('large-screen-queue'),
             itemCount: queue.length,
-            itemBuilder: (context, index) => _QueueTile(
+            itemBuilder: (context, index) => section(_QueueTile(
               track: queue[index],
               index: index,
               covers: settings.showQueueCovers,
-            ),
-            separatorBuilder: (_, __) =>
-                Divider(height: 18, color: tokens.panelBorder),
+            )),
+            separatorBuilder: (_, __) => cards
+                ? const SizedBox(height: 6)
+                : Divider(height: 18, color: tokens.panelBorder),
           ),
       ]),
     );
-    return settings.cardLayout
-        ? DecoratedSliver(
-            decoration: BoxDecoration(
-              color: tokens.solidPanel.withValues(alpha: .86),
-              border: Border.all(color: tokens.panelBorder),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            sliver: list,
-          )
-        : list;
   }
 }
 

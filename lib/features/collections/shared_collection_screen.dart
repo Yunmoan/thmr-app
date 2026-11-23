@@ -279,7 +279,6 @@ class _SharedCollectionScreenState
             padding: const EdgeInsets.only(bottom: 8),
             child: ThmrPanel(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              frost: false,
               child: Row(
                 children: [
                   TrackCover(url: it.coverUrl, size: 46, radius: 8),

@@ -474,7 +474,7 @@ class _ChannelTransition extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ThmrAnimatedSize(
         alignment: Alignment.topLeft,
-        child: ThmrAnimatedContent(child: child),
+        child: ThmrAnimatedContent(fade: false, child: child),
       );
 }
 

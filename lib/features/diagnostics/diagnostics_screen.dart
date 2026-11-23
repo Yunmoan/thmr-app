@@ -281,7 +281,6 @@ class _ServiceCard extends StatelessWidget {
                 : const Color(0xff267b54)
             : Theme.of(context).colorScheme.error;
     return ThmrPanel(
-        frost: false,
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [

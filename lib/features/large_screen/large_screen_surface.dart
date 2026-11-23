@@ -269,6 +269,7 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
                                     key: const ValueKey(
                                         'standard-mode-transition'),
                                     animation: _standard,
+                                    fade: false,
                                     child: widget.child)))),
                   ),
                 ),

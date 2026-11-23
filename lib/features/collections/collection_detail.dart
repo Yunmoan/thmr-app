@@ -371,7 +371,6 @@ class _CollectionDetailScreenState
         final it = items[i];
         return ThmrPanel(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          frost: false,
           child: Row(
             children: [
               TrackCover(url: _offline ? '' : it.coverUrl, size: 46, radius: 8),

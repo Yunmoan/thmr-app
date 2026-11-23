@@ -76,7 +76,6 @@ class TrackListSkeleton extends StatelessWidget {
           itemCount: 8,
           separatorBuilder: (_, __) => SizedBox(height: gap),
           itemBuilder: (context, i) => ThmrPanel(
-              frost: false,
               padding: rowPadding,
               child: Row(children: [
                 const SkeletonBlock(width: 46, height: 46),

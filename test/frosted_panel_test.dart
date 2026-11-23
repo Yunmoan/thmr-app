@@ -104,6 +104,7 @@ void main() {
       expect(frost, findsNWidgets(2));
     }
 
+    expect(find.byType(BackdropFilter), findsNWidgets(2));
     await waitForTexture();
     expect(find.byType(BackdropFilter), findsNothing);
     final normalTexture = tester.widget<RawImage>(frost.first).image;
@@ -136,7 +137,8 @@ void main() {
   });
 
   for (final brightness in Brightness.values) {
-    testWidgets('tab entry keeps the window opaque in $brightness',
+    testWidgets(
+        'tab entry draws full frost from its first frame in $brightness',
         (tester) async {
       tester.view.physicalSize = const Size(430, 300);
       tester.view.devicePixelRatio = 1;
@@ -175,7 +177,7 @@ void main() {
       for (var entry = 0; entry < 2; entry++) {
         active.value = true;
         await tester.pump();
-        for (final milliseconds in [16, 32, 64, 96, 48]) {
+        for (final milliseconds in [0, 16, 32, 64, 96, 48]) {
           await tester.pump(Duration(milliseconds: milliseconds));
           final boundary =
               key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
@@ -183,9 +185,17 @@ void main() {
           final bytes = (await tester.runAsync(
               () => image.toByteData(format: ui.ImageByteFormat.rawRgba)))!;
           image.dispose();
+          int pixel(int x, int y, int c) =>
+              bytes.getUint8((y * 430 + x) * 4 + c);
+          int difference(int a, int b) => List.generate(
+                  3, (c) => (pixel(a, 150, c) - pixel(b, 150, c)).abs())
+              .reduce((a, b) => a + b);
+          expect(difference(124, 128), lessThan(12));
+          expect(difference(125, 300),
+              greaterThan(brightness == Brightness.light ? 75 : 25));
           for (var y = 0; y < 300; y += 10) {
             for (var x = 0; x < 430; x += 10) {
-              expect(bytes.getUint8((y * 430 + x) * 4 + 3), 255,
+              expect(pixel(x, y, 3), 255,
                   reason: 'Frosted cards must not punch through the opaque '
                       'window background during tab entry $entry at ($x, $y)');
             }

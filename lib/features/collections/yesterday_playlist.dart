@@ -173,7 +173,6 @@ class _YesterdayPlaylistState extends ConsumerState<YesterdayPlaylist> {
                   final playedAt = yesterdayPlaybackTime(item);
                   return ThmrPanel(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    frost: false,
                     child: Material(
                       color: Colors.transparent,
                       child: FocusOutline(

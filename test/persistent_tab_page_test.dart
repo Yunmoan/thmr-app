@@ -34,12 +34,9 @@ void main() {
     await tester.pump();
     active.value = false;
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 40));
-    expect(find.byType(ListView), findsOneWidget,
-        reason: 'The departing page stays painted until its exit completes.');
-    expect(find.byType(ListView).hitTestable(), findsNothing);
-    await tester.pumpAndSettle();
     expect(find.byType(ListView), findsNothing);
+    expect(find.byType(ListView, skipOffstage: false), findsOneWidget);
+    await tester.pumpAndSettle();
     expect(tester.binding.hasScheduledFrame, isFalse);
     active.value = true;
     await tester.pumpAndSettle();

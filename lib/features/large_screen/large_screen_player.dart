@@ -207,14 +207,9 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                 excluding: !_controlsVisible,
                 child: IgnorePointer(
                   ignoring: !_controlsVisible,
-                  child: AnimatedOpacity(
+                  child: Opacity(
                     key: const ValueKey('large-screen-controls'),
                     opacity: _controlsVisible ? 1 : 0,
-                    duration:
-                        ThmrMotion.of(context, exiting: !_controlsVisible),
-                    curve: _controlsVisible
-                        ? ThmrMotion.enterCurve
-                        : ThmrMotion.exitCurve,
                     child: Focus(
                         focusNode: _controlsFocus,
                         child: _PlaybackControls(
@@ -254,6 +249,7 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
                 ? 'large-preview-transition'
                 : 'large-mode-transition'),
             animation: _presentation,
+            fade: false,
             child: SafeArea(
               minimum: widget.safeInsets,
               child: LargeScreenContent(
@@ -528,7 +524,6 @@ class _PlaybackControls extends ConsumerWidget {
     return ThmrPanel(
       enabled:
           ref.watch(largeScreenSettingsProvider.select((s) => s.cardLayout)),
-      frost: false,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: Row(children: [
         IconButton(

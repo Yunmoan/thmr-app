@@ -36,7 +36,7 @@ class _MotionHostState extends State<_MotionHost>
 }
 
 void main() {
-  testWidgets('pushed pages crossfade through both push and pop',
+  testWidgets('pushed pages stay fully visible while sliding in and out',
       (tester) async {
     const first = ValueKey('first-page');
     const second = ValueKey('second-page');
@@ -53,7 +53,9 @@ void main() {
     ));
     double opacity(Key key) {
       var value = 1.0;
-      tester.element(find.byKey(key)).visitAncestorElements((element) {
+      tester
+          .element(find.byKey(key, skipOffstage: false))
+          .visitAncestorElements((element) {
         if (element.widget case FadeTransition(:final opacity)) {
           value *= opacity.value;
         }
@@ -66,18 +68,17 @@ void main() {
         builder: (_) => const Scaffold(key: second, body: Text('second'))));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    expect(opacity(first), inExclusiveRange(0, 1));
-    expect(opacity(first) + opacity(second), closeTo(1, .001));
+    expect(opacity(first), 0);
+    expect(opacity(second), 1);
     await tester.pumpAndSettle();
     Navigator.of(pageContext).pop();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 60));
-    expect(opacity(second), inExclusiveRange(0, 1));
-    expect(opacity(first) + opacity(second), closeTo(1, .001),
-        reason: 'The covered page must use the same reverse curve as the '
-            'departing page instead of fading both toward the backdrop.');
+    expect(opacity(first), 0);
+    expect(opacity(second), 1);
     await tester.pumpAndSettle();
     expect(find.byKey(first), findsOneWidget);
+    expect(opacity(first), 1);
     expect(find.byKey(second), findsNothing);
   });
 

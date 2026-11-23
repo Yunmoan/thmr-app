@@ -842,7 +842,7 @@ void main() {
             .widget<FadeTransition>(fade('standard-mode-transition'))
             .opacity
             .value,
-        inExclusiveRange(0, 1));
+        1);
     expect(h.container.read(largeScreenProvider).busy, isTrue);
     await tester.pumpAndSettle();
     await entering;
@@ -1365,12 +1365,12 @@ void main() {
     final controls = find.byKey(const ValueKey('large-screen-controls'));
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
-    expect(tester.widget<AnimatedOpacity>(controls).opacity, 0);
+    expect(tester.widget<Opacity>(controls).opacity, 0);
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: const Offset(200, 200));
     await mouse.moveTo(const Offset(201, 200));
     await tester.pumpAndSettle();
-    expect(tester.widget<AnimatedOpacity>(controls).opacity, 1);
+    expect(tester.widget<Opacity>(controls).opacity, 1);
     await tester.tap(find.byTooltip('暂停播放'));
     await tester.pump();
     expect(h.playback.toggles, 1);
@@ -1378,7 +1378,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pumpAndSettle();
-    expect(tester.widget<AnimatedOpacity>(controls).opacity, 1);
+    expect(tester.widget<Opacity>(controls).opacity, 1);
     await mouse.removePointer();
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 

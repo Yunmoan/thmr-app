@@ -325,51 +325,38 @@ class _AboutLink extends StatelessWidget {
     final tokens = theme.thmr;
     return Semantics(
       link: true,
-      child: Material(
-        color: tokens.panelSoft,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: BorderSide(color: tokens.panelBorder),
-        ),
-        child: FocusOutline(
-            radius: 10,
-            child: InkWell(
-              onTap: () => _openExternalUrl(url),
-              borderRadius: BorderRadius.circular(10),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    ExcludeSemantics(
-                      child: IconTheme(
-                        data: IconThemeData(size: 22, color: tokens.ink),
-                        child: icon,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(label,
-                              style: theme.textTheme.labelSmall
-                                  ?.copyWith(color: tokens.mutedInk)),
-                          Text(name,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                  color: tokens.ink,
-                                  fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    ExcludeSemantics(
-                      child: Icon(Icons.open_in_new_rounded,
-                          size: 16, color: tokens.mutedInk),
-                    ),
-                  ],
-                ),
+      child: ThmrPanel(
+        onTap: () => _openExternalUrl(url),
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            ExcludeSemantics(
+              child: IconTheme(
+                data: IconThemeData(size: 22, color: tokens.ink),
+                child: icon,
               ),
-            )),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: tokens.mutedInk)),
+                  Text(name,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                          color: tokens.ink, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 4),
+            ExcludeSemantics(
+              child: Icon(Icons.open_in_new_rounded,
+                  size: 16, color: tokens.mutedInk),
+            ),
+          ],
+        ),
       ),
     );
   }

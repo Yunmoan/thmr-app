@@ -62,6 +62,7 @@ Future<T?> showThmrDialog<T>({
   required WidgetBuilder builder,
   bool barrierDismissible = true,
   AnimationStyle? animationStyle,
+  bool fade = true,
 }) {
   Tooltip.dismissAllToolTips();
   final navigator = Navigator.of(context, rootNavigator: true);
@@ -72,6 +73,7 @@ Future<T?> showThmrDialog<T>({
     barrierDismissible: barrierDismissible,
     barrierColor: DialogTheme.of(context).barrierColor ?? Colors.black54,
     animationStyle: animationStyle ?? ThmrMotion.style(context),
+    fade: fade,
   ));
 }
 
@@ -84,10 +86,12 @@ class _ThmrDialogRoute<T> extends DialogRoute<T> {
     required super.barrierColor,
     super.traversalEdgeBehavior = TraversalEdgeBehavior.closedLoop,
     required AnimationStyle animationStyle,
+    required this.fade,
   })  : _style = animationStyle,
         super(animationStyle: animationStyle);
 
   final AnimationStyle _style;
+  final bool fade;
 
   @override
   Duration get reverseTransitionDuration =>
@@ -96,7 +100,8 @@ class _ThmrDialogRoute<T> extends DialogRoute<T> {
   @override
   Widget buildTransitions(BuildContext context, Animation<double> animation,
           Animation<double> secondaryAnimation, Widget child) =>
-      ThmrFadeSlide(animation: animation, beginScale: .98, child: child);
+      ThmrFadeSlide(
+          animation: animation, beginScale: .98, fade: fade, child: child);
 }
 
 extension ThmrMessengerMotion on ScaffoldMessengerState {
@@ -172,6 +177,22 @@ class _ThmrAnimatedSizeState extends State<ThmrAnimatedSize> {
   }
 }
 
+/// 以固定的偏移量滑入，保留内容原有的透明度。
+class ThmrSlide extends AnimatedWidget {
+  const ThmrSlide(
+      {super.key, required Animation<double> progress, required this.child})
+      : super(listenable: progress);
+
+  final Widget child;
+  Animation<double> get progress => listenable as Animation<double>;
+
+  @override
+  Widget build(BuildContext context) => Transform.translate(
+        offset: Offset(0, ThmrMotion.distance * (1 - progress.value)),
+        child: child,
+      );
+}
+
 /// 可反向播放的入场动画，中断时保留曲线和子组件状态。
 class ThmrFadeSlide extends StatefulWidget {
   const ThmrFadeSlide(
@@ -179,10 +200,12 @@ class ThmrFadeSlide extends StatefulWidget {
       required this.animation,
       this.secondaryAnimation,
       required this.child,
+      this.fade = true,
       this.beginScale = 1});
   final Animation<double> animation;
   final Animation<double>? secondaryAnimation;
   final Widget child;
+  final bool fade;
   final double beginScale;
 
   @override
@@ -241,7 +264,11 @@ class _ThmrFadeSlideState extends State<ThmrFadeSlide> {
           child: ExcludeFocus(
             excluding: progress == 0,
             child: FadeTransition(
-              opacity: animation,
+              opacity: widget.fade
+                  ? animation
+                  : progress > 0
+                      ? kAlwaysCompleteAnimation
+                      : kAlwaysDismissedAnimation,
               child: Transform.translate(
                 offset: Offset(0, ThmrMotion.distance * (1 - progress)),
                 child: widget.beginScale == 1
@@ -256,22 +283,38 @@ class _ThmrFadeSlideState extends State<ThmrFadeSlide> {
         );
       },
     );
-    return _secondaryCurve == null
-        ? content
-        : FadeTransition(
-            opacity: reduced
-                ? kAlwaysCompleteAnimation
-                : ReverseAnimation(_secondaryCurve!),
-            child: content);
+    final secondary = _secondaryCurve;
+    if (secondary == null) return content;
+    if (widget.fade) {
+      return FadeTransition(
+          opacity:
+              reduced ? kAlwaysCompleteAnimation : ReverseAnimation(secondary),
+          child: content);
+    }
+    // 磨砂页面交接时只绘制一页，避免半透明图层隔开卡片与背景。
+    return AnimatedBuilder(
+      animation: secondary,
+      child: content,
+      builder: (context, child) => FadeTransition(
+        opacity: reduced || secondary.value == 0
+            ? kAlwaysCompleteAnimation
+            : kAlwaysDismissedAnimation,
+        child: child,
+      ),
+    );
   }
 }
 
-/// 退场内容保留原尺寸，同时禁用输入和焦点。
+/// 淡出时保留退场内容的尺寸。含卡片的内容可只滑入，避免混合两个磨砂层。
 class ThmrAnimatedContent extends StatefulWidget {
   const ThmrAnimatedContent(
-      {super.key, this.alignment = Alignment.topLeft, required this.child});
+      {super.key,
+      this.alignment = Alignment.topLeft,
+      this.fade = true,
+      required this.child});
   final Widget child;
   final AlignmentGeometry alignment;
+  final bool fade;
   @override
   State<ThmrAnimatedContent> createState() => _ThmrAnimatedContentState();
 }
@@ -285,7 +328,7 @@ class _ContentEntry {
           reverseDuration: ThmrMotion.exitDuration,
           value: initial ? 1 : 0,
         ) {
-    opacity = CurvedAnimation(
+    progress = CurvedAnimation(
         parent: controller,
         curve: ThmrMotion.enterCurve,
         reverseCurve: ThmrMotion.exitCurve);
@@ -293,9 +336,9 @@ class _ContentEntry {
   final int id;
   Widget child;
   final AnimationController controller;
-  late final CurvedAnimation opacity;
+  late final CurvedAnimation progress;
   void dispose() {
-    opacity.dispose();
+    progress.dispose();
     controller.dispose();
   }
 }
@@ -308,6 +351,13 @@ class _ThmrAnimatedContentState extends State<ThmrAnimatedContent>
   final _previous = <_ContentEntry>[];
   bool _reduced = false;
 
+  void _clearPrevious() {
+    for (final entry in _previous) {
+      entry.dispose();
+    }
+    _previous.clear();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -315,23 +365,21 @@ class _ThmrAnimatedContentState extends State<ThmrAnimatedContent>
         !TickerMode.valuesOf(context).enabled;
     if (_reduced) {
       _current.controller.value = 1;
-      for (final entry in _previous) {
-        entry.dispose();
-      }
-      _previous.clear();
+      _clearPrevious();
     }
   }
 
   @override
   void didUpdateWidget(covariant ThmrAnimatedContent oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!widget.fade && oldWidget.fade) _clearPrevious();
     if (Widget.canUpdate(_current.child, widget.child)) {
       _current.child = widget.child;
       return;
     }
     final old = _current;
     _current = _ContentEntry(_serial++, widget.child, this, initial: _reduced);
-    if (_reduced) {
+    if (_reduced || !widget.fade) {
       old.dispose();
     } else {
       _previous.add(old);
@@ -340,16 +388,14 @@ class _ThmrAnimatedContentState extends State<ThmrAnimatedContent>
         setState(() {});
         old.dispose();
       });
-      _current.controller.forward();
     }
+    if (!_reduced) _current.controller.forward();
   }
 
   @override
   void dispose() {
     _current.dispose();
-    for (final entry in _previous) {
-      entry.dispose();
-    }
+    _clearPrevious();
     super.dispose();
   }
 
@@ -368,8 +414,11 @@ class _ThmrAnimatedContentState extends State<ThmrAnimatedContent>
                   ignoring: outgoing,
                   child: TickerMode(
                     enabled: !outgoing,
-                    child: FadeTransition(
-                        opacity: entry.opacity, child: entry.child),
+                    child: widget.fade
+                        ? FadeTransition(
+                            opacity: entry.progress, child: entry.child)
+                        : ThmrSlide(
+                            progress: entry.progress, child: entry.child),
                   ),
                 ),
               ),
@@ -539,5 +588,6 @@ class ThmrPageTransitionsBuilder extends PageTransitionsBuilder {
       ThmrFadeSlide(
           animation: animation,
           secondaryAnimation: secondaryAnimation,
+          fade: false,
           child: child);
 }

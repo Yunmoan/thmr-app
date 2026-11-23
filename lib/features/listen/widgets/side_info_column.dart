@@ -253,21 +253,15 @@ class _QueueListState extends State<_QueueList> {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).thmr;
     if (queue.isEmpty) {
-      return Container(
-        clipBehavior: Clip.antiAlias,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: tokens.panelSoft,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: tokens.panelBorder),
-        ),
-        child: Text(
+      return ThmrPanel(
+        child: Center(
+            child: Text(
           '队列暂无曲目 · 尽情期待',
           style: Theme.of(context)
               .textTheme
               .bodySmall
               ?.copyWith(color: tokens.mutedInk),
-        ),
+        )),
       );
     }
     final labelStyle = Theme.of(context).textTheme.labelSmall;
@@ -331,13 +325,8 @@ class _QueueListState extends State<_QueueList> {
     return Column(
       children: [
         Expanded(
-          child: Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: tokens.panelBg.withValues(alpha: 0.82),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: tokens.panelBorder),
-            ),
+          child: ThmrPanel(
+            padding: const EdgeInsets.all(1),
             child: ShaderMask(
               shaderCallback: (rect) => const LinearGradient(
                 begin: Alignment.topCenter,
@@ -607,8 +596,6 @@ class QueueSheet extends StatelessWidget {
                     child: ThmrPanel(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 9),
-                      // 队列行使用半透明底色，避免每行单独应用 BackdropFilter 增大 GPU 负荷。
-                      frost: false,
                       onTap: () => showQueueEntryDetail(context, queue[i], i),
                       child: Row(
                         children: [

@@ -15,6 +15,8 @@ import 'package:thmr_app/core/state/settings_provider.dart';
 import 'package:thmr_app/core/theme/thmr_theme.dart';
 import 'package:thmr_app/features/account/radio_source_panel.dart';
 import 'package:thmr_app/features/diagnostics/diagnostics_screen.dart';
+import 'package:thmr_app/shared/widgets/thmr_background.dart';
+import 'package:thmr_app/shared/widgets/thmr_panel.dart';
 
 class _FixtureDiagnostics extends DiagnosticsService {
   static const redirectedUrl = 'https://edge.example.test/health';
@@ -165,6 +167,7 @@ void main() {
               key: boundary,
               child: MaterialApp(
                 theme: themeFor(dark),
+                builder: (context, child) => ThmrBackground(child: child!),
                 home: const DiagnosticsScreen(),
               )),
         ));
@@ -186,7 +189,20 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         // 保存可供检查的布局预览，测试无需网络请求。
-        if (width == 1280 && dark) {
+        if (width == 1280) {
+          final serviceCard = find.ancestor(
+            of: find.text('THMR 网站在线服务'),
+            matching: find.byType(ThmrPanel),
+          );
+          expect(
+            find.descendant(
+              of: serviceCard,
+              matching: find.byWidgetPredicate(
+                (widget) => widget is BackdropFilter || widget is RawImage,
+              ),
+            ),
+            findsOneWidget,
+          );
           await tester.runAsync(() async {
             final render = boundary.currentContext!.findRenderObject()
                 as RenderRepaintBoundary;
@@ -195,7 +211,8 @@ void main() {
                 await image.toByteData(format: ui.ImageByteFormat.png);
             await Directory('build/diagnostics-preview')
                 .create(recursive: true);
-            await File('build/diagnostics-preview/services-dark.png')
+            final brightness = dark ? 'dark' : 'light';
+            await File('build/diagnostics-preview/services-$brightness.png')
                 .writeAsBytes(bytes!.buffer.asUint8List());
             image.dispose();
           });

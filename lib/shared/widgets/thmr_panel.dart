@@ -15,8 +15,6 @@ class ThmrPanel extends StatelessWidget {
     this.padding = const EdgeInsets.all(16),
     this.borderRadius = 10,
     this.onTap,
-    this.blur = thmrFrostSigma,
-    this.frost = true,
     this.enabled = true,
   });
 
@@ -24,63 +22,59 @@ class ThmrPanel extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final double borderRadius;
   final VoidCallback? onTap;
-  final double blur;
-
-  /// 列表行应传入 false，使用半透明容器跳过 BackdropFilter。大量逐行模糊会增加 GPU 负荷，
-  /// 影响拖动窗口时的流畅度。
-  final bool frost;
   final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.thmr;
-    final sharedBlur = enabled && frost && blur == thmrFrostSigma
-        ? ThmrWallpaper.frostOf(context)
-        : null;
+    final radius = BorderRadius.circular(borderRadius);
+    final sharedBlur = enabled ? ThmrWallpaper.frostOf(context) : null;
     final frostOpacity = theme.brightness == Brightness.light ? 0.60 : 0.80;
     final decoration = BoxDecoration(
-      color: frost
-          ? tokens.panelBg.withValues(alpha: frostOpacity)
-          : tokens.solidPanel.withValues(alpha: 0.86),
-      borderRadius: BorderRadius.circular(borderRadius),
+      color: tokens.panelBg.withValues(alpha: frostOpacity),
+      borderRadius: radius,
       border: Border.all(color: tokens.panelBorder),
+    );
+    final foreground = Padding(
+      key: const ValueKey('panel-foreground'),
+      padding: padding,
+      child: BackdropGroup(child: child),
     );
     // 切换卡片装饰时，前景组件保留原来的位置。背景模糊独立绘制，
     // 避免模糊前景或与嵌套面板共用滤镜。
     final panel = ClipRRect(
-      borderRadius: BorderRadius.circular(borderRadius),
+      borderRadius: radius,
       clipBehavior: enabled ? Clip.antiAlias : Clip.none,
       child: Stack(children: [
         if (sharedBlur != null) Positioned.fill(child: sharedBlur),
         if (enabled)
           Positioned.fill(
-            child: frost && blur > 0 && sharedBlur == null
+            child: sharedBlur == null
                 ? BackdropFilter.grouped(
-                    filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                    filter: ImageFilter.blur(
+                        sigmaX: thmrFrostSigma, sigmaY: thmrFrostSigma),
                     blendMode: BlendMode.srcOver,
                     child: DecoratedBox(decoration: decoration),
                   )
                 : DecoratedBox(decoration: decoration),
           ),
-        Padding(
-          key: const ValueKey('panel-foreground'),
-          padding: padding,
-          child: BackdropGroup(child: child),
-        ),
+        if (onTap == null)
+          foreground
+        else
+          // 点击与聚焦反馈绘制在磨砂底图上方。
+          Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: radius,
+              child: foreground,
+            ),
+          ),
       ]),
     );
     if (onTap == null) return panel;
-    return FocusOutline(
-        radius: borderRadius,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(borderRadius),
-            child: panel,
-          ),
-        ));
+    return FocusOutline(radius: borderRadius, child: panel);
   }
 }
 
