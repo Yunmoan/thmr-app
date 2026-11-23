@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:thmr_app/core/models/models.dart';
 import 'package:thmr_app/core/player/playback_controller.dart';
 import 'package:thmr_app/core/platform/window_presentation.dart';
 import 'package:thmr_app/core/state/settings_provider.dart';
@@ -261,6 +262,73 @@ void main() {
     await mouse.removePointer();
   });
 
+  testWidgets('changing the edge mode retargets an unfinished tuck',
+      (tester) async {
+    final harness =
+        _EdgeHarness(tester, nativeLatency: const Duration(milliseconds: 40));
+    await harness.mount(hideMode: MiniEdgeHideMode.tab, dpi: 120);
+    final settings =
+        ProviderScope.containerOf(tester.element(find.byType(MiniPlayerWindow)))
+            .read(settingsProvider.notifier);
+    harness.listener.onWindowMoved();
+    await tester.pump(const Duration(milliseconds: 180));
+    await harness.advance(80);
+    expect(harness.position.dx, inExclusiveRange(-410, 0));
+
+    await settings.setMiniEdgeHideMode(MiniEdgeHideMode.compact);
+    await harness.advance(272);
+    expect(harness.position, const Offset(-400, 100));
+    expect(tester.widget<ClipRect>(_peekClip).clipper!.getClip(kMiniWindowSize),
+        const Rect.fromLTWH(320, 0, 24, 112));
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(340, 55));
+    await harness.advance(56);
+    await settings.setMiniEdgeHideMode(MiniEdgeHideMode.hidden);
+    await harness.advance(272);
+    expect(harness.position, const Offset(0, 100));
+    expect(harness.maxPendingMoves, 1);
+    await mouse.removePointer();
+  });
+
+  testWidgets('the clipped subtitle stops rotating until the player expands',
+      (tester) async {
+    final harness = _EdgeHarness(tester);
+    await harness.mount(
+      stationState: const StationUiState(
+        status: StationStatus(
+          station: StationInfo(
+              id: 'main',
+              name: 'THMR',
+              enabled: true,
+              public: null,
+              streamAuthEnabled: false,
+              bitrates: []),
+          listeners: 7,
+          uniqueIps: 7,
+          current: null,
+          previous: null,
+          queue: [],
+        ),
+      ),
+    );
+    final listeners = find.text('7 人在听');
+    harness.listener.onWindowMoved();
+    await harness.advance(420);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(_peekClip, findsOneWidget);
+    expect(listeners, findsNothing);
+    expect(tester.binding.hasScheduledFrame, isFalse);
+
+    harness.listener.onWindowEvent('show');
+    await harness.advance(220);
+    expect(harness.position, const Offset(0, 100));
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    expect(listeners, findsOneWidget);
+  });
+
   testWidgets('edge motion respects reduced motion', (tester) async {
     final harness = _EdgeHarness(tester);
     await harness.mount(reducedMotion: true);
@@ -304,6 +372,7 @@ class _EdgeHarness {
     MiniEdgeHideMode hideMode = MiniEdgeHideMode.compact,
     int dpi = 96,
     List<WindowDisplay> displays = const [primaryMiniDisplay],
+    StationUiState stationState = const StationUiState(),
   }) async {
     _clockOrigin = tester.binding.clock.now();
     SharedPreferences.setMockInitialValues({'miniEdgeHideMode': hideMode.name});
@@ -340,9 +409,9 @@ class _EdgeHarness {
               MediaQuery.of(context).copyWith(disableAnimations: reducedMotion),
           child: child!,
         ),
-        home: const MiniPlayerWindow(
-          stationState: StationUiState(),
-          playbackState: PlaybackState(),
+        home: MiniPlayerWindow(
+          stationState: stationState,
+          playbackState: const PlaybackState(),
         ),
       ),
     ));

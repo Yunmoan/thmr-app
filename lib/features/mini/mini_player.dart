@@ -675,7 +675,8 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     final mode = ref.watch(settingsProvider.select((s) => s.miniEdgeHideMode));
     ref.listen(settingsProvider.select((s) => s.miniEdgeHideMode),
         (previous, next) {
-      if (_tucked && _placement != null) unawaited(_tuck(_placement!));
+      final placement = _placement;
+      if (_tuckRequested && placement != null) unawaited(_tuck(placement));
     });
     final placement = _placement;
     final edge = placement?.edge;
@@ -716,6 +717,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
                 valueListenable: _edgeProgress,
                 child: _MiniPlayerBody(
                   attachedEdge: edge,
+                  animateSubtitle: !_tucked,
                   onDragStart: _dragWindow,
                   stationState: widget.stationState,
                   playbackState: widget.playbackState,
@@ -979,12 +981,14 @@ class _MiniIllustration extends StatelessWidget {
 class _MiniPlayerBody extends ConsumerWidget {
   const _MiniPlayerBody({
     this.attachedEdge,
+    required this.animateSubtitle,
     required this.onDragStart,
     this.stationState,
     this.playbackState,
   });
 
   final MiniEdge? attachedEdge;
+  final bool animateSubtitle;
   final Future<void> Function() onDragStart;
   final StationUiState? stationState;
   final PlaybackState? playbackState;
@@ -1105,11 +1109,14 @@ class _MiniPlayerBody extends ConsumerWidget {
                             ],
                           ),
                           SizedBox(height: layout.titleGap),
-                          _MiniRotatingSubtitle(
-                            artist: cur?.artist ?? '等待下一首',
-                            listeners: status?.listeners,
-                            height: MediaQuery.textScalerOf(context)
-                                .scale(layout.subtitle),
+                          TickerMode(
+                            enabled: animateSubtitle,
+                            child: _MiniRotatingSubtitle(
+                              artist: cur?.artist ?? '等待下一首',
+                              listeners: status?.listeners,
+                              height: MediaQuery.textScalerOf(context)
+                                  .scale(layout.subtitle),
+                            ),
                           ),
                           SizedBox(height: layout.controlsGap),
                           _MiniControls(playbackState: playbackState),
