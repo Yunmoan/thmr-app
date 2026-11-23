@@ -22,7 +22,7 @@
   <a href="https://github.com/Yunmoan/thmr-app/actions/workflows/build.yml"><img src="https://github.com/Yunmoan/thmr-app/actions/workflows/build.yml/badge.svg" alt="桌面端与 Android 构建状态"></a>
   <a href="https://github.com/Yunmoan/thmr-app/actions/workflows/ios.yml"><img src="https://github.com/Yunmoan/thmr-app/actions/workflows/ios.yml/badge.svg" alt="iOS 构建状态"></a>
   <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.47.5-02569B?logo=flutter&logoColor=white" alt="Flutter 3.47.5"></a>
-  <img src="https://img.shields.io/badge/version-0.2.0-e2455a" alt="版本 0.2.0">
+  <img src="https://img.shields.io/badge/version-0.2.1-e2455a" alt="版本 0.2.1">
 </p>
 
 ## 关于 THMR
