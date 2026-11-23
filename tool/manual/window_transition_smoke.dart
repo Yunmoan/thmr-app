@@ -1,6 +1,5 @@
-// Runs the real Windows runner, DWM cloak and raster fence without network or
-// audio. Run: flutter run -d windows -t tool/window_transition_smoke.dart
-// The probe exits automatically and never writes application preferences.
+// Checks the real Windows runner, DWM cloak and raster fence, then exits.
+// Run instructions are in docs/development/verification.md.
 import 'dart:io';
 import 'dart:ffi' as ffi;
 

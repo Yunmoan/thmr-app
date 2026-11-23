@@ -95,8 +95,8 @@ class AboutPanel extends StatelessWidget {
   }
 }
 
-// Snapshot of https://api.github.com/repos/Yunmoan/thmr-app/contributors
-// verified on 2026-11-23. The author is credited separately above the list.
+// Contributor credits are displayed in the order below.
+// See the contributor section in README.md for how to add an entry.
 const _contributors = ['AoralsFout', 'lbw14514', 'kimi-tsuki'];
 
 class _ProjectCommunity extends StatelessWidget {

@@ -64,7 +64,7 @@ class StationUiState {
   }
 }
 
-/// 双定时器轮询(FLUTTER.md 4.3):
+/// 使用两个定时器定期刷新并对齐电台换曲。
 /// 常规 10s 一次;拿到 expectedEndMs 后在换曲时刻 +800ms 精准再刷。
 class StationPoller extends StateNotifier<StationUiState> {
   StationPoller(this._api, this._stationId) : super(const StationUiState()) {

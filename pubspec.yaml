@@ -9,7 +9,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.8
 
   # State management
   flutter_riverpod: ^2.6.1
@@ -87,6 +86,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    # Original artwork in assets/brand/source/ is outside the runtime bundle.
     - assets/brand/
     - assets/icons/
     - path: assets/updater/

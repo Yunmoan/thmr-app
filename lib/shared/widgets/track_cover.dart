@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/thmr_motion.dart';
 import '../../core/theme/thmr_theme.dart';
 
-/// 曲目封面:圆角、细描边;加载中、无封面或加载失败时使用官方占位图
-/// (提取自 Web 端 public/assets/cover-fallback.svg 的内嵌 PNG)。
+/// 曲目封面，加载中、无封面或加载失败时显示 THMR 标志。
 class TrackCover extends StatelessWidget {
   const TrackCover({
     super.key,
@@ -24,7 +23,7 @@ class TrackCover extends StatelessWidget {
       cacheWidth,
       null,
       url.isEmpty
-          ? const AssetImage('assets/brand/cover-fallback.png')
+          ? const AssetImage('assets/brand/logo.png')
           : NetworkImage(url),
     );
   }

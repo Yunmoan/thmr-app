@@ -1,5 +1,7 @@
 # Kenney Input Prompts
 
+[Keyboard, gamepad and accessibility guide](../../docs/user/accessibility.md)
+
 - Author: Kenney
 - Source: https://kenney.nl/assets/input-prompts
 - Package version: 1.5A (as recorded in the included original `License.txt`)

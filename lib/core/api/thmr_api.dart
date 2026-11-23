@@ -4,8 +4,7 @@ import '../config.dart';
 import '../models/models.dart';
 import 'radio_api.dart';
 
-/// THMR 账号后端(FLUTTER.md 7.2)。
-/// App 采用 Bearer 方案:WebView 提取一次 thmr_session,之后全部走 header。
+/// THMR 业务 API。已登录请求使用从 WebView 验证取得的 Bearer 会话。
 class ThmrApi {
   ThmrApi({String? baseUrl}) : _dio = Dio() {
     _dio.options
@@ -126,8 +125,7 @@ class ThmrApi {
   Future<List<Collection>> collections() async {
     final r = await _dio.get<Object?>('/api/me/collections');
     if (r.statusCode != 200) _throwApiError(r);
-    // The endpoint returns a bare JSON array (FLUTTER.md: first item =
-    // default collection). Be liberal in what we accept.
+    // Accept a bare list or a list in the collections or data field.
     final data = r.data;
     final List raw;
     if (data is List) {

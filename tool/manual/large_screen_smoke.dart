@@ -1,6 +1,5 @@
-// Real HWND, fullscreen, raster-fence and retained-page checks. No network,
-// audio or preference writes. Run with the normal THMR instance closed:
-// flutter run -d windows -t tool/large_screen_smoke.dart --no-pub
+// Real HWND, fullscreen, raster-fence and retained-page checks.
+// Run instructions are in docs/development/verification.md.
 import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'dart:ui' as ui;

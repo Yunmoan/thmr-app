@@ -1,4 +1,4 @@
-// In-app WebView login (Natayark OAuth), see FLUTTER.md 6.2.
+// In-app WebView login (Natayark OAuth).
 //
 // Loopback flow (localhost origins are whitelisted by the backend):
 //   1. this screen starts a tiny HTTP server on 127.0.0.1:<random>;

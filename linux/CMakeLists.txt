@@ -126,7 +126,7 @@ install(PROGRAMS
   "${CMAKE_CURRENT_SOURCE_DIR}/../tool/linux/install-desktop.sh"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tool/linux/uninstall-desktop.sh"
   DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../docs/LINUX.md"
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../docs/user/linux.md"
   DESTINATION "${CMAKE_INSTALL_PREFIX}" RENAME README-Linux.md COMPONENT Runtime)
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"

@@ -5,7 +5,7 @@ library;
 import '../config.dart';
 
 /// coverUrl 统一处理:Radio 后端返回相对路径(或空串),账号后端返回绝对 URL。
-/// 非 http 开头一律拼 radioBaseUrl(FLUTTER.md 通用约定 4)。
+/// 相对路径用 Radio 服务地址解析。
 String absolutizeCover(String coverUrl, String radioBaseUrl) {
   if (coverUrl.isEmpty) return '';
   if (coverUrl.startsWith('http://') || coverUrl.startsWith('https://')) {

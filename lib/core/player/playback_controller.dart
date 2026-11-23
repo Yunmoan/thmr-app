@@ -13,7 +13,7 @@ import '../state/radio_source_provider.dart';
 import 'audio_engine.dart';
 import 'shared_radio_stream.dart';
 
-/// 播放状态机 — 与 Web 端 player store 对齐(FLUTTER.md 4.4)。
+/// 直播流从连接、播放到重连的状态。
 enum PlaybackPhase { idle, connecting, online, buffering, reconnecting }
 
 class PlaybackState {
@@ -192,7 +192,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     });
   }
 
-  /// 连接直播流(换码率 = 换地址重连,FLUTTER.md 4.2)。
+  /// 连接直播流，换码率时使用新流地址重新连接。
   Future<void> tune(String url, {bool autoplay = true}) async {
     _resumeAfterChannelChange = false;
     _currentUrl = url;

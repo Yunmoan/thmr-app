@@ -1,4 +1,4 @@
-// Run explicitly: flutter test tool/input_help_preview_test.dart
+// Run instructions are in docs/development/verification.md.
 import 'dart:io';
 import 'dart:ui' as ui;
 

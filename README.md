@@ -1,166 +1,199 @@
-# THMR 客户端(Flutter)
+<p align="center">
+  <img src="assets/icons/icon-512.png" width="112" alt="THMR 朱红色印记">
+</p>
 
-东方音乐电台 **THMR(TouHouMusicRadio)** 跨平台客户端 — Windows / macOS / Linux / Android / iOS。
+<h1 align="center">THMR · 东方音乐电台</h1>
 
-对接双后端(均无需改动):
+<p align="center">
+  <strong>跨过博丽大结界无需通行证——随时随地收听万千东方同人音乐。</strong><br>
+  Touhou Music Radio 跨平台客户端，覆盖 Windows、macOS、Linux、Android 与 iOS。
+</p>
 
-- Radio 流媒体后端:`https://radio.yunmoan.cn`(状态 / 直播流 / 封面 / 反馈)
-- THMR 账号后端:`https://api.yunmoan.cn`(Natayark 登录 / 收藏 / 投票 / 曲库代理)
+<p align="center">
+  <a href="https://github.com/Yunmoan/thmr-app/releases"><strong>下载客户端</strong></a>
+  · <a href="#功能特性">功能特性</a>
+  · <a href="#平台与快速开始">平台与快速开始</a>
+  · <a href="#技术栈">技术栈</a>
+  · <a href="#新贡献者留名">参与贡献</a>
+  · <a href="docs/README.md">项目文档</a>
+</p>
 
-接口契约详见 [FLUTTER.md](FLUTTER.md)。
+<p align="center">
+  <a href="https://github.com/Yunmoan/thmr-app/actions/workflows/build.yml"><img src="https://github.com/Yunmoan/thmr-app/actions/workflows/build.yml/badge.svg" alt="桌面端与 Android 构建状态"></a>
+  <a href="https://github.com/Yunmoan/thmr-app/actions/workflows/ios.yml"><img src="https://github.com/Yunmoan/thmr-app/actions/workflows/ios.yml/badge.svg" alt="iOS 构建状态"></a>
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.47.5-02569B?logo=flutter&logoColor=white" alt="Flutter 3.47.5"></a>
+  <img src="https://img.shields.io/badge/version-0.2.0-e2455a" alt="版本 0.2.0">
+</p>
 
-## 快速开始
+## 关于 THMR
 
-使用 [`.fvmrc`](.fvmrc) 锁定的 Flutter stable 版本。可以从 [Flutter SDK 归档](https://docs.flutter.dev/install/archive) 下载与开发机架构匹配的安装包，将解压后的 `flutter/bin` 加入 `PATH`。已有 FVM 的开发者可以在仓库根目录执行 `fvm install`，并用 `fvm flutter` 运行下面的命令。
+> 无论是神社午后的闲适独奏，还是弹幕交锋时的燃曲改编，幻想乡的电波 24 小时不间断放送。打开客户端，直接接通现世与幻想乡的音频频段。
 
-```bash
-flutter --version
-flutter pub get
-flutter analyze
-flutter test
+**THMR（Touhou Music Radio）** 是面向东方同人音乐电台的跨平台原生客户端，将直播收听、曲库检索、个人收藏与切歌投票收拢进同一个轻量应用里。推门即听，无需注册。登录后可搜索曲库、收藏和投票。从 Windows 桌角的迷你悬浮条到五个平台的大屏幕音乐动效，随使用场景自由切换。
+
+> **文々。新闻 · 号外**
+>
+> 本报记者现场发回报道：THMR 客户端已发布 Windows、macOS、Linux 和 Android 安装包，iOS 测试版经由 TestFlight 分发！大屏幕模式、五种音乐动效、Windows 桌角迷你播放器与多套角色主题均已实装。完整更新条目请参阅 [更新日志](CHANGELOG.md)。
+>
+> —— 射命丸文
+
+---
+
+## 功能特性
+
+### 电台与线路：推门即听
+
+*博丽神社的赛钱箱常年冷清，但电台的信号从不打烊。*
+
+- **零门槛开听**：无需登录即可直接收听直播，自由切换频道、音质与播放源，所选线路会自动记忆至下次启动。
+- **双线路自动测速**：内置「自动测速」「源 1」「源 2」。自动模式会像穿行隙间般探测两路直播流（各读取最多 32 KiB 音频）。两路均可用时，候选线路取得音频的耗时改善达到阈值才切换。当前线路不可用时，可直接切换到可用线路。也可随时在设置中手动重测。 [播放源与网络诊断](docs/user/network.md)
+- **队列与昨日歌单**：播放队列预告当前频道的后续曲目。昨日歌单按接口返回的顺序显示前一日播出的曲目，保留重复播放记录。
+- **封面与曲目详情**：封面加载平滑淡入，缺失时自动回退品牌占位图；队列与历史歌单中的曲目信息支持自由划选文本，也可一键复制。
+- **曲目反馈**：收听时可提交曲目反馈（非东方曲目、版权、违规、信息错误或播放异常等）。若服务端返回自动跳过结果，客户端会给出提示。
+
+### 曲库、收藏与投票：同好共鸣
+
+*把散落各处的同人佳作收进红魔馆大图书馆，或为提前切歌投出一票。*
+
+- **曲库检索**：登录后可按关键词检索想听的东方同人曲目。
+- **歌单收藏与分享**：将心仪曲目收入收藏夹，快捷收藏默认使用列表首项，重复添加时会提示已收藏。整理后可生成链接分享给同好。
+- **实时切歌投票**：在开放投票的频道中，登录后可为提前切歌投票，也可以撤回自己的票。客户端与部署端都需开启投票功能。
+
+### 视觉、主题与大屏幕：从桌角摸鱼到舞台演出
+
+*既能缩在屏幕角落安静陪跑，也能铺满整块屏幕开一场专属的音符演出。*
+
+- **Windows 迷你播放器**：支持将播放器收束至屏幕角落，随时查看曲目并控制播放，也可通过系统托盘一键唤回主窗口。
+- **全平台大屏幕模式**：全平台通用，桌面端按 `F11` 切换全屏，`Esc` 或手柄 `B / ○` 键无损返回原页面，完整保留当前焦点与播放状态。[大屏幕模式](docs/user/large-screen.md)
+  - **灵活布局与队列**：提供「自适应、封面居左、封面居右、上下」4 种版式，队列支持隐藏、仅显示下一首、横排或可滚动列表。
+  - **五种音乐动效**：内置极光流场、星云漫游、棱镜涟漪、镜像频谱与流体渐变，支持调节动效强度与省电模式。
+  - **小组件与隐身控制栏**：可自由添加时钟、日期与自定义文本小组件并调整位置与外观。开启自动收起后，播控栏在闲置时隐去，动一动鼠标、键盘或手柄即可唤回。
+- **和纸排版与角色主题**：视觉沿用 Web 端思源宋体（Noto Serif SC）通栏设计与 `1.62` 行高；默认灵梦主题采用绯红强调色与粉纸底色，内置**灵梦、魔理沙、⑨（baka9）、蕾米莉亚、觉、恋恋、幽香**等角色主题，支持明暗模式切换，切换时强调色、纸面渐变与背景立绘同步焕新。
+
+### 操控、集成与维护：妖怪之山级工程力
+
+*不靠信仰驱动，靠扎实的原生系统集成与容错机制。*
+
+- **键盘与手柄操控**：桌面端支持键盘导航与播控（`Ctrl+1` 至 `Ctrl+4` 切换主页面，macOS 也支持用 `⌘`，`F1` 打开快捷键与手柄键位图鉴）。Xbox / PlayStation 手柄也可用于导航与播控。 [键盘、手柄与无障碍](docs/user/accessibility.md)
+- **深度桌面集成**：Windows 通过 SMTC 提供系统播放控制与曲目信息。Linux 通过 MPRIS 提供播放、暂停、停止、音量、曲目信息与窗口唤起，并提供 GTK 原生标题栏与桌面菜单安装脚本。桌面端重复启动时会唤起已有窗口。macOS 可在「我的 → 关闭按钮」选择每次询问、退出或隐藏至菜单栏。
+- **无障碍与减少动画**：播放及窗口控件提供读屏名称，导航项报告选中状态，音量控件支持步进操作。系统开启「减少动画」时，客户端会减少页面、背景与频谱动态。
+- **可信应用内更新**：Windows、macOS、Linux 与 Android 可在「我的」内检查更新、开关自动检查或下载、取消下载或忽略特定版本。客户端验证更新清单的 Ed25519 签名和安装包哈希，桌面端替换后若启动失败会自动回滚至原版本。iOS 通过 TestFlight 分发与更新。 [安装与更新](docs/user/install.md)
+- **一键网络诊断**：前往「我的 → 播放与网络 → 网络诊断」，即可排查公网 IP 与属地、本机 IPv4/IPv6 接口、系统与内存状态，以及各服务的 HTTP 状态码、响应耗时、DNS、实际连接 IP 与 CDN 标识。报告可导出为 TXT，登录凭据、Cookie 与媒体访问密钥不会写入。 [播放源与网络诊断](docs/user/network.md)
+
+---
+
+## 平台与快速开始
+
+### 安装包与运行环境
+
+前往 [GitHub Releases](https://github.com/Yunmoan/thmr-app/releases) 获取对应平台产物（运行库、首次启动与更新细节见 [安装与更新](docs/user/install.md)）：
+
+| 平台 | 版本 / 架构 | 分发包 | 启动与环境说明 |
+| --- | --- | --- | --- |
+| **Windows** | x64 | `thmr-app-windows-x64.zip` | 解压后运行 `thmr_app.exe`，内嵌登录依赖 WebView2 Runtime（Windows 11 自带） |
+| **macOS** | 12+，Universal | `thmr-app-macos-universal.dmg` | 兼容 Intel 与 Apple Silicon，拖入 `Applications` 后启动（签名与公证视发布配置而定） |
+| **Linux** | x64 | `thmr-app-linux-x64.tar.gz` | 主要适配 Ubuntu 24.04，执行 `bundle/thmr` 启动，需具备 GTK、libmpv 等运行库 |
+| **Android** | APK | `thmr-app-android.apk` | 下载后通过系统安装器直接安装 |
+| **iOS** | 15+ | TestFlight | 通过 TestFlight 邀请链接安装与接收更新 |
+
+### 上手指南
+
+1. **直接开听**：打开客户端后点播放即可收听，无需账号。「收听 / 曲库 / 收藏 / 我的」在窄窗口显示于底栏，在宽窗口显示于侧栏。
+2. **按需登录**：需要搜索曲库、管理收藏夹或参与切歌投票时，在「我的」中登录。Linux 上的登录入口会打开网页版，这些功能可在网页中使用。
+3. **切换线路与诊断**：遇到网络波动或希望切换播放源，前往「我的 → 播放与网络」。
+4. **定制大屏幕**：前往「我的 → 外观 → 大屏幕模式Beta 配置」调整动效与小组件；桌面端按 `F1` 查看键位说明，按 `F11` 一键进入大屏幕。
+
+### 从源码构建
+
+项目使用 [`.fvmrc`](.fvmrc) 锁定 **Flutter 3.47.5**。安装 FVM 后执行：
+
+```sh
+fvm install
+fvm flutter pub get --enforce-lockfile
+fvm flutter devices
+fvm flutter run -d windows
 ```
 
-在对应平台启动开发版：
+将 `windows` 替换为 `macos`、`linux` 或 `fvm flutter devices` 输出的目标设备 ID。桌面端需在对应操作系统环境下构建。
 
-```bash
-flutter run -d windows          # Windows 桌面
-flutter run -d macos            # macOS 桌面
-flutter run -d linux            # Linux 桌面
-flutter devices                 # 查看已连接的手机和模拟器 ID
-flutter run -d DEVICE_ID        # 将 DEVICE_ID 换成设备 ID
+- **Windows**：Visual Studio「使用 C++ 的桌面开发」工作负载及 C++ ATL 组件；内嵌登录需 WebView2。
+- **macOS / iOS**：Xcode 和 CocoaPods。 [iOS 开发指南](docs/development/ios.md)
+- **Linux**：GTK 3、libmpv、libsecret、jsoncpp 与 AppIndicator 开发包，详见 [Linux 开发指南](docs/development/linux.md)。
+- **Android**：Android SDK 及可用的真机或模拟器。
+
+### 本地验证与 CI
+
+本地可按与 GitHub Actions CI 一致的顺序执行静态检查与测试（Windows 环境通常使用 `python` 替代 `python3`）：
+
+```sh
+python3 -m unittest discover -s tool -p 'test_*.py' -v
+node --test tool/test_update_release.cjs
+fvm flutter analyze --no-pub
+fvm flutter test --no-pub
 ```
 
-iOS 开发机需要完整的 Xcode 和 CocoaPods。模拟器启动、Apple 后台建 App 和签名步骤见 [iOS 开发与 TestFlight](docs/IOS_TESTFLIGHT.md)。
+桌面端和 Android 的 PR 构建产物会上传至 Actions Artifacts。默认分支构建成功后生成预发布，推送 `v<版本>` 标签可触发对应 Release。iOS 的 PR 构建用于无签名编译检查，TestFlight 由独立工作流上传。 [发布指南](docs/release/README.md)
 
-## 大屏幕模式
+---
 
-桌面端（Windows / macOS / Linux）点击收听页「复制信息」旁的显示器图标，或按 F11，打开大屏幕模式。右上角用符号按钮切换全屏、收起大屏，Esc 直接返回普通界面，保留播放、页面和滚动位置。沿用应用的字体、角色立绘、明暗主题和纸面板；可在「我的 → 外观 → 大屏幕模式」配置布局、队列、画面范围、封面适应、主题和控制栏。
+## 技术栈
 
-使用外接投影或显示器时，先把主窗口拖到目标屏幕，再打开大屏幕模式。更多说明见 [大屏幕模式](docs/LARGE_SCREEN.md)。
-
-## 键盘、手柄与无障碍
-
-Tab / Shift+Tab 遍历控件，Enter / 空格操作选中的按钮。Ctrl（macOS 为 ⌘）+ 1–4 切换主页面，+ F 定位曲库搜索，+ P 播放/暂停，+ ↑ / ↓ 调整音量。Ctrl+M 静音（macOS 使用 ⌘+Shift+M，保留 ⌘+M 最小化）；Windows 使用 Ctrl+Shift+M 切换迷你播放器。Esc 关闭可取消的弹窗或返回，迷你模式下恢复主窗口。
-
-手柄十字键或左摇杆移动焦点，A / × 确认、B / ○ 返回，X / □ 播放/暂停，Y / △ 搜索，LB / L1 和 RB / R1 切页，右摇杆上下滚动、按下静音。文本输入仍使用键盘或系统输入法。手柄输入只在应用前台生效。
-
-按 F1 或在「我的 → 操作帮助 → 键盘与手柄操作」查看图文说明。按键图标采用 Kenney Input Prompts（CC0）。隐藏页面隔离焦点，主要自绘控件提供焦点框，播放与窗口按钮提供读屏名称，角色主题调整强调色以保证实色面板和按钮文字对比度。支持范围和真机验收项见 [无障碍说明](docs/ACCESSIBILITY.md)。
-
-## 播放源与网络诊断
-
-在「我的 → 播放与网络」选择「自动测速」「源 1」或「源 2」，选择会持久化。
-自动模式在启动时同时对两路直播流进行有界采样，优先选择连接并读取 32 KiB 音频更快的可用来源；也可手动重新测速。
-播放中切换来源会保留码率并重新连接，已暂停时保持暂停。手动指定来源不会被测速结果覆盖。
-
-点击「网络诊断」即可查看公网 IP 与属地（`https://myip.ipip.net/json`）、本机 IPv4/IPv6 接口、系统环境、应用与系统内存，以及六个服务的 HTTP 状态、响应耗时、DNS、实际连接 IP 和 CDN 响应标识。
-诊断以收到 HTTP 响应为连通，包含域名根路径的 404；节点名称未公开时仅展示实际 IP 与服务端提供的标识。
-「导出 TXT」使用系统另存为窗口，生成含 UTF-8 BOM 的中文文本报告；不写入登录凭据、Cookie 或流媒体访问密钥。
-
-开发时可用 `dart tool/diagnostics_smoke.dart` 检查真实接口并在本地 `build/` 生成报告，普通测试使用本地服务或模拟结果。
-
-## 客户端版本与自动更新
-
-客户端只向 `https://api.zyghit.cn/updater/thmr` 检查更新。支持后台下载、Ed25519 清单验签、SHA-256 文件校验、准确匹配平台架构、应用内安装；桌面端自动替换和重启，启动失败自动恢复旧版。Android 使用系统安装器，仍需用户确认。自动检查与自动下载均可关闭，支持取消下载和忽略版本。
-
-界面、更新比较和安装包统一使用客户端构建版本。CI 标签 `v0.2.0` 对应 `0.2.0`，构建号是 `Actions run number × 100 + run attempt`；普通本地构建取 `pubspec.yaml`，可由 `--build-name` / `--build-number` 覆盖。更新 API 不依赖电台或账号后端的版本号。
-
-API 插件单独交付为 OPENAPI-Next-Core 的 Next ZIP 包，也兼容 legacy 单文件方式；保留原 `/ofcpl` 路由，不纳入客户端仓库。完整的密钥、API 插件部署、GitHub Variables/Secrets、Android 签名、macOS 公证和发版步骤见 **[自动更新配置文档](docs/AUTO_UPDATE.md)**。
-
-安装包构建完成后会逐个平台上传到同一个 GitHub Release 草稿，仓库所有者可先下载；全部平台完成后自动发布（普通构建为预发布，`v*` 稳定标签为正式发布）。你下载原包上传到镜像后，修改 Next 插件 `apis/updater/index.js` 顶部 `THMR_DOWNLOAD_URLS` 的四个地址，再把 Release 的签名清单放到插件的 `data/`。支持 `thmr-update.json` 和 `thmr-release.json`，后者优先；legacy 使用项目根目录的 `data/updates/`。`/updater/thmr/status` 可检查已验签的版本和故障类型。镜像地址可以单独调整，版本、文件大小与哈希仍经过验签。
-
-开发与 CI 使用 `.fvmrc` 中的 Flutter 版本。CI 使用 Node.js LTS，Android 构建使用 Temurin 21。Windows 使用 `windows-latest`，Linux 固定 `ubuntu-24.04`，macOS 使用 `macos-26` 并打包 Intel 和 Apple Silicon 通用产物。
-
-## 构建与发布
-
-`.github/workflows/build.yml` 在各平台系统上构建，并打包完整安装目录：
-
-| 平台 | 产物 |
-| --- | --- |
-| Windows x64 | `thmr-app-windows-x64.zip` |
-| macOS 12+，Intel / Apple Silicon | `thmr-app-macos-universal.dmg`（拖拽安装）；另附 `.zip` 供客户端自更新 |
-| Linux x64 | `thmr-app-linux-x64.tar.gz` |
-| Android | `thmr-app-android.apk` |
-
-普通构建保存在 Actions Artifacts。所有平台完成后发布 Release；稳定版本同时生成签名更新清单，需要按上述步骤部署到自有更新 API。macOS、Linux 的本地构建必须在对应系统进行。
-
-iOS 在 `Build iOS` 工作流中执行无签名编译检查。配置 Apple 凭据后，`Build Clients` 发布正式版本标签对应的 GitHub Release，再将签名 IPA 上传到 TestFlight。详见 [iOS 开发与 TestFlight](docs/IOS_TESTFLIGHT.md)。
-
-macOS DMG 包含 THMR 应用、Applications 拖拽入口和中英文安装引导背景。先拖入 Applications，再从该目录启动。更新镜像中的 macOS 地址仍填写 ZIP，现有客户端的安装器使用此格式。
-
-Linux Debian/Ubuntu 构建依赖：
-
-```bash
-sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev \
-  liblzma-dev g++ libsecret-1-dev libjsoncpp-dev \
-  libayatana-appindicator3-dev libmpv-dev mpv
-```
-
-分发时保留整个 `bundle/`，使用 `./thmr` 启动，可运行 `./install-desktop.sh` 添加当前用户的应用菜单入口。运行系统仍需 libmpv、GTK、libsecret、jsoncpp 和 Ayatana AppIndicator 等运行库；频谱使用内置 minimp3，无需安装 FFmpeg 命令。Linux 已接入托盘、关闭行为设置、MPRIS 系统媒体控制和本应用实时频谱，托盘不可用时回退任务栏最小化。Linux 登录保留网页版入口，本轮不适配客户端登录和迷你播放器；macOS/Linux 使用原生标题栏。完整安装、测试和兼容边界见 [Linux 使用说明](docs/LINUX.md)。
-
-桌面端（Windows / macOS / Linux）每个登录会话只运行一个实例。重复启动会退出新进程并唤起已有窗口；Windows 支持从托盘隐藏或最小化状态恢复，并保留当前的主窗口 / 迷你播放器模式。退出或崩溃后可正常重新启动。
-
-macOS 已接入菜单栏图标：点击图标打开“显示主窗口／退出”菜单。在“我的 → 关闭按钮”可选择每次询问、退出程序或隐藏到菜单栏；隐藏后继续播放，可通过菜单栏、Dock 或重复启动恢复窗口。菜单栏图标不可用时回退到 Dock 最小化，Cmd+Q 与菜单“退出”共用音频资源清理流程。实现与验证边界见 [性能与 macOS 说明](docs/PERFORMANCE_AND_MACOS.md)。
-
-## 设计语言:「幻想乡放送局」
-
-与 Web 端(`thmr/src/styles/tokens.css`)同一套令牌,源出博丽神社的红白配色:
-
-| 令牌 | 浅色 | 深色 |
+| 层面 | 选型 | 在 THMR 中的职责 |
 | --- | --- | --- |
-| 页面底 `pageBg` | `#fbf2f4`(粉纸渐变) | `#160d10`(酒红黑渐变) |
-| 主墨 `ink` | `#24161a` | `#f8edf0` |
-| 弱化 `mutedInk` | `#6f5960` | `#d7c1c8` |
-| 面板 `panelBg` | `rgba(255,251,252,.92)` 毛玻璃 | `rgba(31,19,23,.90)` |
-| 描边 `panelBorder` | `rgba(84,34,46,.16)` | `rgba(255,228,236,.13)` |
-| 强调 `accent` | `#c65a69` 绯红(可被 `station.public.accentColor` 运行时覆盖) | 同左 |
+| **应用框架** | Flutter 3.47.5 · Dart | 单套 Dart 业务代码覆盖桌面与移动五端 |
+| **状态管理** | Riverpod | 驱动频道、播放器、收藏夹、账号会话与更新状态 |
+| **网络通信** | Dio | 封装 Radio 与 THMR 业务接口、Bearer 鉴权与统一错误映射 |
+| **音频播放** | media_kit | 基于 libmpv 播放直播流，切换码率时连接新的直播流 |
+| **媒体会话** | audio_service · audio_session | Android 和 iOS 的后台播放、系统媒体会话与音频焦点管理 |
+| **桌面原生集成** | window_manager · tray_manager · smtc_windows | 自绘标题栏、系统托盘与 Windows SMTC 接入 |
+| **身份认证** | flutter_inappwebview | 承载 Natayark OAuth 内嵌登录（Linux 走外部浏览器入口） |
+| **安全存储** | flutter_secure_storage | 加密持久化保存会话 Token |
+| **外设输入** | gamepads | 游戏手柄焦点导航与快捷播控 |
+| **原生音频频谱** | C++ · Java · minimp3 | WASAPI 音频采样、原生解码与实时 FFT 计算 |
+| **图形渲染** | Fragment Shader · 自绘控件 | 大屏幕音乐动效、频谱可视化与主题绘制 |
+| **更新安全** | Ed25519 · 哈希校验 | 更新清单数字签名验证、安装包完整性校验与异常回滚 |
+| **工程化** | FVM · GitHub Actions | 锁定 SDK 版本，自动化多端构建与 Release 发布 |
 
-排版:**思源宋体(Noto Serif SC)通栏**,正文行高 1.62,与 Web 端一致。
-背景:所选角色的插画固定在左下方，页面使用透明底色与半透明渐变遮罩；切换主题时插画平滑过渡。
-品牌元素:logo 的鸟居「T」、阴阳玉「R」、电波弧线被复用为封面 fallback、空状态插画。
+## 项目结构
 
-## 目录结构
-
-```
-lib/
-├── main.dart                  # MediaKit 初始化 + Riverpod
-├── app.dart                   # MaterialApp + 明暗主题
-├── core/
-│   ├── config.dart            # JSON 资产内置 + --dart-define 覆盖
-│   ├── theme/                 # 设计令牌 + ThemeData 工厂
-│   ├── models/models.dart     # 后端 JSON 模型(ID 全 String)
-│   ├── api/                   # RadioApi / ThmrApi(dio,统一 {error} 解析)
-│   ├── player/                # media_kit 直播流播放器 + 状态机
-│   └── state/                 # 轮询 / 设置 / 认证 / 收藏 providers
-├── shared/widgets/            # 纸面板、插画背景、封面、LIVE 徽标
-└── features/
-    ├── shell/                 # 底部导航 / 宽屏 NavigationRail
-    ├── listen/                # 收听页:正在放送 + 码率 + 队列 + 反馈 + 投票
-    ├── library/               # 曲库搜索(账号后端代理)
-    ├── collections/           # 收藏夹列表 / 详情 / 分享 / 导出
-    └── account/               # 账号 + 主题设置 + 关于
-```
-
-## 已实现(对齐 FLUTTER.md 里程碑)
-
-- **M1 播放器**:状态双定时器轮询(10s + `expectedEndMs` 精准换曲刷新)、media_kit 直连 MP3 流、直播状态机(idle/connecting/online/buffering/reconnecting,重连策略与 Web 端一致)、码率切换(按 station 持久化、播放中热切换)、听众数 / LIVE 徽标
-- **系统媒体控制**:Windows SMTC、Linux MPRIS 与 Android/iOS `audio_service` 同步曲目信息、播放状态和进度；系统播放/暂停键共用直播流状态机，不提供直播流 seek。
-- **M5 反馈**:曲目反馈表单(10 类枚举、联系方式必填、`autoSkipped` 提示)
-- **M4 部分**:切歌投票(阈值来自 `/api/meta`,公开接口可看票数)
-- **M2 账号**:Bearer 会话存取、`/auth/me` 引导、昵称修改与内置 WebView 登录（Linux 除外）
-- **M3 骨架**:收藏夹 CRUD / 曲库搜索加曲 / 收藏 toggle / 默认收藏夹约定(首个 position 最小)/ 409 幂等提示;分享开关已接 `/share`
-
-## 待接入
-
-| 项 | 说明 |
+| 路径 | 职责说明 |
 | --- | --- |
-| Linux 登录 | 保留网页版入口，本轮不适配；当前后端没有可用于桌面浏览器登录的凭据交付契约 |
-| macOS 桌面扩展 | 菜单栏托盘和关闭行为已接入；迷你窗口和频谱原生实现待接入 |
-| Linux 迷你播放器 | 本轮明确不适配 |
-| 评论 / 广场 | 等后端 `/api/social/*` 接口落地后再对接(FLUTTER.md 第十章) |
+| [`lib/main.dart`](lib/main.dart)、[`lib/app.dart`](lib/app.dart) | 初始化播放器内核、平台环境与主题系统，挂载全局输入监听 |
+| [`lib/core/`](lib/core/) | 网络 API、数据模型、Riverpod 状态、播放控制、应用更新、诊断与平台桥接 |
+| [`lib/features/`](lib/features/) | 收听、曲库、收藏、账号、网络诊断、迷你播放器与大屏幕等业务模块 |
+| [`lib/shared/widgets/`](lib/shared/widgets/) | 跨模块复用的基础 UI 组件 |
+| [`native/`](native/)、各平台目录 | 原生频谱采样、播放辅助与各系统运行器集成 |
+| [`assets/`](assets/)、[`shaders/`](shaders/) | 品牌视觉素材、角色图标、安装脚本与大屏幕着色器代码 |
+| [`test/`](test/)、[`tool/`](tool/) | 单元与集成测试、CI 辅助脚本及手动验证工具 |
+| [`docs/`](docs/) | 用户手册、开发文档与发布规范 |
 
-## 平台注意
+## 文档索引
 
-- Android:`INTERNET` 权限由 Flutter 模板自带;minSdk 默认满足(≥21);全 HTTPS。
-- iOS:已配置 `audio_service` 和 `UIBackgroundModes: audio`；锁屏显示仍需在真机核验。
-- Windows:首次构建需 Visual Studio 2022 桌面 C++ 工作负载。
-- 字体:google_fonts 首次联网拉取 Noto Serif SC;离线发布时将字体文件放入 `assets/google_fonts/`(见 google_fonts 文档)即可免下载。
+| 文档 | 内容概览 |
+| --- | --- |
+| [使用指南](docs/user/README.md) | 安装与更新、Linux 桌面配置、大屏幕模式、键盘与手柄、播放源与网络诊断 |
+| [开发指南](docs/development/README.md) | 本地环境搭建、代码入口导览、后端接口接入、频谱管线与测试验证 |
+| [发布指南](docs/release/README.md) | GitHub Releases 流程、包签名、更新服务 API 与 TestFlight 分发 |
+| [更新日志](CHANGELOG.md) | 当前版本的发布说明 |
+
+---
+
+## 参与 THMR
+
+遇到奇怪的「异变」或有新的功能脑洞，欢迎提交 Issue。若是播放或网络问题，可在「我的 → 播放与网络 → 网络诊断」导出报告，检查并删去不希望公开的 IP 等信息后，再随 Issue 附上。
+
+发现宝藏同人曲想找人安利，也欢迎来官方交流群一起听歌摸鱼。如果这个小电台合你胃口，不妨在 GitHub 顺手点一颗 Star——毕竟连某位黑白魔法使路过都要顺走几颗星星，DA☆ZE！
+
+[GitHub Issues](https://github.com/Yunmoan/thmr-app/issues) · [官方 QQ 群](https://qm.qq.com/q/pKXxsx4m52) · [GitHub 项目页](https://github.com/Yunmoan/thmr-app)
+
+### 新贡献者留名
+
+首次向 THMR 提交 PR 时，请在同一个 PR 里把自己的 GitHub 用户名（不带 `@`）追加到 `_contributors` 列表末尾。按 PR 合入顺序留名，原有条目按现有顺序保留。若遇到合并冲突，请先同步目标分支的名单，再把自己的用户名追加到末尾。已在名单中的贡献者只需提交本次改动。
+
+名单会显示在客户端的「我的 → 关于 → 项目与社区」。 [编辑贡献者名单](lib/features/account/about_panel.dart#L100)
+
+---
+
+<p align="center">
+  <sub>THMR · Touhou Music Radio 客户端 · 基于 Flutter 构建</sub>
+</p>

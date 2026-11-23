@@ -3,7 +3,7 @@ import 'package:dio/dio.dart';
 import '../config.dart';
 import '../models/models.dart';
 
-/// Radio 后端 — 全部免登录(FLUTTER.md 7.1)。
+/// Radio 流媒体 API。请求无需账号会话。
 /// 所有 /api/* 响应带 Cache-Control: no-store,不做 HTTP 层缓存。
 class RadioApi {
   RadioApi({RadioApi? debugClient, String? baseUrl})
@@ -117,7 +117,7 @@ class RadioApi {
         : '$base?token=${Uri.encodeQueryComponent(appConfig.streamToken)}';
   }
 
-  /// 曲目反馈(7.3)。返回 autoSkipped 等字段。
+  /// 提交曲目反馈，返回当前曲目匹配和自动切歌结果。
   Future<FeedbackResult> feedback({
     required String stationId,
     required String type,

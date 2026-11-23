@@ -3,6 +3,8 @@
 .toolchains/
 .packages
 build/
+/dist/
+/flutter_*.png
 .flutter-plugins
 .flutter-plugins-dependencies
 .idea/
