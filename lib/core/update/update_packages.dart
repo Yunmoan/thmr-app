@@ -381,8 +381,12 @@ class UpdatePackageManager {
       };
       final planFile = File(p.join(tx.path, 'plan.json'));
       final helper = File(p.join(tx.path, 'install.ps1'));
-      await helper.writeAsString(
-          await rootBundle.loadString('assets/updater/install_windows.ps1'),
+      // 保留 UTF-8 BOM，供 Windows PowerShell 5.1 识别脚本编码。
+      final helperData =
+          await rootBundle.load('assets/updater/install_windows.ps1');
+      await helper.writeAsBytes(
+          helperData.buffer
+              .asUint8List(helperData.offsetInBytes, helperData.lengthInBytes),
           flush: true);
       await File(p.join(cache.path, 'last-transaction'))
           .writeAsString('tx-$token', flush: true);

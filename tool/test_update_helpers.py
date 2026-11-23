@@ -55,13 +55,13 @@ class UpdateHelperTests(unittest.TestCase):
                 if native_launcher or simulate_uac:
                     # 仅模拟操作系统提权边界，使用真实的监督进程和安装子进程验证通信协议，
                     # 无需触发 UAC。
+                    helper_source = helper.read_text(encoding='utf-8-sig')
                     helper = tx / 'install.ps1'
-                    helper_source = (ROOT / 'assets/updater/install_windows.ps1').read_text()
                     if simulate_uac:
                         helper_source = helper_source.replace(' -Verb RunAs', '')
                     # 只记录辅助进程的 PID，使清理逻辑能等它完成最后一次事务写入并退出。
                     helper_source = helper_source.replace('$plan = $null', "$plan = $null\nif (-not $ElevatedWorker) { [IO.File]::WriteAllText((Join-Path $transaction 'helper.pid'), [string]$PID) }")
-                    helper.write_text(helper_source, encoding='utf-8')
+                    helper.write_text(helper_source, encoding='utf-8-sig')
                 command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                            "-File", str(helper), "-PlanPath", str(plan_path)]
                 if native_launcher:

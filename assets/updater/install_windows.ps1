@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$PlanPath, [switch]$ElevatedWorker)
+﻿param([Parameter(Mandatory=$true)][string]$PlanPath, [switch]$ElevatedWorker)
 $ErrorActionPreference = 'Stop'
 $transaction = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($PlanPath))
 $plan = $null
