@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
@@ -11,6 +12,20 @@ class ThmrMotion {
   static const enterCurve = Curves.easeOutCubic;
   static const exitCurve = Curves.easeInCubic;
   static const distance = 8.0;
+
+  static bool get viewVisible {
+    final state = WidgetsBinding.instance.lifecycleState;
+    if (state == null || state == AppLifecycleState.resumed) return true;
+    // 桌面窗口失焦后仍然可见，隐藏或最小化后才停用后台刷新。
+    return state == AppLifecycleState.inactive &&
+        switch (defaultTargetPlatform) {
+          TargetPlatform.windows ||
+          TargetPlatform.linux ||
+          TargetPlatform.macOS =>
+            true,
+          _ => false,
+        };
+  }
 
   static Duration of(BuildContext context, {bool exiting = false}) =>
       MediaQuery.disableAnimationsOf(context)

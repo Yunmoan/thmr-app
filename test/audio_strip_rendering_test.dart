@@ -85,6 +85,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 10));
     }
     expect(source.polls - initialPolls, inInclusiveRange(19, 21));
+    expect(tester.binding.transientCallbackCount, 0);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('频谱在窗口暂时变窄时仍可绘制', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home:
+          Center(child: SizedBox(width: 25, child: AudioStrip(playing: false))),
+    ));
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

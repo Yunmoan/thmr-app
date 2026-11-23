@@ -1029,10 +1029,10 @@ void main() {
         of: find.byType(LargeScreenPlayer),
         matching: find.byType(ThmrBackground)));
     expect(background.underlayAboveWash, isTrue);
-    final opacity = tester.widget<Opacity>(find.descendant(
+    final portrait = tester.widget<Image>(find.descendant(
         of: find.byKey(const ValueKey('background-illustration')),
-        matching: find.byType(Opacity)));
-    expect(opacity.opacity, closeTo(.65 * .55, .001),
+        matching: find.byType(Image)));
+    expect(portrait.opacity?.value, closeTo(.65 * .55, .001),
         reason: 'fluid motion keeps the portrait visible but subdued');
     final tint = background.illustrationTint;
     expect(tint, isNotNull, reason: 'the cover pigments wash the illustration');

@@ -1,10 +1,8 @@
+import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import '../../../core/theme/thmr_motion.dart';
-import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -513,8 +511,7 @@ class _ListeningClock extends ConsumerWidget {
 
 /// 音频频谱反映实际采样。无法取得频谱时，条形衰减至静止。
 ///
-/// 单个 Ticker 驱动频谱，节流间隔为 48 毫秒。通过 CustomPaint 批量绘制频谱条，
-/// 页面被 TickerMode 静音时暂停帧回调。
+/// 频谱按 20 Hz 采样，通过 CustomPaint 批量绘制频谱条，隐藏时暂停采样。
 class AudioStrip extends StatefulWidget {
   const AudioStrip({
     super.key,
@@ -531,30 +528,17 @@ class AudioStrip extends StatefulWidget {
   State<AudioStrip> createState() => _AudioStripState();
 }
 
-class _AudioStripState extends State<AudioStrip>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  late final Ticker _ticker = createTicker(_onTick);
+class _AudioStripState extends State<AudioStrip> with WidgetsBindingObserver {
+  Timer? _updates;
   late final SpectrumSource? _cap = widget.source ?? getPlatformSpectrum();
   final _frames = ValueNotifier(0);
   List<double> _values = [];
-  Duration _last = Duration.zero;
   bool _capturing = false;
   bool _unavailable = false;
 
-  bool get _canAnimate {
-    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) return false;
-    final state = WidgetsBinding.instance.lifecycleState;
-    if (state == null || state == AppLifecycleState.resumed) return true;
-    // 桌面窗口失焦后仍可能可见。真正隐藏或最小化时才停止采样。
-    return state == AppLifecycleState.inactive &&
-        switch (defaultTargetPlatform) {
-          TargetPlatform.windows ||
-          TargetPlatform.linux ||
-          TargetPlatform.macOS =>
-            true,
-          _ => false,
-        };
-  }
+  bool get _canAnimate =>
+      !(MediaQuery.maybeOf(context)?.disableAnimations ?? false) &&
+      ThmrMotion.viewVisible;
 
   @override
   void initState() {
@@ -569,7 +553,7 @@ class _AudioStripState extends State<AudioStrip>
       _begin();
     } else {
       _stopCapture();
-      _ticker.stop();
+      _stopUpdates();
     }
   }
 
@@ -579,16 +563,22 @@ class _AudioStripState extends State<AudioStrip>
       _begin();
     } else {
       _stopCapture();
-      _ticker.stop();
+      _stopUpdates();
     }
   }
 
   @override
   void didUpdateWidget(AudioStrip old) {
     super.didUpdateWidget(old);
-    // 暂停时不立刻停表:让 tick 走完衰减到静止再自动停
     if (widget.playing && !old.playing) _begin();
-    if (!widget.playing && old.playing) _stopCapture();
+    if (!widget.playing && old.playing) {
+      _stopCapture();
+      // 从暂停时刻重新计时，保留振幅衰减的过渡。
+      if (_updates != null) {
+        _stopUpdates();
+        _startUpdates();
+      }
+    }
   }
 
   void _begin() {
@@ -599,10 +589,15 @@ class _AudioStripState extends State<AudioStrip>
       _cap.start();
       _capturing = true;
     }
-    if (!_ticker.isActive) {
-      _last = Duration.zero;
-      _ticker.start();
-    }
+    _startUpdates();
+  }
+
+  void _startUpdates() => _updates ??= Timer.periodic(
+      const Duration(milliseconds: 50), (_) => _updateSpectrum());
+
+  void _stopUpdates() {
+    _updates?.cancel();
+    _updates = null;
   }
 
   void _stopCapture() {
@@ -626,23 +621,15 @@ class _AudioStripState extends State<AudioStrip>
     }
   }
 
-  void _onTick(Duration elapsed) {
-    // 跳过距上次更新不足 48 毫秒的帧，使更新频率上限约为 21 Hz。
-    if (elapsed - _last < const Duration(milliseconds: 48)) return;
-    _last = elapsed;
-    var settled = false;
+  void _updateSpectrum() {
+    var changed = true;
     if (widget.playing) {
-      _step();
+      changed = _step();
     } else {
       for (var i = 0; i < _values.length; i++) {
         _values[i] += (0.05 - _values[i]) * 0.32;
       }
-      settled = _values.every((v) => v <= 0.065);
-    }
-    if (settled) {
-      // 振幅衰减到静止后停止 Ticker。
-      _ticker.stop();
-      _last = Duration.zero;
+      if (_values.every((v) => v <= 0.065)) _stopUpdates();
     }
     final source = _cap;
     final unavailable =
@@ -651,31 +638,30 @@ class _AudioStripState extends State<AudioStrip>
       setState(() => _unavailable = unavailable);
     }
     // 振幅包络只触发重绘，布局、按钮和无障碍语义无需按频谱频率更新。
-    _frames.value++;
+    if (changed) _frames.value++;
   }
 
-  void _step() {
+  bool _step() {
     final n = _values.length;
-    if (n == 0) return;
+    if (n == 0) return false;
     final real = _cap?.poll(n);
-    if (real != null) {
-      for (var i = 0; i < n; i++) {
-        // 振幅上升和衰减使用不同的平滑系数。
-        final nv = real[i];
-        final k = nv > _values[i] ? 0.42 : 0.09;
-        _values[i] += (nv - _values[i]) * k;
-      }
-      return;
-    }
+    var changed = false;
     for (var i = 0; i < n; i++) {
-      _values[i] += (0.02 - _values[i]) * 0.22;
+      final target = real == null ? .02 : real[i];
+      final delta = target - _values[i];
+      if (delta.abs() < .0005) continue;
+      // 振幅上升和衰减使用不同的平滑系数。
+      final factor = real == null ? .22 : (delta > 0 ? .42 : .09);
+      _values[i] += delta * factor;
+      changed = true;
     }
+    return changed;
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _ticker.dispose();
+    _stopUpdates();
     _stopCapture();
     _frames.dispose();
     super.dispose();
@@ -754,7 +740,7 @@ class _SpectrumPainter extends CustomPainter {
     final n = values.length;
     if (n == 0 || size.width <= 0) return;
     final slot = size.width / n;
-    final barW = (slot - 2.0).clamp(1.2, slot);
+    final barW = math.min(slot, math.max(1.2, slot - 2.0));
     final radius = Radius.circular(math.min(2.0, barW / 2));
     final paint = Paint()..style = PaintingStyle.fill;
     for (var i = 0; i < n; i++) {

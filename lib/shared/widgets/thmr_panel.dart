@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/thmr_theme.dart';
 import 'focus_outline.dart';
+import 'thmr_wallpaper.dart';
 
 /// 「和风纸面」面板:毛玻璃 + 细绯红描边 + 柔影。
 /// 对应 Web 端 --panel-bg / --panel-border / --shadow。
@@ -14,7 +15,7 @@ class ThmrPanel extends StatelessWidget {
     this.padding = const EdgeInsets.all(16),
     this.borderRadius = 10,
     this.onTap,
-    this.blur = 8,
+    this.blur = thmrFrostSigma,
     this.frost = true,
     this.enabled = true,
   });
@@ -34,6 +35,9 @@ class ThmrPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.thmr;
+    final sharedBlur = enabled && frost && blur == thmrFrostSigma
+        ? ThmrWallpaper.frostOf(context)
+        : null;
     final frostOpacity = theme.brightness == Brightness.light ? 0.60 : 0.80;
     final decoration = BoxDecoration(
       color: frost
@@ -48,9 +52,10 @@ class ThmrPanel extends StatelessWidget {
       borderRadius: BorderRadius.circular(borderRadius),
       clipBehavior: enabled ? Clip.antiAlias : Clip.none,
       child: Stack(children: [
+        if (sharedBlur != null) Positioned.fill(child: sharedBlur),
         if (enabled)
           Positioned.fill(
-            child: frost
+            child: frost && blur > 0 && sharedBlur == null
                 ? BackdropFilter.grouped(
                     filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
                     blendMode: BlendMode.srcOver,

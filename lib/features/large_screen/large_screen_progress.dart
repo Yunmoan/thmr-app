@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/models/models.dart';
+import '../../core/theme/thmr_motion.dart';
 import '../../core/theme/thmr_theme.dart';
 
 /// 本地暂停时电台仍在直播。以服务端报告的播放位置为基准推进进度，避免依赖服务端与本机时钟同步。
@@ -17,23 +18,23 @@ class LargeScreenProgress extends StatefulWidget {
   State<LargeScreenProgress> createState() => _LargeScreenProgressState();
 }
 
-class _LargeScreenProgressState extends State<LargeScreenProgress> {
-  late final Timer _timer;
+class _LargeScreenProgressState extends State<LargeScreenProgress>
+    with WidgetsBindingObserver {
+  Timer? _timer;
   DateTime _receivedAt = DateTime.now();
   bool _visible = true;
 
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_visible && widget.current != null) setState(() {});
-    });
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _visible = TickerMode.valuesOf(context).enabled;
+    _syncTimer();
   }
 
   @override
@@ -43,11 +44,28 @@ class _LargeScreenProgressState extends State<LargeScreenProgress> {
         oldWidget.updatedAt != widget.updatedAt) {
       _receivedAt = DateTime.now();
     }
+    _syncTimer();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) => _syncTimer();
+
+  void _syncTimer() {
+    if (_visible &&
+        ThmrMotion.viewVisible &&
+        (widget.current?.durationSec ?? 0) > 0) {
+      _timer ??=
+          Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
+      return;
+    }
+    _timer?.cancel();
+    _timer = null;
   }
 
   @override
   void dispose() {
-    _timer.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
     super.dispose();
   }
 

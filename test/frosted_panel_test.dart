@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:thmr_app/core/theme/thmr_colors.dart';
 import 'package:thmr_app/shared/widgets/persistent_tab_page.dart';
 import 'package:thmr_app/shared/widgets/thmr_panel.dart';
+import 'package:thmr_app/shared/widgets/thmr_wallpaper.dart';
 
 class _Texture extends CustomPainter {
   @override
@@ -52,6 +53,88 @@ void main() {
   goldenFileComparator = _TolerantGoldenComparator(
     Uri.parse('test/frosted_panel_test.dart'),
   );
+  testWidgets('静态毛玻璃共享底图，卡片移动时仍与壁纸对齐', (tester) async {
+    tester.view.physicalSize = const Size(430, 300);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final key = GlobalKey();
+    final card = GlobalKey();
+    final left = ValueNotifier(32.0);
+    addTearDown(left.dispose);
+    await tester.pumpWidget(RepaintBoundary(
+      key: key,
+      child: MaterialApp(
+        theme: ThemeData(extensions: [ThmrTokens.reimuLight]),
+        home: ThmrWallpaper(
+          textureKey: 'test-wallpaper',
+          background: CustomPaint(painter: _Texture()),
+          child: ValueListenableBuilder(
+            valueListenable: left,
+            builder: (context, position, child) => Stack(children: [
+              Positioned(
+                  left: position,
+                  top: 20,
+                  width: 150,
+                  height: 80,
+                  child: child!),
+              const Positioned(
+                  left: 32,
+                  top: 140,
+                  width: 150,
+                  height: 80,
+                  child: ThmrPanel(child: SizedBox.expand())),
+            ]),
+            child: RepaintBoundary(
+              key: card,
+              child: const ThmrPanel(child: SizedBox.expand()),
+            ),
+          ),
+        ),
+      ),
+    ));
+
+    final frost = find.byType(RawImage);
+    Future<void> waitForTexture() async {
+      for (var i = 0; i < 50 && frost.evaluate().isEmpty; i++) {
+        await tester.pump(const Duration(milliseconds: 10));
+        await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 4)));
+      }
+      expect(frost, findsNWidgets(2));
+    }
+
+    await waitForTexture();
+    expect(find.byType(BackdropFilter), findsNothing);
+    final normalTexture = tester.widget<RawImage>(frost.first).image;
+    expect(tester.widget<RawImage>(frost.last).image, same(normalTexture));
+    final cardLayer =
+        card.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final snapshot = await cardLayer.toImage();
+    expect(snapshot.width, 150);
+    snapshot.dispose();
+
+    left.value = 240;
+    await tester.pump();
+    final boundary =
+        key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final image = await boundary.toImage(pixelRatio: 1);
+    final bytes = (await tester
+        .runAsync(() => image.toByteData(format: ui.ImageByteFormat.rawRgba)))!;
+    image.dispose();
+    int pixel(int x, int y, int c) => bytes.getUint8((y * 430 + x) * 4 + c);
+    expect(pixel(300, 60, 2), greaterThan(pixel(300, 60, 0) + 25));
+    expect((pixel(300, 60, 2) - pixel(304, 60, 2)).abs(), lessThan(12));
+    expect(pixel(80, 180, 0), greaterThan(pixel(80, 180, 2) + 25));
+
+    tester.view.physicalSize = const Size(500, 300);
+    await tester.pump();
+    await waitForTexture();
+    tester.view.physicalSize = const Size(430, 300);
+    await tester.pump();
+    expect(tester.widget<RawImage>(frost.first).image, same(normalTexture));
+  });
+
   for (final brightness in Brightness.values) {
     testWidgets('tab entry keeps the window opaque in $brightness',
         (tester) async {

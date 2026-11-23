@@ -60,10 +60,8 @@ class ThmrApp extends ConsumerWidget {
               children: [
                 if (windows)
                   DesktopPlayerSurface(child: navigator)
-                else ...[
-                  const ThmrBackground(child: SizedBox.expand()),
-                  navigator,
-                ],
+                else
+                  ThmrBackground(visible: !large, child: navigator),
                 if (!mini)
                   Positioned(
                     top: windows && !large

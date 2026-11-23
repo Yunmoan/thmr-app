@@ -4,12 +4,11 @@ import 'dart:typed_data';
 import 'dart:ui'
     show FragmentProgram, FragmentShader, PointMode, VertexMode, Vertices;
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 
 import '../../core/player/spectrum.dart';
 import '../../core/state/large_screen_settings.dart';
+import '../../core/theme/thmr_motion.dart';
 import '../../core/theme/thmr_theme.dart';
 import 'large_screen_fluid_colors.dart';
 
@@ -71,13 +70,13 @@ class LargeScreenMusicVisual extends StatefulWidget {
 }
 
 class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with WidgetsBindingObserver {
   static const _bandCount = 48;
   static const _demoDuration = Duration(milliseconds: 4800);
 
   final _motion = _MusicMotion();
   late final _sampleBands = Float32List(_spectrumBandCount);
-  late final Ticker _ticker = createTicker(_tick);
+  Timer? _updates;
   FragmentShader? _shader;
   SpectrumSource? _capture;
   Duration _lastTick = Duration.zero;
@@ -97,20 +96,6 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
         LargeScreenMusicEffect.spectrum =>
           false,
       };
-
-  bool get _visible {
-    final state = WidgetsBinding.instance.lifecycleState;
-    if (state == null || state == AppLifecycleState.resumed) return true;
-    // 桌面窗口失去焦点后仍可能可见。
-    return state == AppLifecycleState.inactive &&
-        switch (defaultTargetPlatform) {
-          TargetPlatform.windows ||
-          TargetPlatform.linux ||
-          TargetPlatform.macOS =>
-            true,
-          _ => false,
-        };
-  }
 
   @override
   void initState() {
@@ -158,7 +143,10 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
             effectChanged ||
             (_isFluid && widget.fluidMotion != oldWidget.fluidMotion))) {
       _demoFinished = false;
-      _ticker.stop();
+      _stopUpdates();
+    } else if (widget.lowPower != oldWidget.lowPower) {
+      _updates?.cancel();
+      _updates = null;
     }
     _sync();
   }
@@ -180,7 +168,7 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
     _motion.setFluidColors(
         toneFluidColors(
             colors, theme.thmr, theme.brightness == Brightness.dark),
-        animate: _allowsMotion && _visible);
+        animate: _allowsMotion && ThmrMotion.viewVisible);
   }
 
   bool get _hasPendingFrame {
@@ -192,7 +180,7 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   }
 
   void _sync() {
-    final visible = _allowsMotion && _visible;
+    final visible = _allowsMotion && ThmrMotion.viewVisible;
     final source = !widget.demo && widget.playing ? widget.source : null;
     if (_isFluid || (visible && (widget.demo || source != null))) {
       _loadShaderIfNeeded();
@@ -210,17 +198,24 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
     }
     if (!visible) _motion.finishColorBlend();
     if (!canAnimate || !_hasPendingFrame) {
-      _ticker.stop();
-    } else if (!_ticker.isActive) {
-      _lastTick = Duration.zero;
-      _ticker.start();
+      _stopUpdates();
+    } else if (_updates == null) {
+      // 只在采样时请求绘制，避免用全速 Ticker 唤醒随后会被跳过的帧。
+      final interval = Duration(milliseconds: widget.lowPower ? 66 : 33);
+      final start = _lastTick;
+      _updates = Timer.periodic(
+          interval, (timer) => _tick(start + interval * timer.tick));
     }
+  }
+
+  void _stopUpdates() {
+    _updates?.cancel();
+    _updates = null;
+    _lastTick = Duration.zero;
   }
 
   void _tick(Duration elapsed) {
     final delta = elapsed - _lastTick;
-    final interval = Duration(milliseconds: widget.lowPower ? 64 : 32);
-    if (delta < interval) return;
     _lastTick = elapsed;
     final seconds = math.min(delta.inMicroseconds / 1e6, .08);
     final showBands = widget.effect == LargeScreenMusicEffect.spectrum;
@@ -241,7 +236,7 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
       );
     }
     if (widget.demo && elapsed >= _demoDuration) _demoFinished = true;
-    if (!_hasPendingFrame) _ticker.stop();
+    if (!_hasPendingFrame) _stopUpdates();
   }
 
   _Energy _measureEnergy(Float32List? data) {
@@ -294,7 +289,7 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _ticker.dispose();
+    _stopUpdates();
     _capture?.stop();
     _shader?.dispose();
     _motion.dispose();
