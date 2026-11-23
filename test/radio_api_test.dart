@@ -26,11 +26,12 @@ const _statusJson = {
         'channels': 2,
         'enabled': true,
       },
+      {'id': '320k', 'bitrateKbps': 320, 'enabled': false},
     ],
   },
   'totals': {'listeners': 3, 'uniqueIps': 2},
   'current': {
-    'trackId': 't-current',
+    'trackId': 12345,
     'title': '当前曲目',
     'artist': '社团',
     'coverUrl': '/covers/current.jpg',
@@ -69,6 +70,7 @@ const _playlistJson = {
       'plannedEndMs': 1700000001200,
       'durationSec': 200,
     },
+    {'trackId': 't-external', 'coverUrl': 'https://art.example/queue.jpg'},
   ],
 };
 
@@ -114,8 +116,11 @@ void main() {
         '/api/stations/touhou/playlist' => _playlistJson,
         '/api/stations/touhou-curated/yesterday' => _yesterdayJson,
         '/api/stations/touhou/yesterday' => {'items': []},
-        _ => _statusJson,
+        '/api/stations/other/yesterday' => {'items': 'invalid'},
+        '/api/stations/touhou/status' => _statusJson,
+        _ => null,
       };
+      if (json == null) response.statusCode = HttpStatus.notFound;
       response.write(jsonEncode(json));
       await response.close();
     });
@@ -133,6 +138,7 @@ void main() {
     expect(status.station.public?.title, '东方音乐电台');
     expect(status.station.enabledBitrates.single.id, '128k');
     expect(status.listeners, 3);
+    expect(status.current?.trackId, '12345');
     expect(status.current?.title, '当前曲目');
     // Covers resolve against the selected source, not appConfig.
     expect(status.current?.coverUrl,
@@ -146,10 +152,11 @@ void main() {
   test('playlist queue entries parse with resolved covers', () async {
     final api = RadioApi(baseUrl: 'http://127.0.0.1:${server.port}');
     final queue = await api.playlist('touhou');
-    expect(queue, hasLength(1));
-    expect(queue.single.trackId, 't-queue');
-    expect(queue.single.coverUrl,
-        'http://127.0.0.1:${server.port}/covers/queue.jpg');
+    expect(queue.map((item) => item.trackId), ['t-queue', 't-external']);
+    expect(queue.map((item) => item.coverUrl), [
+      'http://127.0.0.1:${server.port}/covers/queue.jpg',
+      'https://art.example/queue.jpg',
+    ]);
   });
 
   test('site listener total sums all Radio stations', () async {

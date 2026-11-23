@@ -154,7 +154,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   }, variant: desktopPlatforms);
 
-  testWidgets('mobile inactive state still suspends spectrum capture',
+  testWidgets('mobile inactivity suspends spectrum capture until resume',
       (tester) async {
     final source = _Spectrum();
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
@@ -170,6 +170,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 120));
     expect(source.stops, 1);
     expect(source.polls, polls);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(source.polls, polls);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(source.polls, greaterThan(polls));
     await tester.pumpWidget(const SizedBox.shrink());
   },
       variant: const TargetPlatformVariant(

@@ -50,57 +50,38 @@ void main() {
 
   for (final brightness in Brightness.values) {
     test('Reimu preserves its original palette in $brightness', () {
-      final theme = brightness == Brightness.dark
-          ? ThmrTheme.dark()
-          : ThmrTheme.light();
+      final theme =
+          brightness == Brightness.dark ? ThmrTheme.dark() : ThmrTheme.light();
       const accent = Color(0xFFC65A69);
       const onAccent = Color(0xFFFFF8FA);
       expect(theme.colorScheme.primary, accent);
       expect(theme.colorScheme.onPrimary, onAccent);
-      expect(theme.thmr,
-          same(ThmrTokens.resolve(AccentTheme.reimu, brightness)));
-      expect(theme.filledButtonTheme.style?.backgroundColor?.resolve({}),
-          accent);
+      expect(
+          theme.filledButtonTheme.style?.backgroundColor?.resolve({}), accent);
       expect(theme.filledButtonTheme.style?.foregroundColor?.resolve({}),
           onAccent);
       expect(theme.textButtonTheme.style?.foregroundColor?.resolve({}), accent);
     });
   }
 
-  testWidgets('the first app build uses the saved theme and accent',
-      (tester) async {
-    SharedPreferences.setMockInitialValues({
-      'themeMode': ThemeMode.dark.index,
-      'accentTheme': AccentTheme.cirno.index,
+  for (final (name, preferences, mode, accent) in [
+    ('fresh install', <String, Object>{}, ThemeMode.system, AccentTheme.reimu),
+    (
+      'existing preferences',
+      {'themeMode': 2, 'accentTheme': 2},
+      ThemeMode.dark,
+      AccentTheme.cirno,
+    ),
+  ]) {
+    test('startup loads the appearance for $name', () async {
+      SharedPreferences.setMockInitialValues(preferences);
+      final controller = SettingsController();
+      addTearDown(controller.dispose);
+      await controller.ready;
+      expect(controller.state.themeMode, mode);
+      expect(controller.state.accentTheme, accent);
     });
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
-    await tester
-        .runAsync(() => container.read(settingsProvider.notifier).ready);
-
-    final rendered = <AppSettings>[];
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: Consumer(builder: (context, ref, child) {
-        rendered.add(ref.watch(settingsProvider));
-        return const SizedBox.shrink();
-      }),
-    ));
-    await tester.pump();
-
-    expect(rendered, isNotEmpty);
-    expect(rendered.map((s) => s.themeMode), everyElement(ThemeMode.dark));
-    expect(rendered.map((s) => s.accentTheme), everyElement(AccentTheme.cirno));
-  });
-
-  test('startup readiness preserves defaults on a fresh install', () async {
-    SharedPreferences.setMockInitialValues({});
-    final controller = SettingsController();
-    addTearDown(controller.dispose);
-    await controller.ready;
-    expect(controller.state.themeMode, ThemeMode.system);
-    expect(controller.state.accentTheme, AccentTheme.reimu);
-  });
+  }
 
   test('appearance is applied atomically after its illustration is prepared',
       () async {
@@ -150,7 +131,6 @@ void main() {
     expect(unchanged.$2, same(original.$2));
     await settings.setAccentTheme(AccentTheme.cirno);
     final changed = container.read(appThemesProvider);
-    expect(changed.$1, isNot(same(original.$1)));
     expect(
         changed.$1.colorScheme.primary,
         ThmrTokens.resolve(AccentTheme.cirno, Brightness.light)

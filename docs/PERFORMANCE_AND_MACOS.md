@@ -49,8 +49,8 @@ flutter test
 python -m unittest discover -s tool -p test_macos_app.py
 ```
 
-`test/audio_strip_rendering_test.dart` 同时检查修改前的 PNG 基准、绘制器分配数、
-采样节奏以及隐藏/后台停止采样。`application_exit_test.dart` 覆盖退出等待、
+`test/audio_strip_rendering_test.dart` 检查 PNG 基准和采样节奏。
+`audio_strip_lifecycle_test.dart` 验证隐藏或进入后台时停止采样。`application_exit_test.dart` 覆盖退出等待、
 并发请求、清理失败和超时；媒体控制测试覆盖启动尚未完成时退出的竞争。
 `desktop_tray_test.dart` 覆盖资源图标、菜单事件、启动期间退出和 Windows 兼容；
 `macos_tray_window_test.dart` 使用模拟原生通道验证关窗后继续播放、菜单恢复窗口、

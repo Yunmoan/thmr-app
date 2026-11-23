@@ -1,10 +1,12 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:thmr_app/core/api/radio_api.dart';
-import 'package:thmr_app/core/input/app_commands.dart';
 import 'package:thmr_app/core/platform/linux_tray.dart';
 import 'package:thmr_app/core/player/playback_controller.dart';
 import 'package:thmr_app/core/state/channel_provider.dart';
@@ -12,6 +14,8 @@ import 'package:thmr_app/core/state/radio_source_provider.dart';
 import 'package:thmr_app/core/state/station_provider.dart';
 import 'package:thmr_app/core/theme/thmr_colors.dart';
 import 'package:thmr_app/features/shell/home_shell.dart';
+
+const _captureKey = ValueKey('bottom-nav-capture');
 
 class _Station extends StateNotifier<StationUiState> implements StationPoller {
   _Station() : super(const StationUiState(initialLoading: false));
@@ -51,33 +55,52 @@ void main() {
         channelCatalogProvider.overrideWith((ref) async => []),
         desktopTrayAvailableProvider.overrideWith((ref) => false),
       ],
-      child: MaterialApp(
-        theme: ThemeData(extensions: [ThmrTokens.reimuLight]),
-        home: const HomeShell(),
+      child: RepaintBoundary(
+        key: _captureKey,
+        child: MaterialApp(
+          theme: ThemeData(extensions: [ThmrTokens.reimuLight]),
+          home: const HomeShell(),
+        ),
       ),
     ));
     await tester.pumpAndSettle();
   }
 
-  testWidgets('bottom navigation suppresses Material ink effects',
+  testWidgets('hovering and pressing a bottom tab leave its appearance intact',
       (tester) async {
     await mount(tester);
     final item = find.byKey(const ValueKey('bottom-nav-item-1'));
-    final ink = tester.widget<InkWell>(
-      find.descendant(of: item, matching: find.byType(InkWell)),
-    );
-    expect(ink.splashFactory, NoSplash.splashFactory);
-    expect(ink.splashColor, Colors.transparent);
-    expect(ink.highlightColor, Colors.transparent);
-    expect(ink.hoverColor, Colors.transparent);
-    expect(ink.focusColor, Colors.transparent);
+    final boundary =
+        tester.renderObject<RenderRepaintBoundary>(find.byKey(_captureKey));
+    final rect =
+        tester.getRect(item).shift(-boundary.localToGlobal(Offset.zero));
 
-    final container =
-        ProviderScope.containerOf(tester.element(find.byType(HomeShell)));
-    expect(container.read(appTabProvider), 0);
-    await tester.tap(item);
+    Future<ByteData?> pixels() => tester.runAsync(() async {
+          final layer = boundary.debugLayer! as OffsetLayer;
+          final image = await layer.toImage(rect);
+          try {
+            return (await image.toByteData(
+                format: ui.ImageByteFormat.rawRgba))!;
+          } finally {
+            image.dispose();
+          }
+        });
+
+    final before = (await pixels())!;
+    final center = tester.getCenter(item);
+    final mouse = await tester.createGesture(kind: ui.PointerDeviceKind.mouse);
+    await mouse.addPointer();
+    await mouse.moveTo(center);
     await tester.pumpAndSettle();
-    expect(container.read(appTabProvider), 1);
+    expect((await pixels())!.buffer.asUint8List(), before.buffer.asUint8List());
+    await mouse.removePointer();
+    final press = await tester.startGesture(center);
+    await tester.pump(const Duration(milliseconds: 120));
+    await tester.pump(const Duration(milliseconds: 120));
+    expect((await pixels())!.buffer.asUint8List(), before.buffer.asUint8List());
+    await press.up();
+    await tester.pumpAndSettle();
+    expect(find.text('曲库搜索需要登录后使用'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -85,20 +108,14 @@ void main() {
   testWidgets('bottom navigation still activates from the keyboard',
       (tester) async {
     await mount(tester);
-    final item = find.byKey(const ValueKey('bottom-nav-item-1'));
-    final label = find.descendant(of: item, matching: find.text('曲库'));
-
-    final focus = Focus.of(tester.element(label));
-    focus.requestFocus();
+    final label = find.text('曲库');
+    Focus.of(tester.element(label)).requestFocus();
     await tester.pump();
-    expect(focus.hasFocus, isTrue);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
 
-    final container =
-        ProviderScope.containerOf(tester.element(find.byType(HomeShell)));
-    expect(container.read(appTabProvider), 1);
+    expect(find.text('曲库搜索需要登录后使用'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });

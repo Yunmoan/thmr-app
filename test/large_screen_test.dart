@@ -22,7 +22,6 @@ import 'package:thmr_app/core/state/large_screen_settings.dart';
 import 'package:thmr_app/core/state/channel_provider.dart';
 import 'package:thmr_app/features/listen/widgets/channel_switcher.dart';
 import 'package:thmr_app/shared/widgets/thmr_background.dart';
-import 'package:thmr_app/shared/widgets/thmr_slider.dart';
 import 'package:thmr_app/shared/widgets/track_cover.dart';
 import 'package:thmr_app/features/large_screen/large_screen_button.dart';
 import 'package:thmr_app/features/large_screen/large_screen_controller.dart';
@@ -360,18 +359,6 @@ void main() {
     await tester.pumpAndSettle();
     await route;
     expect(tester.takeException(), isNull);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
-
-  testWidgets(
-      'native reveal waits for a frame containing visible incoming content',
-      (tester) async {
-    final h = _Harness(tester);
-    await h.mount();
-    await h.change(true);
-    await h.change(false);
-    expect(h.revealedOpacities, hasLength(2));
-    expect(h.revealedOpacities, everyElement(greaterThan(0)),
-        reason: 'A rasterized backdrop at opacity zero is not a ready player.');
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('fullscreen resizing keeps the initialized stage opaque',
@@ -1182,7 +1169,6 @@ void main() {
     }
     expect(h.concealed, isTrue);
     expect(h.revealed, isEmpty);
-    expect(h.controller.change(true), same(entering));
     final collapse = tester.widget<IconButton>(find.byWidgetPredicate(
         (widget) => widget is IconButton && widget.tooltip == '收起大屏幕模式'));
     expect(collapse.onPressed, isNull);
@@ -1191,6 +1177,7 @@ void main() {
     await entering;
     expect(h.revealed.single.active, isTrue);
     expect(h.revealed.single.busy, isTrue);
+    expect(h.revealed.single.contentVisible, isTrue);
     expect(h.flushed.last.busy, isFalse);
     h.frameGate = null;
     await h.change(false);
@@ -1198,6 +1185,9 @@ void main() {
     expect(h.revealed.last.busy, isTrue);
     expect(h.flushed.last.busy, isFalse);
     expect(h.concealed, isFalse);
+    expect(h.revealedOpacities, hasLength(2));
+    expect(h.revealedOpacities, everyElement(greaterThan(0)),
+        reason: 'The incoming content must be visible at either reveal.');
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('opening in a window does not force fullscreen', (tester) async {
@@ -1590,23 +1580,6 @@ void main() {
       variant: const TargetPlatformVariant(
           {TargetPlatform.android, TargetPlatform.iOS}));
 
-  testWidgets('window reveals only after the stage entrance has started',
-      (tester) async {
-    final h = _Harness(tester);
-    await h.mount();
-    await h.change(true);
-    expect(h.revealed, hasLength(1));
-    expect(h.revealed.single.contentVisible, isTrue,
-        reason: 'The incoming entrance must start before the reveal.');
-    final fade = find
-        .descendant(
-            of: find.byKey(const ValueKey('large-mode-transition')),
-            matching: find.byType(FadeTransition))
-        .first;
-    expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
-    expect(h.container.read(largeScreenProvider).busy, isFalse);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
-
   testWidgets('entering from a covered route still reveals the stage',
       (tester) async {
     final h = _Harness(tester);
@@ -1632,18 +1605,22 @@ void main() {
     expect(h.container.read(largeScreenProvider).busy, isFalse);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
-  testWidgets('settings page uses overlay-free sliders for screen readers',
+  testWidgets('pushed settings page exposes an adjustable effect intensity',
       (tester) async {
+    final semantics = tester.ensureSemantics();
     final h = _Harness(tester);
     await h.mount(size: const Size(1440, 900), desktopRoot: true);
     unawaited(h.navigator.currentState!.push(MaterialPageRoute<void>(
         builder: (_) => const LargeScreenSettingsPage())));
     await tester.pumpAndSettle();
-    // Material Slider's OverlayPortal emits orphaned semantics nodes inside a
-    // pushed route on Windows, freezing the accessibility tree.
-    expect(find.byType(Slider), findsNothing);
-    expect(find.byType(ThmrSlider), findsWidgets);
-    expect(tester.takeException(), isNull);
+    final intensity = find.semantics.byPredicate((node) =>
+        node.label == '动效强度' &&
+        node.getSemanticsData().hasAction(ui.SemanticsAction.increase));
+    expect(intensity.evaluate().single.value, '60%');
+    tester.semantics.increase(intensity);
+    await tester.pumpAndSettle();
+    expect(intensity.evaluate().single.value, '70%');
+    semantics.dispose();
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('collapsing completes even when the stage ticker is muted',

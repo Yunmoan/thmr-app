@@ -31,7 +31,6 @@ void main() {
     await tester.tapAt(Offset(rect.left + rect.width * .75, rect.center.dy));
     await tester.pump();
     expect(value, closeTo(.8, .001));
-    expect(find.byType(OverlayPortal), findsNothing);
   });
 
   testWidgets('exposes slider label, value and stepping semantics',

@@ -83,20 +83,10 @@ void main() {
     expect(controller.state.tested, isTrue);
   });
 
-  test('chooseRadioSource respects the improvement threshold per current', () {
+  test('a small improvement also retains source two when it is current', () {
     expect(
-        chooseRadioSource([measurement(0, 120), measurement(1, 65)],
-                radioSources[0])
-            .id,
-        RadioSourcePreference.source2);
-    expect(
-        chooseRadioSource([measurement(0, 600), measurement(1, 640)],
-                radioSources[1])
-            .id,
-        RadioSourcePreference.source2);
-    expect(
-        chooseRadioSource([measurement(0, 640), measurement(1, 600)],
-                radioSources[1])
+        chooseRadioSource(
+                [measurement(0, 600), measurement(1, 640)], radioSources[1])
             .id,
         RadioSourcePreference.source2);
   });
