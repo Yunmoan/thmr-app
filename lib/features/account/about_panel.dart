@@ -96,8 +96,8 @@ class AboutPanel extends StatelessWidget {
 }
 
 // Snapshot of https://api.github.com/repos/Yunmoan/thmr-app/contributors
-// verified on 2026-11-08. The author is credited separately above the list.
-const _contributors = ['AoralsFout', 'lbw14514'];
+// verified on 2026-11-23. The author is credited separately above the list.
+const _contributors = ['AoralsFout', 'lbw14514', 'kimi-tsuki'];
 
 class _ProjectCommunity extends StatelessWidget {
   const _ProjectCommunity();
