@@ -1,3 +1,7 @@
+# Audio test fixtures
+
+[Audio spectrum verification](../../docs/development/spectrum.md#验证)
+
 Synthetic MP3 test tones generated for this repository; no third-party recordings.
 The runtime tests consume these files directly and do not require FFmpeg.
 

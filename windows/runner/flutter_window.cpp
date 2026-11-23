@@ -47,7 +47,7 @@ FlutterWindow::~FlutterWindow() {}
 
 void FlutterWindow::RequestActivation() {
   activation_pending_ = true;
-  // Preserve first-frame preparation and any in-progress mini-mode transition.
+  // 保留首帧准备和正在进行的迷你模式切换。
   if (!startup_ready_ || presentation_concealed_ || !GetHandle()) return;
   activation_pending_ = false;
   ShowWindow(GetHandle(), IsIconic(GetHandle()) ? SW_RESTORE : SW_SHOW);
@@ -62,11 +62,10 @@ bool FlutterWindow::OnCreate() {
 
   RECT frame = GetClientArea();
 
-  // The size here must match the window dimensions to avoid unnecessary surface
-  // creation / destruction in the startup path.
+  // 控制器初始尺寸需与窗口一致，避免启动时重复创建 Flutter 绘制表面。
   flutter_controller_ = std::make_unique<flutter::FlutterViewController>(
       frame.right - frame.left, frame.bottom - frame.top, project_);
-  // Ensure that basic setup of the controller was successful.
+  // 控制器必须已创建引擎和视图，才能继续初始化窗口。
   if (!flutter_controller_->engine() || !flutter_controller_->view()) {
     return false;
   }
@@ -74,8 +73,7 @@ bool FlutterWindow::OnCreate() {
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
   RegisterWindowPresentation();
 
-  // Dart owns startup visibility: it restores settings, prepares visual assets,
-  // and waits for the first rasterized frame before window_manager shows us.
+  // Dart 恢复设置、准备资源并等待首帧光栅化，再通过 window_manager 显示窗口。
 
   return true;
 }
@@ -109,7 +107,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     }
     return 0;
   }
-  // Give Flutter, including plugins, an opportunity to handle window messages.
+  // 先让 Flutter 及插件处理窗口消息。
   if (flutter_controller_) {
     std::optional<LRESULT> result =
         flutter_controller_->HandleTopLevelWindowProc(hwnd, message, wparam,
@@ -244,8 +242,8 @@ void FlutterWindow::RegisterWindowPresentation() {
           }
           if (SUCCEEDED(hr)) {
             presentation_concealed_ = true;
-            // A method-channel reply is not a compositor fence. Wait until the
-            // old content AND decorations are off screen before any mutation.
+            // MethodChannel 回复前先同步 DWM 合成，确保原来的客户区内容与窗口装饰完全隐藏，
+            // 再允许修改界面。
             hr = DwmFlush();
           }
           if (FAILED(hr)) {
@@ -268,8 +266,8 @@ void FlutterWindow::RegisterWindowPresentation() {
             result->Error("invalid_presentation", "Expected a concealed window and bool");
             return;
           }
-          // Unlike window_manager's posted SC_RESTORE/SC_MAXIMIZE, ShowWindow
-          // completes the state/metrics change before replying to Dart.
+          // window_manager 的 SC_RESTORE / SC_MAXIMIZE 只投递命令。这里同步调用 ShowWindow，
+          // 再将窗口切换结果返回给 Dart。
           ShowWindow(GetHandle(), *maximized ? SW_MAXIMIZE : SW_RESTORE);
           if ((IsZoomed(GetHandle()) != FALSE) != *maximized) {
             result->Error("window_state_failed", "Window state did not change");
@@ -288,13 +286,11 @@ void FlutterWindow::RegisterWindowPresentation() {
             return;
           }
           frame_result_ = std::move(result);
-          // After a timeout, let the outstanding engine callback drain before
-          // registering another one; the engine owns only one callback slot.
+          // 引擎只保留一个回调槽。等待超时后继续等在途回调退出，才能登记下一次。
           frame_callback_pending_ = true;
           const auto serial = ++frame_serial_;
-          // Dart calls this after submitting its target-size layer tree. The
-          // engine queues callback registration on the raster task runner after
-          // that submission. ForceRedraw also handles a static/empty target UI.
+          // Dart 已提交目标尺寸的图层树。引擎随后在光栅线程登记回调，
+          // 并通过 ForceRedraw 为静止或空白的界面请求重绘。
           flutter_controller_->engine()->SetNextFrameCallback([this, serial] {
             frame_callback_pending_ = false;
             if (serial != frame_serial_ || !frame_result_) return;
@@ -312,7 +308,7 @@ void FlutterWindow::RegisterWindowPresentation() {
 HRESULT FlutterWindow::RevealWindow() {
   HRESULT hr = S_OK;
   if (presentation_concealed_) {
-    // Flush the rendered target surface before making the complete HWND visible.
+    // 显示整个 HWND 前先等待目标表面提交到 DWM。
     DwmFlush();
     const BOOL disabled = FALSE;
     hr = DwmSetWindowAttribute(GetHandle(), DWMWA_CLOAK, &disabled, sizeof(BOOL));

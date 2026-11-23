@@ -3,8 +3,7 @@ import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/foundation.dart';
 
-/// Keeps the Dart isolate alive until native audio callbacks are detached.
-/// Concurrent close/menu/keyboard requests must share the same cleanup.
+/// 清理原生音频回调期间保持 Dart isolate 存活。窗口、菜单和键盘同时发起的退出请求共用同一次清理。
 class ApplicationExitCoordinator {
   ApplicationExitCoordinator(
     this.releaseResources, {
@@ -24,8 +23,7 @@ class ApplicationExitCoordinator {
       await releaseResources().timeout(timeout);
     } catch (error) {
       debugPrint('Application exit cleanup failed: $error');
-      // If a native plugin is stuck, terminate the process directly rather than
-      // unloading the Flutter VM underneath its still-live callbacks.
+      // 如果原生插件卡住，直接结束进程，避免在回调仍可能运行时卸载 Flutter VM。
       exitProcess(0);
     }
     return AppExitResponse.exit;

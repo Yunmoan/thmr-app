@@ -1,16 +1,9 @@
-// In-app WebView login (Natayark OAuth), see FLUTTER.md 6.2.
+// 应用内 WebView 登录使用 Natayark OAuth。
 //
-// Loopback flow (localhost origins are whitelisted by the backend):
-//   1. this screen starts a tiny HTTP server on 127.0.0.1:<random>;
-//   2. the OAuth redirect param points at http://127.0.0.1:<port>/callback;
-//   3. after authorization the backend sets the session cookie and 302s to
-//      our loopback URL — the webview renders a self-contained "done" page,
-//      never the web app;
-//   4. meanwhile we read the webview cookies and validate each candidate
-//      against /api/auth/me (the production cookie name is deploy-specific,
-//      so we never hard-code it).
-// Fallback: if the backend rejects the loopback origin it redirects to the
-// web landing page — we freeze it there and keep polling cookies.
+// 本地回调模式在 127.0.0.1 的随机端口启动 HTTP 服务，并把 /callback 作为 OAuth 重定向地址。
+// 后端写入会话 Cookie 后通过 HTTP 302 跳转到本地完成页。客户端读取原站点的 WebView Cookie，
+// 并以 /api/auth/me 的结果确认会话。
+// 本地回调不可用时，以 Web 落地页继续检测会话 Cookie。
 
 import 'dart:async';
 import 'dart:convert' show utf8;
@@ -45,7 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _checking = false;
   Timer? _retry;
   int _attempts = 0;
-  // 已验证过的 cookie 值:重试轮只验证新出现的,避免重复请求触发 WAF 限频
+  // 记录已尝试的 Cookie 值，后续轮询只验证新出现的值，减少重复请求。
   final Set<String> _triedTokens = {};
   String? _diag;
 
@@ -58,8 +51,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _initEnv() async {
-    // WebViewEnvironment is a WebView2-only API. Android and iOS create their
-    // platform WebView directly and use the default CookieManager instance.
+    // WebViewEnvironment 属于 WebView2。其他平台直接创建原生 WebView，并使用默认 CookieManager。
     if (defaultTargetPlatform != TargetPlatform.windows) {
       if (mounted) setState(() => _envReady = true);
       return;
@@ -82,14 +74,13 @@ class _LoginScreenState extends State<LoginScreen> {
       _port = server.port;
       _loopback = server;
       server.listen((request) async {
-        // Any hit on our loopback means the backend has finished the OAuth
-        // exchange and the session cookie is already stored.
+        // 本地回调仅触发会话检查，是否登录以 /api/auth/me 的验证结果为准。
         try {
           request.response.headers.contentType = ContentType.html;
           request.response.add(utf8.encode(_successPage));
           await request.response.close();
         } catch (_) {
-          // webview may cancel the connection on close
+          // 关闭 WebView 时，正在处理的本地请求可能被取消。
         }
         if (mounted) {
           setState(() => _diag = '已收到登录回调,正在建立会话…');
@@ -119,8 +110,8 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _retry?.cancel();
     _loopback?.close(force: true);
-    // WindowsWebViewEnvironment.dispose throws MissingPluginException in
-    // this plugin version; the OS reclaims the env with the process.
+    // 部分 Windows 插件版本释放 WebViewEnvironment 时会抛出 MissingPluginException，
+    // 进程结束后由系统回收相关资源。
     _env?.dispose().catchError((_) {});
     super.dispose();
   }
@@ -129,11 +120,10 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_checking || !mounted) return;
     _checking = true;
     try {
-      // The cookie reader must share the webview's WebViewEnvironment.
+      // CookieManager 读取的是该 WebViewEnvironment 中的 Cookie。
       final cm = CookieManager.instance(webViewEnvironment: _env);
       final cookies = await cm.getCookies(url: WebUri(appConfig.thmrBaseUrl));
-      // The production session cookie name is deploy-specific: validate
-      // every cookie value against /api/auth/me instead of trusting names.
+      // Cookie 名称因部署而异，使用 /api/auth/me 验证非空候选值。
       final api = ThmrApi();
       for (final c in cookies) {
         final value = c.value;
@@ -149,10 +139,10 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         } on ApiException catch (e) {
           if (e.statusCode == 429 || e.statusCode >= 500) rethrow;
-          // 401/403:该候选 cookie 无效,继续验证其余 cookie
+          // HTTP 429 和 5xx 交给外层处理，其余 API 错误允许继续检查下一个候选值。
         }
       }
-      // Not found yet: retry a few times (cookie may still be settling).
+      // 到达回调或落地页时，Cookie 可能尚未可读，按间隔继续尝试。
       if (onLanding && _attempts < 12) {
         _attempts++;
         _retry?.cancel();
@@ -279,7 +269,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     onProgressChanged: (_, p) =>
                         setState(() => _progress = p / 100),
                     onLoadStop: (_, url) {
-                      // Loopback success page or (fallback) web landing page.
+                      // 本地回调完成页与 Web 落地页都可触发会话检查。
                       final landed = url != null &&
                           (url.host == '127.0.0.1' ||
                               url.host == 'localhost' ||
@@ -297,8 +287,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-/// Self-contained success page shown by the loopback server — same design
-/// language as the app (paper pink, serif, crimson).
+/// 本地 HTTP 服务返回的独立完成页，沿用应用的粉色纸面、宋体和绯红配色。
 const String _successPage = '''
 <!doctype html>
 <html lang="zh-CN">

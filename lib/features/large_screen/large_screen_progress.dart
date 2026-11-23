@@ -6,8 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/models/models.dart';
 import '../../core/theme/thmr_theme.dart';
 
-/// Broadcast time continues when local playback is paused. Anchor the clock to
-/// the reported position instead of assuming the server and PC clocks agree.
+/// 本地暂停时电台仍在直播。以服务端报告的播放位置为基准推进进度，避免依赖服务端与本机时钟同步。
 class LargeScreenProgress extends StatefulWidget {
   const LargeScreenProgress(
       {super.key, required this.current, required this.updatedAt});

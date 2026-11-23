@@ -23,7 +23,7 @@ class VotePanel extends ConsumerStatefulWidget {
   final StationStatus status;
   final bool switching;
 
-  /// Width supplied by a parent that measures intrinsic card heights.
+  /// 由测量卡片固有高度的父布局提供的宽度。
   final double? availableWidth;
 
   @override
@@ -149,8 +149,7 @@ class _VotePanelState extends ConsumerState<VotePanel> {
                       ))),
             ])),
       ]);
-      // Keep the same arrangement across loading/result/error states. Large
-      // text uses a second row instead of squeezing out the status message.
+      // 加载、结果和错误状态共用排列方式。大字号时使用第二行，为状态文字留出空间。
       final minimumInfoWidth = 30 + measure('投票切歌', labelStyle);
       if (width < minimumInfoWidth + 8 + buttonWidth) {
         return Column(

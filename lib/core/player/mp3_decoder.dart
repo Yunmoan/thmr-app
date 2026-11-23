@@ -12,7 +12,7 @@ typedef _Decode = int Function(
 typedef _DestroyNative = Void Function(Pointer<Void>);
 typedef _Destroy = void Function(Pointer<Void>);
 
-/// One MP3 stream's decoder, exclusively owned by the spectrum worker isolate.
+/// 每个 MP3 流对应一个解码器，由频谱 worker isolate 独占。
 class Mp3Decoder {
   Mp3Decoder(String library) {
     final native = DynamicLibrary.open(library);

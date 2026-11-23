@@ -298,8 +298,8 @@ class _ComponentEditorState extends State<_ComponentEditor> {
   late final _text = TextEditingController(text: widget.component.text);
   late final _format = TextEditingController(text: widget.component.format);
   late final _color = TextEditingController(text: _hex(widget.component.color));
-  // ExpansionTile stores a bool under its PageStorageKey. A nested input's
-  // internal Scrollable must not read that value as its double scroll offset.
+  // ExpansionTile 在 PageStorageKey 下存储布尔值。内部输入框的 Scrollable 需隔离该存储，
+  // 避免把布尔值当成 double 滚动偏移。
   final _textScroll = ScrollController(keepScrollOffset: false);
   final _formatScroll = ScrollController(keepScrollOffset: false);
   final _colorScroll = ScrollController(keepScrollOffset: false);
@@ -314,8 +314,8 @@ class _ComponentEditorState extends State<_ComponentEditor> {
         oldWidget.component.color == widget.component.color) {
       return;
     }
-    // EditableText owns selection and composing state. Synchronize external
-    // presets after this build, never while its elements are being updated.
+    // 选区和输入法组合态由 EditableText 管理。外部预设在本帧构建后同步，
+    // 避免在元素更新过程中写入。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       void sync(TextEditingController controller, String value) {

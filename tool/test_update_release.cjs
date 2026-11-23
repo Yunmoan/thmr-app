@@ -61,7 +61,7 @@ test('signed payload carries the version and build; macOS updates keep ZIP compa
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   for (const name of ['thmr-app-windows-x64.zip', 'thmr-app-macos-universal.zip',
     'thmr-app-linux-x64.tar.gz', 'thmr-app-android.apk']) fs.writeFileSync(path.join(directory, name), name);
-  // The human installer must never replace the updater ZIP in the signed manifest.
+  // 面向用户的安装器与自动更新 ZIP 分别分发。签名清单应引用自动更新 ZIP。
   fs.writeFileSync(path.join(directory, 'thmr-app-macos-universal.dmg'), 'installer');
   const { privateKey } = crypto.generateKeyPairSync('ed25519');
   const notesFile = path.join(directory, 'notes.txt');
@@ -104,11 +104,15 @@ test('release notes come from the matching packaged changelog section', () => {
   assert.throws(() => releaseNotes('0.2.0', '## 0.2.0\n'), /empty/);
 });
 
-test('release notes CLI exports the same Chinese text used by the signed manifest', () => {
-  const script = path.join(__dirname, 'update_release.cjs');
-  const notes = execFileSync(process.execPath, [script, 'notes', '--version', '0.1.4'], { encoding: 'utf8' }).trim();
-  assert.equal(notes, releaseNotes('0.1.4'));
-  assert.match(notes, /修复 Windows/);
-  assert.equal(execFileSync(process.execPath, [script, 'notes', '--version', '0.1.4-rc.1'],
-    { encoding: 'utf8' }).trim(), notes);
+test('release notes CLI selects the stable changelog section for a preview', t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'thmr-notes-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const script = path.join(directory, 'tool', 'update_release.cjs');
+  fs.mkdirSync(path.dirname(script));
+  fs.copyFileSync(path.join(__dirname, 'update_release.cjs'), script);
+  fs.writeFileSync(path.join(directory, 'CHANGELOG.md'),
+    '## 0.1.5\n\n- 更新安装包\n\n## 0.1.4\n\n- 修复 Windows 更新\n');
+  const notes = execFileSync(process.execPath, [script, 'notes', '--version', '0.1.4-rc.1'],
+    { encoding: 'utf8' }).trim();
+  assert.equal(notes, '- 修复 Windows 更新');
 });

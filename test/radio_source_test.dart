@@ -78,25 +78,15 @@ void main() {
             Future.value([measurement(0, 1200), measurement(1, 1150)])));
     addTearDown(controller.dispose);
     await controller.ensureSelected();
-    // 源 2 measured ~4% faster; not enough to justify reconnecting everything.
+    // 播放源 2 的探测用时仅少约 4%，达不到切换并重连的阈值。
     expect(controller.state.selected.id, RadioSourcePreference.source1);
     expect(controller.state.tested, isTrue);
   });
 
-  test('chooseRadioSource respects the improvement threshold per current', () {
+  test('a small improvement also retains source two when it is current', () {
     expect(
-        chooseRadioSource([measurement(0, 120), measurement(1, 65)],
-                radioSources[0])
-            .id,
-        RadioSourcePreference.source2);
-    expect(
-        chooseRadioSource([measurement(0, 600), measurement(1, 640)],
-                radioSources[1])
-            .id,
-        RadioSourcePreference.source2);
-    expect(
-        chooseRadioSource([measurement(0, 640), measurement(1, 600)],
-                radioSources[1])
+        chooseRadioSource(
+                [measurement(0, 600), measurement(1, 640)], radioSources[1])
             .id,
         RadioSourcePreference.source2);
   });

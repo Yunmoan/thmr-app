@@ -1,4 +1,4 @@
-// Read-only smoke check against the production endpoints, with a local report.
+// 对生产端点执行只读冒烟检查，并生成本地报告。
 import 'dart:io';
 
 import 'package:thmr_app/core/diagnostics/diagnostics.dart';

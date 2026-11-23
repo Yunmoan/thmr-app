@@ -36,7 +36,7 @@ Future<void> main(List<String> args) async {
   }
 
   if (updateLaunch) FlutterError.onError = updateErrorHandler;
-  // 桌面 / 移动全平台播放后端(just_audio 桌面实现受限,统一 media_kit)
+  // 桌面端和移动端统一使用 media_kit 播放。
   try {
     MediaKit.ensureInitialized();
   } catch (error, stack) {
@@ -56,7 +56,7 @@ Future<void> main(List<String> args) async {
         ),
       ),
     ));
-    return; // Never acknowledge an update whose playback engine cannot start.
+    return; // 播放引擎初始化失败时，不确认更新成功。
   }
 
   final container = ProviderContainer();
@@ -71,8 +71,8 @@ Future<void> main(List<String> args) async {
   if (!kIsWeb && Platform.isMacOS) {
     final shutdown = ApplicationExitCoordinator(() async {
       await DesktopTrayController.disposeActive();
-      // Cancel polling, reconnection timers and player subscriptions before
-      // disposing mpv. AppKit must keep the engine alive until this completes.
+      // 释放 mpv 前先取消轮询、重连定时器和播放器订阅。AppKit 在清理完成前需保持 Flutter 引擎
+      // 运行。
       container.dispose();
       try {
         await LinuxSpectrum.appleInstance.dispose();
@@ -89,10 +89,10 @@ Future<void> main(List<String> args) async {
     container: container,
     child: const ThmrApp(),
   ));
-  // Audio service registration can wait for Android's service binding. It must
-  // never keep the launch screen up or prevent the app from opening.
+  // 音频服务注册可能等待 Android 绑定服务，因此在界面首帧后异步启动。
   WidgetsBinding.instance.addPostFrameCallback((_) {
     if (updateLaunch) {
+      // 给首帧后的启动错误留出观察窗口，再向安装辅助程序确认更新。
       unawaited(Future<void>.delayed(const Duration(seconds: 3), () async {
         if (startupHealthy) await acknowledgeInstalledUpdate(args);
         if (FlutterError.onError == updateErrorHandler) {
@@ -115,7 +115,7 @@ Future<void> main(List<String> args) async {
 Future<void> _showMainWindow(
     WidgetsBinding binding, AppSettings settings) async {
   try {
-    // Build while hidden so Image widgets and Google Fonts start loading.
+    // 窗口隐藏期间先构建界面，启动 Image 和 Google Fonts 加载。
     await binding.endOfFrame;
     final illustration =
         ThmrTokens.resolve(settings.accentTheme, Brightness.light).illustration;
@@ -123,8 +123,7 @@ Future<void> _showMainWindow(
     await Future.wait([
       precacheImage(AssetImage(illustration), context),
       precacheImage(const AssetImage('assets/brand/logo.png'), context),
-      // Fonts may require a download on first launch. Fall back to system fonts
-      // if the network is unavailable instead of leaving the window hidden.
+      // 首次启动可能下载字体。给字体加载设定超时，届时继续显示窗口。
       GoogleFonts.pendingFonts().timeout(const Duration(seconds: 5)),
     ]);
     await binding.endOfFrame;
@@ -133,8 +132,7 @@ Future<void> _showMainWindow(
   } finally {
     binding.allowFirstFrame();
   }
-  // A post-frame callback only means layout/paint is done on the Dart side.
-  // Wait for the engine to rasterize it before exposing the native window.
+  // Dart 帧回调仅代表布局和绘制阶段已完成。等引擎光栅化首帧后再显示原生窗口。
   await binding.waitUntilFirstFrameRasterized;
   await windowManager.show();
   await windowManager.focus();

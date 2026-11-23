@@ -8,8 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 final desktopTrayAvailableProvider =
     StateProvider<bool>((ref) => !kIsWeb && Platform.isWindows);
 
-/// Recheck the actual panel host, including after a shell restart. Never infer
-/// availability from tray_manager's successful icon-registration call.
+/// 检查实际承载托盘图标的面板服务，覆盖桌面 shell 重启的情况。
+/// tray_manager 注册图标成功也可能没有可用的面板服务。
 class LinuxTrayMonitor extends ValueNotifier<bool> {
   LinuxTrayMonitor() : super(false);
 

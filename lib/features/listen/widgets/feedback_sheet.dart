@@ -10,7 +10,7 @@ import '../../../core/config.dart';
 import '../../../core/models/models.dart';
 import '../../../core/theme/thmr_theme.dart';
 
-/// 反馈类型(7.3 枚举)。
+/// 曲目反馈类型。
 const _feedbackTypes = <(String, String)>[
   ('non-touhou', '非东方歌曲'),
   ('non-music', '非音乐节目'),

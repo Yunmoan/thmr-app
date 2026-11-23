@@ -22,8 +22,8 @@ String desktopTrayActionLabel({required bool available}) {
   return available ? '最小化到托盘' : '最小化到任务栏';
 }
 
-/// GTK owns Linux's decorations, initial geometry and first-frame presentation.
-/// Initializing window_manager must not replace its native header bar.
+/// Linux 窗口装饰、初始位置与尺寸、首帧显示由 GTK 管理。初始化 window_manager 时需保留 GTK 的
+/// 原生标题栏。
 Future<void> initializeDesktopWindow({TargetPlatform? platform}) async {
   if (kIsWeb) return;
   switch (platform ?? defaultTargetPlatform) {
@@ -38,7 +38,7 @@ Future<void> initializeDesktopWindow({TargetPlatform? platform}) async {
     case TargetPlatform.linux:
       await windowManager.ensureInitialized();
     case TargetPlatform.macOS:
-      // Keep AppKit's title bar and geometry; only install the close delegate.
+      // 仅安装关闭代理，保留 AppKit 的标题栏和窗口尺寸、位置。
       await windowManager.ensureInitialized();
       await windowManager.setPreventClose(true);
     default:
@@ -51,16 +51,14 @@ Future<void> restoreDesktopWindow() async {
   await windowManager.focus();
 }
 
-/// Stop Linux playback and background work before terminating the process.
-/// Both GTK window destruction and Flutter's application exit can race native
-/// plugin/engine threads during shutdown. Avoid that teardown after cleanup.
+/// Linux 应先停止播放和后台任务，再直接结束进程。销毁 GTK 窗口或走 Flutter 的常规退出流程可能与
+/// 原生线程收尾发生竞态。
 Future<void> quitDesktopApplication(Future<void> Function() releaseResources,
     {TargetPlatform? platform, void Function(int) exitProcess = exit}) async {
   final target = platform ?? defaultTargetPlatform;
   if (target == TargetPlatform.windows) terminateWindowsProcess();
   if (target == TargetPlatform.macOS) {
-    // Cmd+Q and the tray Exit item must share main.dart's exit coordinator.
-    // Destroying the window or forcing an exit would bypass its mpv cleanup.
+    // Cmd+Q 和托盘「退出」共用 main.dart 中的退出协调逻辑，确保 mpv 清理完成后再退出。
     await ServicesBinding.instance.exitApplication(AppExitType.cancelable);
     return;
   }

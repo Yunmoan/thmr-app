@@ -52,10 +52,8 @@ RadioSource? fastestRadioSource(List<SourceMeasurement> measurements) {
   return usable.isEmpty ? null : usable.first.source;
 }
 
-/// Automatic mode only hops away from [current] when the faster source wins
-/// by a meaningful margin. Probe timings differ by tens of milliseconds run
-/// to run; switching the API host, covers and live stream for that noise
-/// costs a reconnect and gains nothing.
+/// [current] 不可用时优先选最快的可用源。当前源仍可用时，候选源的探测用时
+/// 默认要少至少 10% 才切换，以免短时波动导致直播重连。
 RadioSource chooseRadioSource(
   List<SourceMeasurement> measurements,
   RadioSource current, {

@@ -4,8 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/thmr_motion.dart';
 import 'message_body.dart';
 
-/// A status message over the page, with the same entrance/exit as other THMR
-/// surfaces. Retain the outgoing content until its exit has finished.
+/// 页面上方的状态提示，沿用 THMR 的入场和退场动画。退场完成前继续保留旧内容。
 class StatusNotice extends StatefulWidget {
   const StatusNotice(
       {super.key,
@@ -88,7 +87,7 @@ class _StatusNoticeState extends State<StatusNotice>
         }
       }
     } on TickerCanceled {
-      // A replacement, reduced-motion update or disposal superseded the exit.
+      // 内容替换、减少动态效果设置变化或组件销毁时，旧退场流程已经失效。
     }
   }
 

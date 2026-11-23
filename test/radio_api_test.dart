@@ -4,8 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:thmr_app/core/api/radio_api.dart';
 
-/// Shapes copied from the real `/api/stations/:id/status` payload: nested
-/// JSON objects and a relative cover path.
+/// 模拟 /api/stations/:id/status 的实际结构，包括嵌套 JSON 对象和相对封面路径。
 const _statusJson = {
   'station': {
     'id': 'touhou',
@@ -26,11 +25,12 @@ const _statusJson = {
         'channels': 2,
         'enabled': true,
       },
+      {'id': '320k', 'bitrateKbps': 320, 'enabled': false},
     ],
   },
   'totals': {'listeners': 3, 'uniqueIps': 2},
   'current': {
-    'trackId': 't-current',
+    'trackId': 12345,
     'title': '当前曲目',
     'artist': '社团',
     'coverUrl': '/covers/current.jpg',
@@ -69,6 +69,7 @@ const _playlistJson = {
       'plannedEndMs': 1700000001200,
       'durationSec': 200,
     },
+    {'trackId': 't-external', 'coverUrl': 'https://art.example/queue.jpg'},
   ],
 };
 
@@ -114,8 +115,11 @@ void main() {
         '/api/stations/touhou/playlist' => _playlistJson,
         '/api/stations/touhou-curated/yesterday' => _yesterdayJson,
         '/api/stations/touhou/yesterday' => {'items': []},
-        _ => _statusJson,
+        '/api/stations/other/yesterday' => {'items': 'invalid'},
+        '/api/stations/touhou/status' => _statusJson,
+        _ => null,
       };
+      if (json == null) response.statusCode = HttpStatus.notFound;
       response.write(jsonEncode(json));
       await response.close();
     });
@@ -133,8 +137,9 @@ void main() {
     expect(status.station.public?.title, '东方音乐电台');
     expect(status.station.enabledBitrates.single.id, '128k');
     expect(status.listeners, 3);
+    expect(status.current?.trackId, '12345');
     expect(status.current?.title, '当前曲目');
-    // Covers resolve against the selected source, not appConfig.
+    // 封面相对路径以当前选择的播放源为基准解析。
     expect(status.current?.coverUrl,
         'http://127.0.0.1:${server.port}/covers/current.jpg');
     expect(status.previous?.coverUrl,
@@ -146,10 +151,11 @@ void main() {
   test('playlist queue entries parse with resolved covers', () async {
     final api = RadioApi(baseUrl: 'http://127.0.0.1:${server.port}');
     final queue = await api.playlist('touhou');
-    expect(queue, hasLength(1));
-    expect(queue.single.trackId, 't-queue');
-    expect(queue.single.coverUrl,
-        'http://127.0.0.1:${server.port}/covers/queue.jpg');
+    expect(queue.map((item) => item.trackId), ['t-queue', 't-external']);
+    expect(queue.map((item) => item.coverUrl), [
+      'http://127.0.0.1:${server.port}/covers/queue.jpg',
+      'https://art.example/queue.jpg',
+    ]);
   });
 
   test('site listener total sums all Radio stations', () async {

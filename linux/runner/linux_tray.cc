@@ -33,8 +33,8 @@ void bus_received(GObject*, GAsyncResult* result, gpointer data) {
     respond(call, false);
     return;
   }
-  // A watcher may exist without a panel hosting its items (notably GNOME).
-  // Successful app_indicator_new() alone does not mean the icon is usable.
+  // GNOME 等环境中可能存在 watcher 但没有实际承载图标的面板。
+  // app_indicator_new() 成功后仍需判断面板是否可用。
   g_dbus_connection_call(
       bus, "org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher",
       "org.freedesktop.DBus.Properties", "Get",

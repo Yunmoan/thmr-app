@@ -1,4 +1,4 @@
-"""Sign inside-out and validate the actual macOS distribution, not just Xcode output."""
+"""从内到外签名，并验证实际分发的 macOS 应用。"""
 import argparse
 import json
 import os
@@ -31,8 +31,8 @@ def macho_files(app):
 
 
 def validate_entitlements(entitlements):
-    # Even an empty access-groups array is a restricted entitlement claim.
-    # Ad-hoc / Developer ID builds here have no provisioning profile for it.
+    # 即使 access-groups 为空数组，也会声明受限的 entitlement。
+    # 此处的 ad-hoc 和 Developer ID 构建没有相应的 provisioning profile。
     for key in ("keychain-access-groups", "com.apple.application-identifier",
                 "com.apple.developer.team-identifier"):
         if key in entitlements:
@@ -52,8 +52,8 @@ def sign_app(app, identity="-", keychain=None):
         options += ["--options", "runtime", "--timestamp"]
     if keychain:
         options += ["--keychain", keychain]
-    # Do not use --deep for signing: it propagates app entitlements into libraries.
-    # Sign real files first, then their containing bundles, and the outer app last.
+    # 避免使用 --deep 签名，以免把应用的 entitlement 传给嵌套库。先签实际文件，再签嵌套 bundle，
+    # 最后签外层应用。
     for path in macho_files(app):
         if path != app / "Contents/MacOS/THMR":
             subprocess.run(["codesign", *options, str(path)], check=True)
@@ -96,7 +96,7 @@ def verify_app(app, launch=False):
 def smoke_launch(app, bundle_id, timeout=60):
     arch = {"x86_64": "x86_64", "arm64": "arm64"}[platform.machine()]
     token = secrets.token_hex(32)
-    # Same path_provider non-sandboxed cache path used by acknowledgeInstalledUpdate.
+    # 使用与 acknowledgeInstalledUpdate 一致的非沙盒缓存目录。
     transaction = Path.home() / "Library/Caches" / bundle_id / "thmr-updates" / f"tx-{token}"
     transaction.mkdir(parents=True)
     ack = transaction / "ack"

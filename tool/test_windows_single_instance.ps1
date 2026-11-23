@@ -1,5 +1,5 @@
-# Build first: flutter build windows --debug
-# Run: pwsh -NoProfile -File tool/test_windows_single_instance.ps1
+# 先构建：flutter build windows --debug
+# 运行：pwsh -NoProfile -File tool/test_windows_single_instance.ps1
 param([string]$Executable = "$PSScriptRoot/../build/windows/x64/runner/Debug/thmr_app.exe")
 
 $ErrorActionPreference = 'Stop'
@@ -32,8 +32,8 @@ public static class ThmrInstanceProbe {
 
 $launched = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
 function Start-Thmr {
-    # This is a visible-window test. SW_HIDE in STARTUPINFO would override the
-    # app's first ShowWindow call and invalidate the normal-launch scenario.
+    # 此测试需要可见窗口。STARTUPINFO 中的 SW_HIDE 会覆盖应用首次 ShowWindow 调用，
+    # 破坏常规启动场景。
     $process = Start-Process -FilePath $Executable -WorkingDirectory (Split-Path $Executable) -PassThru -WindowStyle Normal
     $launched.Add($process)
     return $process
@@ -68,7 +68,7 @@ function Assert-Duplicate([IntPtr]$Window) {
 }
 
 try {
-    # Race the first launch against several others before Flutter is ready.
+    # Flutter 尚未就绪时并发启动多个实例，验证首个进程收到激活请求。
     1..6 | ForEach-Object { $null = Start-Thmr }
     Wait-Until {
         @($launched | Where-Object { -not $_.HasExited }).Count -eq 1 -and
@@ -79,7 +79,7 @@ try {
     Assert-Duplicate $window
     Write-Output 'PASS: startup race and visible-window activation'
 
-    $null = [ThmrInstanceProbe]::ShowWindowAsync($window, 0) # SW_HIDE, like tray hiding.
+    $null = [ThmrInstanceProbe]::ShowWindowAsync($window, 0) # SW_HIDE，模拟隐藏到托盘。
     Wait-Until { -not [ThmrInstanceProbe]::IsWindowVisible($window) } 'window hidden'
     Assert-Duplicate $window
     Write-Output 'PASS: hidden window restored and foreground'
@@ -113,7 +113,7 @@ try {
     Assert-Duplicate ([ThmrInstanceProbe]::FindThmrWindow())
     Write-Output 'PASS: crash cleanup and restart'
 } finally {
-    # Stop only the processes this test started.
+    # 只停止此测试启动的进程。
     foreach ($process in $launched) {
         if (-not $process.HasExited) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue

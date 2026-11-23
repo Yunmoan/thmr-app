@@ -38,8 +38,7 @@ final largeScreenThemeProvider =
 final largeScreenSpectrumProvider =
     Provider<SpectrumSource?>((ref) => getPlatformSpectrum());
 
-/// The existing THMR paper, character illustration and typography, presented
-/// without navigation. The shared player and station remain mounted throughout.
+/// 大屏模式沿用 THMR 的纸面、角色插画和排版，收起导航。播放器和频道状态在整个切换过程中保持挂载。
 class LargeScreenPlayer extends ConsumerStatefulWidget {
   const LargeScreenPlayer(
       {super.key,
@@ -98,14 +97,13 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
       await (visible ? _presentation.forward() : _presentation.reverse())
           .orCancel
           .timeout(duration + const Duration(milliseconds: 200), onTimeout: () {
-        // A muted ticker (the stage can be entered under an opaque route)
-        // never ticks. Land on the target instead of keeping `busy` set with
-        // the content stranded at opacity zero.
+        // 大屏可能在不透明路由下方入场，此时 Ticker 会静音。超时后直接应用最终状态，
+        // 避免界面一直透明并占用忙碌状态。
         _presentation.stop();
         _presentation.value = visible ? 1 : 0;
       });
     } on TickerCanceled {
-      // Removing the surface also completes its native mode transition.
+      // 移除大屏界面时，也需要解除原生模式切换的等待。
     }
   }
 
@@ -151,15 +149,12 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
     if (!widget.preview) {
       ref.listen(largeScreenProvider, (_, state) {
         if (!state.busy && state.active && state.contentVisible) {
-          // Native fullscreen changes can replace or cancel an animation's
-          // ticker. A completed transition must always have painted content.
+          // 原生全屏切换可能替换或取消动画 Ticker。切换完成后需要确保内容已经可见。
           _presentationVisible = true;
           _presentation.value = 1;
         }
       });
-      // Fallback for a missed controller callback (for example when the stage
-      // remounts during a transition): follow the shared visibility state so
-      // the content can never stay transparent while the stage is visible.
+      // 过渡中重挂载可能错过控制器回调。此时以共享的可见状态为准，确保大屏启用后内容可以显示。
       ref.listen(largeScreenProvider.select((state) => state.contentVisible),
           (previous, visible) {
         if (visible != _presentationVisible &&
@@ -559,7 +554,7 @@ class _PlaybackControls extends ConsumerWidget {
                 : playing
                     ? Icons.pause_rounded
                     : Icons.play_arrow_rounded)),
-        // @Aoralsfout: yma你忘了鼠标滚轮悬浮调整qwq...
+        // @Aoralsfout：鼠标悬停时，滚轮用于调整音量。
         VolumeWheelControl(
           value: volume,
           onChanged:

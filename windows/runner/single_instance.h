@@ -5,8 +5,8 @@
 
 inline constexpr wchar_t kThmrWindowClass[] = L"THMR_RUNNER_WIN32_WINDOW";
 
-// Kernel objects live only while a process holds them; crashes cannot leave a
-// stale lock. The activation event also survives requests made during startup.
+// 最后一个句柄关闭后，系统会回收内核对象，进程崩溃也会释放锁。
+// 激活事件可保留尚未建好窗口时收到的请求。
 class SingleInstance {
  public:
   enum class Result { primary, secondary, error };

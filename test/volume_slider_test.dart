@@ -33,8 +33,8 @@ void main() {
     expect(volume, greaterThan(50));
   });
 
-  testWidgets('volume control works in a pushed route without OverlayPortal',
-      (tester) async {
+  testWidgets('volume remains adjustable in a pushed route', (tester) async {
+    final semantics = tester.ensureSemantics();
     var volume = 50.0;
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
@@ -65,28 +65,25 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(VolumeSlider), findsOneWidget);
-    expect(find.byType(OverlayPortal), findsNothing);
-    final rect = tester.getRect(find.byType(VolumeSlider));
+    final slider = find.bySemanticsLabel('音量');
+    expect(tester.getSemantics(slider).value, '50%');
+    final rect = tester.getRect(slider);
     await tester.tapAt(Offset(rect.left + rect.width * .75, rect.center.dy));
     await tester.pump();
     expect(volume, closeTo(77, 1));
 
-    await tester.drag(find.byType(VolumeSlider), const Offset(-35, 0));
+    await tester.drag(slider, const Offset(-35, 0));
     await tester.pump();
     expect(volume, lessThan(77));
 
-    final paint = find.descendant(
-      of: find.byType(VolumeSlider),
-      matching: find.byWidgetPredicate(
-          (widget) => widget is CustomPaint && widget.painter != null),
-    );
-    Focus.of(tester.element(paint)).requestFocus();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pump();
     final beforeKey = volume;
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump();
     expect(volume, closeTo(beforeKey - 5, .01));
+    expect(tester.getSemantics(slider).value, '${volume.round()}%');
     expect(tester.takeException(), isNull);
+    semantics.dispose();
   });
 }

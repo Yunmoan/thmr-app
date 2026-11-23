@@ -1,4 +1,4 @@
-// Collection detail: items, sorting, share toggle + link bar, export.
+// 收藏夹详情，包括条目、排序、分享和导出。
 
 import 'package:flutter/material.dart';
 import '../../core/theme/thmr_motion.dart';
@@ -462,7 +462,7 @@ class _TrackItemAction extends StatelessWidget {
   }
 }
 
-/// Share link bar: visible URL, copy to clipboard, system share sheet.
+/// 分享链接栏显示 URL，并提供复制到剪贴板和调用系统分享的入口。
 class _ShareLinkBar extends StatelessWidget {
   const _ShareLinkBar({required this.slug});
 

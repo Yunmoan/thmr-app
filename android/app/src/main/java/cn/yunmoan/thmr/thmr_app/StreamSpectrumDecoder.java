@@ -11,12 +11,11 @@ import java.nio.ByteOrder;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Decodes THMR's loopback MP3 stream to PCM, without any audio capture API. */
+/** 将 THMR 的 loopback MP3 直播流解码为 PCM，无需调用录音接口。 */
 final class StreamSpectrumDecoder {
     private static final String TAG = "ThmrSpectrum";
     private final Object samplesLock = new Object();
-    // Live MP3 extractors can deliver several seconds of PCM in one burst.
-    // Keep a bounded queue so each UI frame advances through real audio.
+    // 直播 MP3 解码器可能一次交付数秒 PCM。用有界队列缓存，让 UI 按实际音频时间逐步取样。
     private final float[] samples = new float[48000 * 8];
     private volatile long generation;
     private volatile boolean decodeFailed;
@@ -66,7 +65,7 @@ final class StreamSpectrumDecoder {
             }
             long now = System.nanoTime();
             if (!startedReading || available > sampleRate * 7) {
-                // Retain enough PCM to bridge the extractor's multi-second gaps.
+                // 缓存足量 PCM，以跨过解码器两次批量交付之间的间隔。
                 int skip = Math.max(0, available - Math.max(sampleRate * 5,
                         snapshot.length));
                 readIndex = (readIndex + skip) % samples.length;

@@ -13,7 +13,7 @@ typedef FluidColors = ({
   Color bottomRight,
 });
 
-/// Resolve the current cover once for both the flowing background and portrait.
+/// 流动背景和角色区域共用当前封面的解析结果。
 class LargeScreenFluidArtwork extends StatefulWidget {
   const LargeScreenFluidArtwork({
     super.key,
@@ -58,7 +58,7 @@ class _LargeScreenFluidArtworkState extends State<LargeScreenFluidArtwork> {
       return;
     }
 
-    // Keep the previous colors while the new cover is loading.
+    // 新封面加载期间保留上一组颜色。
     final stream = artwork.resolve(createLocalImageConfiguration(context));
     final listener = ImageStreamListener((info, _) {
       if (revision == _revision) _detach();
@@ -66,7 +66,7 @@ class _LargeScreenFluidArtworkState extends State<LargeScreenFluidArtwork> {
     }, onError: (Object _, StackTrace? __) {
       if (revision != _revision) return;
       _detach();
-      // A provider may report a cached error during this build.
+      // 图片提供器可能在本次构建中同步报告缓存的加载错误。
       scheduleMicrotask(() => _useColors(null, revision));
     });
     _load = (stream: stream, listener: listener);
@@ -78,7 +78,7 @@ class _LargeScreenFluidArtworkState extends State<LargeScreenFluidArtwork> {
     try {
       colors = await fluidColorsFromArtwork(info.image);
     } catch (_) {
-      // An unreadable thumbnail uses the same theme fallback as a missing one.
+      // 缩略图无法读取时，与缺少封面时一样使用主题配色。
     } finally {
       info.dispose();
     }
@@ -106,8 +106,7 @@ class _LargeScreenFluidArtworkState extends State<LargeScreenFluidArtwork> {
   Widget build(BuildContext context) => widget.builder(context, _colors);
 }
 
-/// Read a small decoded cover once. Keeping four spatial averages preserves
-/// the cover's distribution of color when the shader moves each region.
+/// 读取一次低分辨率封面，计算四个区域的平均色。着色器移动各区域时仍可保留封面的色彩分布。
 Future<FluidColors?> fluidColorsFromArtwork(ui.Image image) async {
   final bytes =
       await image.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
@@ -125,7 +124,7 @@ Future<FluidColors?> fluidColorsFromArtwork(ui.Image image) async {
       final chroma = (math.max(red, math.max(green, blue)) -
               math.min(red, math.min(green, blue))) /
           255;
-      // A small area of pigment can define a cover with a large neutral field.
+      // 大面积中性色的封面中，一小块高饱和区域也可能代表封面的主色。
       final weight = alpha / 255 * (.10 + 4.8 * chroma * chroma);
       final region =
           (y * 2 < image.height ? 0 : 2) + (x * 2 < image.width ? 0 : 1);
@@ -143,8 +142,7 @@ Future<FluidColors?> fluidColorsFromArtwork(ui.Image image) async {
   );
 }
 
-/// Tint cover pigments toward the reading surface. Limit strong swatches by
-/// the same secondary text color used for the track details and widgets.
+/// 将封面颜色向阅读区底色混合，并用曲目信息和小组件的次要文字颜色限制强色块的对比度。
 FluidColors toneFluidColors(FluidColors palette, ThmrTokens theme, bool dark) {
   Color tone(Color color, double lightnessOffset) {
     final hsl = HSLColor.fromColor(color);

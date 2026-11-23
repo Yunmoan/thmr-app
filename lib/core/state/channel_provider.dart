@@ -15,9 +15,8 @@ final channelCatalogProvider = FutureProvider<List<RadioChannel>>((ref) async {
     try {
       return await api.channels();
     } catch (error) {
-      // A cold iOS launch can fail the very first request while the network
-      // or the backend is still waking up. Retry transient failures before
-      // the provider caches the error for the rest of the session.
+      // 冷启动时网络或后端可能尚未就绪。频道目录首次请求因暂时性问题失败时，
+      // 在向界面报告错误前最多重试两次。
       if (attempt >= retryDelays.length || !_transientCatalogFailure(error)) {
         rethrow;
       }
@@ -42,7 +41,7 @@ final activeStationIdProvider = Provider<String>((ref) {
   if (stored == null || !RadioChannel.isValidId(stored)) {
     return appConfig.stationId;
   }
-  // Only a successful catalog can rule out a saved station.
+  // 只有成功取得频道目录后，才能判定保存的频道已不存在。
   if (channels == null || channels.any((channel) => channel.id == stored)) {
     return stored;
   }

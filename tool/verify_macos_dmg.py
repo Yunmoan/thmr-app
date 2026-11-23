@@ -1,4 +1,4 @@
-"""Check the final read-only DMG, including its actual bundled app identity."""
+"""检查最终的只读 DMG，核对包内应用的实际身份和版本。"""
 import os
 from pathlib import Path
 import plistlib
@@ -28,7 +28,7 @@ def verify(image):
                 assert info["CFBundleShortVersionString"] == version.split("-")[0]
             if build := os.environ.get("CLIENT_BUILD_NUMBER"):
                 assert info["CFBundleVersion"] == build
-            # Exercise the installed copy, exactly as a user dragging to Applications.
+            # 检查复制到安装目录的应用，复现用户从 DMG 拖入 Applications 后的运行路径。
             with tempfile.TemporaryDirectory(prefix="thmr-installed-check-") as installed:
                 target = Path(installed) / "THMR.app"
                 subprocess.run(["ditto", str(app), str(target)], check=True)

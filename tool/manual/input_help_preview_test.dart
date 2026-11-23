@@ -1,4 +1,4 @@
-// Run explicitly: flutter test tool/input_help_preview_test.dart
+// 运行步骤见 docs/development/verification.md。
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -15,7 +15,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    // Use a local CJK font for deterministic previews, without font downloads.
+    // 使用本地 CJK 字体，使预览可重复且无需下载字体。
     final font = File('C:/Windows/Fonts/msyh.ttc');
     if (font.existsSync()) {
       final loader = FontLoader('HelpPreview')

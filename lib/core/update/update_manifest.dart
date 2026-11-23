@@ -63,7 +63,7 @@ class AppRelease {
   UpdateArtifact? artifactFor([String? platform]) =>
       artifacts[platform ?? currentUpdatePlatform()];
 
-  // Useful for platform previews; installation always checks the exact ABI.
+  // 允许按平台选择预览项，安装时仍要求 ABI 精确匹配。
   Uri? downloadFor(TargetPlatform platform) => artifacts[switch (platform) {
         TargetPlatform.windows => 'windows-x86_64',
         TargetPlatform.macOS => 'darwin-aarch64',
@@ -86,7 +86,7 @@ Uri checkedUpdateUrl(Object? value) {
   return url;
 }
 
-/// Verify the original payload bytes, before trusting any install metadata.
+/// 先校验原始 payload 字节的签名，再使用安装元数据。
 Future<AppRelease?> verifyUpdateManifest(Object? raw, String publicKey) async {
   if (publicKey.isEmpty) {
     throw const UpdateCheckException('尚未配置更新验签公钥，请按自动更新部署文档配置客户端');
@@ -121,8 +121,8 @@ Future<AppRelease?> verifyUpdateManifest(Object? raw, String publicKey) async {
     if (entries is! Map || entries.isEmpty) {
       throw const FormatException('No artifacts');
     }
-    // The owner's HTTPS update API may relocate the same signed binaries.
-    // Only the location changes; all installation metadata remains signed.
+    // 项目方的 HTTPS 更新 API 可以为同一份已签名的安装包提供新地址。
+    // 其余安装元数据继续取自签名载荷。
     final downloads = raw['download_urls'] ?? const <String, dynamic>{};
     if (downloads is! Map ||
         downloads.keys

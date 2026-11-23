@@ -4,7 +4,7 @@
 uniform vec2 uSize;
 uniform float uTime;
 uniform float uIntensity;
-uniform vec4 uAudio;  // Bass, mids, treble, bass transients.
+uniform vec4 uAudio;  // 低频、中频、高频、低频瞬态
 uniform vec3 uAccent;
 uniform vec3 uShade;
 uniform vec3 uHighlight;
@@ -15,7 +15,7 @@ uniform vec3 uFluidTopRight;
 uniform vec3 uFluidBottomLeft;
 uniform vec3 uFluidBottomRight;
 uniform vec3 uFluidPaper;
-uniform vec3 uFluidMotion;  // Drift, orbit, tide.
+uniform vec3 uFluidMotion;  // 漂移、旋转、起伏
 uniform float uThemeTint;
 
 out vec4 fragColor;
@@ -50,7 +50,7 @@ vec3 aurora(vec2 p) {
   p = rotatePlane(p, -0.22);
   vec3 light = 0.48 * uShade * gaussian((p.y + 0.32) * 1.7);
 
-  // Each curtain has a bright folded hem and a taller, translucent veil.
+  // 每道光幕包含明亮的折叠边缘和更高的半透明帘面。
   for (int layer = 0; layer < 3; ++layer) {
     float depth = float(layer);
     float phase = uTime * (0.42 + 0.22 * depth) + 2.3 * depth;
@@ -83,7 +83,7 @@ vec3 nebula(vec2 p) {
   vec3 light = uShade * 0.31 * gaussian(length(sky + vec2(0.42, -0.13)) * 1.65)
              + mix(uShade, uAccent, broad) * dust * (1.8 + 0.9 * uAudio.x);
 
-  // Three depths use their own drift rate, point size and focus.
+  // 三层景深分别使用各自的漂移速度、点尺寸和清晰度。
   for (int layer = 0; layer < 3; ++layer) {
     float depth = float(layer);
     float scale = 30.0 - 8.5 * depth;
@@ -108,25 +108,24 @@ vec2 curlAround(vec2 p, vec2 center, float spin) {
 }
 
 vec4 fluid(vec2 uv) {
-  // Slower than the stage clock so the field breathes rather than swims.
+  // 背景以慢于大屏时钟的速度变化，使流动更柔和。
   float t = uTime * 0.55;
   vec2 p = (uv - 0.5) * uSize / max(1.0, min(uSize.x, uSize.y));
   vec2 q = p;
   if (uFluidMotion.x > 0.0) {
-    // Slow oblique flow. The upper and lower pigments pull in different
-    // directions so the image stretches instead of sliding as a whole.
+    // 上下区域的颜色沿不同斜向缓慢流动，使画面产生局部拉伸。
     vec2 drift = vec2(0.30 * sin(2.7 * p.y - 0.55 * t),
                        0.20 * cos(2.3 * p.x + 0.42 * t));
     q += uFluidMotion.x * drift;
   }
   if (uFluidMotion.y > 0.0) {
-    // An off-center eddy turns the middle faster than the edges.
+    // 偏心旋涡使中心比边缘转得更快。
     vec2 center = vec2(0.18 * sin(0.26 * t), -0.13 * cos(0.22 * t));
     vec2 orbit = curlAround(p, center, 1.05 + 0.85 * sin(0.36 * t));
     q += uFluidMotion.y * (orbit - p);
   }
   if (uFluidMotion.z > 0.0) {
-    // Broad diagonal swells carry color across the screen and roll back.
+    // 宽缓的斜向波将色彩带过画面，再使其回流。
     vec2 current = vec2(0.82, 0.57);
     float swell = sin(dot(p, current) * 3.6 - 0.62 * t);
     float undertow = cos(dot(p, current.yx) * 3.0 + 0.40 * t);
@@ -136,13 +135,13 @@ vec4 fluid(vec2 uv) {
   q *= 1.0 + 0.015 * sin(0.22 * t);
   q *= 1.0 - 0.04 * uAudio.x - 0.02 * uAudio.w;
 
-  // Two drifting noise fields bend the color coordinates into slow folds.
+  // 两组漂移的噪声场扭曲颜色坐标，形成缓慢移动的褶皱。
   vec2 warp = vec2(
       cloudNoise(q * 1.9 + vec2(0.16 * t, -0.11 * t)),
       cloudNoise(q * 1.9 + vec2(3.7 - 0.12 * t, 1.9 + 0.14 * t))) - 0.5;
   vec2 s = q + warp * 0.62;
 
-  // Soft, continuous mixing among the four cover quadrants.
+  // 对封面四个区域的取色做平滑混合。
   float mixX = 0.5 + 0.5 * sin(s.x * 1.9 + s.y * 1.4 + 0.16 * t);
   float mixY = 0.5 + 0.5 * sin(s.y * 1.6 - s.x * 1.1 - 0.12 * t + 1.4);
   mixX = smoothstep(0.12, 0.88, mixX);
@@ -151,8 +150,7 @@ vec4 fluid(vec2 uv) {
   vec3 bottom = mix(uFluidBottomLeft, uFluidBottomRight, mixX);
   vec3 pigment = mix(top, bottom, mixY);
 
-  // Shading and a soft sheen give the surface depth without hard contour
-  // lines, which read as banding on large displays.
+  // 用柔和阴影和高光表现层次，避免硬边在大屏上形成可见条带。
   float sheen = 0.5 + 0.5 * sin(s.x * 2.4 + s.y * 1.7 + 0.15 * t + 1.2);
   pigment *= 0.96 + 0.08 * smoothstep(0.25, 0.80, sheen);
   pigment += uHighlight * smoothstep(0.52, 0.92, sheen) *
@@ -163,12 +161,12 @@ vec4 fluid(vec2 uv) {
   vec3 color = mix(uFluidPaper, pigment, presence);
   color += uHighlight * smoothstep(0.80, 0.98, sheen) * (0.05 + 0.03 * uAudio.z);
 
-  // A faint pale-theme wash unifies the cover palette with the stage.
+  // 浅色主题下混入少量浅色，使封面配色与大屏底色协调。
   color = mix(color, uHighlight, uThemeTint * (0.08 + 0.08 * sheen));
   float luminance = dot(color, vec3(0.299, 0.587, 0.114));
   color = mix(vec3(luminance), color, 1.10);
 
-  // One pixel of dither keeps wide, quiet gradients free of steps.
+  // 加入像素级抖动，减轻平滑渐变中的色阶断层。
   vec3 grain = cellRandom(FlutterFragCoord().xy);
   float alpha = mix(0.34, 1.0, uIntensity) * (0.95 + 0.05 * uAudio.x);
   return vec4((color + (grain - 0.5) * 0.006) * alpha, alpha);
@@ -181,7 +179,7 @@ void main() {
     return;
   }
   float strength = smoothstep(0.015, 0.39, max(uAudio.x, max(uAudio.y, uAudio.z)));
-  // Soften the header and controls at the edges of the stage.
+  // 逐渐减弱顶部和底部的背景强度，为页眉和控件留出空间。
   float edges = 0.63 + 0.37 * smoothstep(0.0, 0.19, min(uv.y, 1.0 - uv.y));
   float opacity = strength * edges * uIntensity;
   vec2 p = (uv - 0.5) * uSize / min(uSize.x, uSize.y);

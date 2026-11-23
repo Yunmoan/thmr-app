@@ -7,8 +7,7 @@ import 'mp3_decoder.dart';
 import 'adaptive_spectrum.dart';
 import 'spectrum_fft.dart';
 
-/// Only standard Dart/FFI imports: this entry point runs outside Flutter's UI
-/// isolate and never loads media_kit or requests access to an audio device.
+/// 此入口只使用 Dart 标准库和 FFI，可脱离 Flutter UI isolate 运行，无需 media_kit 或音频设备。
 Future<void> runLinuxSpectrumWorker(List<Object> arguments) async {
   final events = arguments[0] as SendPort;
   final uri = Uri.parse(arguments[1] as String);
@@ -46,8 +45,7 @@ Future<void> runLinuxSpectrumWorker(List<Object> arguments) async {
           ..setRange(pending.length, pending.length + take, chunk, offset);
         offset += take;
         var consumed = 0;
-        // Initial synchronization wants several frames. Retain a small tail
-        // afterward so split frames are never discarded at a network boundary.
+        // 初次同步需要多个 MP3 帧。之后保留少量尾部字节，避免丢弃恰好跨网络分块的帧。
         while (input.length - consumed >= (synced ? 4096 : 8192)) {
           final bytes = Uint8List.sublistView(input, consumed);
           final pcm = decoder.decode(bytes);
@@ -62,8 +60,7 @@ Future<void> runLinuxSpectrumWorker(List<Object> arguments) async {
             decodedMicroseconds += pcm.length / decoder.channels / rate * 1e6;
             final frame = fft.add(pcm, decoder.channels, rate);
             if (frame != null) {
-              // Measure decoded audio time, so network bursts cannot accelerate
-              // learning or hide all the intermediate FFT frames.
+              // 按解码后的音频时长推进频谱估计，避免网络突发数据加速估计或跳过中间 FFT 帧。
               spectrum.add(frame, rate,
                   Duration(microseconds: decodedMicroseconds.round()));
               latest = frame;
@@ -73,7 +70,7 @@ Future<void> runLinuxSpectrumWorker(List<Object> arguments) async {
         }
         pending = Uint8List.fromList(input.sublist(consumed));
         if (pending.length == Mp3Decoder.inputCapacity) {
-          // Bound memory even for malformed streams or a large ID3 prefix.
+          // 限制缓冲区大小，防止畸形流或过大的 ID3 前缀耗尽内存。
           pending = Uint8List.fromList(pending.sublist(8192));
         }
       }

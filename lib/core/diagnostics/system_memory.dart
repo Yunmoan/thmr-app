@@ -77,7 +77,7 @@ Future<SystemMemory> readSystemMemory() async {
       }
     }
   } catch (_) {
-    // Some mobile OS versions restrict system-wide memory information.
+    // 部分移动系统版本限制读取系统级内存信息。
   }
   return const SystemMemory();
 }

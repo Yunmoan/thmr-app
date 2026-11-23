@@ -1,4 +1,4 @@
-// Mobile queue strip: horizontal cards; tap opens the detail sheet.
+// 移动端以横向卡片显示队列，点击卡片打开详情弹层。
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -11,14 +11,14 @@ import '../../../core/theme/thmr_theme.dart';
 import '../../../shared/widgets/track_cover.dart';
 import 'side_info_column.dart' show showQueueSheet;
 
-/// Estimated air time for a queue entry (backend schedule or null).
+/// 播放队列条目的预计播出时间。后端未提供时返回 null。
 String? queuePlannedHHmm(QueueEntry e) {
   if (e.plannedStartMs <= 0) return null;
   final t = DateTime.fromMillisecondsSinceEpoch(e.plannedStartMs);
   return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 }
 
-/// Secondary detail sheet for a queue entry (shared by strip & queue page).
+/// 横向队列和队列页面共用的条目详情弹层。
 void showQueueEntryDetail(BuildContext context, QueueEntry entry, int index,
     {String? heading,
     String? album,
@@ -138,10 +138,10 @@ void showQueueEntryDetail(BuildContext context, QueueEntry entry, int index,
   );
 }
 
-/// 「接下来」队列 — 横向卡片,高度对齐 Web 端 92px 队列卡。
+/// 横向队列卡片至少高 92 个逻辑像素，字号放大时按三行文字所需高度扩展。
 double queueStripHeight(BuildContext context) {
   final text = Theme.of(context).textTheme;
-  var height = 30.0; // Three lines, two gaps, padding and border.
+  var height = 30.0; // 预留行间距、内边距和边框的高度。
   for (final style in [text.titleSmall, text.bodySmall, text.labelSmall]) {
     final painter = TextPainter(
         text: TextSpan(text: '曲目', style: style),
@@ -183,8 +183,7 @@ class _QueueStripState extends State<QueueStrip> {
     final target = (position.pixels + delta)
         .clamp(position.minScrollExtent, position.maxScrollExtent);
     if (target == position.pixels) return;
-    // Resolve once so the enclosing page does not scroll at the same time.
-    // Native horizontal wheel/trackpad events remain owned by the ListView.
+    // 仅注册一次指针信号处理，避免外层页面同时滚动。原生横向滚轮或触控板事件仍由 ListView 处理。
     GestureBinding.instance.pointerSignalResolver.register(event, (_) {
       position.pointerScroll(delta);
     });
@@ -337,7 +336,7 @@ class _QueueCard extends StatelessWidget {
   }
 }
 
-/// Duration plus scheduled air time when available.
+/// 显示曲目时长，后端提供时也显示预计播出时间。
 String plannedLabel(QueueEntry entry, int index) {
   final planned = queuePlannedHHmm(entry);
   return planned == null

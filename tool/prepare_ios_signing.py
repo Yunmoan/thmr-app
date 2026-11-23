@@ -1,4 +1,4 @@
-"""Configure App Store Connect signing on a GitHub-hosted macOS runner."""
+"""在 GitHub 托管的 macOS runner 上配置 App Store Connect 签名。"""
 
 import base64
 from datetime import datetime, timezone

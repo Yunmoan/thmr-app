@@ -6,10 +6,8 @@ command -v create-dmg >/dev/null
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/thmr-dmg.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 ditto "$app" "$work/THMR.app"
-# Coordinates match tool/dmg/background.png. Keep Finder customization enabled:
-# skipping AppleScript would remove the background and installation guidance.
-# Finder's AppleScript occasionally hangs on CI runners; alarm + retry keeps
-# a transient hang from blocking the whole release job.
+# 坐标与 tool/dmg/background.png 对应。Finder 的 AppleScript 负责显示安装背景和拖拽指引，
+# 超时和重试可避免偶发卡住整个发布任务。
 attempt=1
 until perl -e 'alarm shift; exec @ARGV' 300 create-dmg \
   --volname 'THMR Installer' \

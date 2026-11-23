@@ -1,4 +1,4 @@
-// Custom Windows title bar (native one hidden via window_manager).
+// Windows 自绘标题栏，原生标题栏通过 window_manager 隐藏。
 
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
@@ -21,8 +21,7 @@ class DesktopTitleBar extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Cover the full title height, logo, text and empty space. Keep
-          // caption buttons outside this area so their gestures stay separate.
+          // 拖动区域覆盖整条标题栏的标志、文字和留白。窗口按钮位于区域之外，分别处理手势。
           Expanded(
             child: DragToMoveArea(
               child: Row(
@@ -96,8 +95,8 @@ class _CaptionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).thmr;
-    // 注意:标题栏位于 MaterialApp.builder 层(Navigator/Overlay 之外),
-    // 不能使用 Tooltip(需要 Overlay 祖先),否则运行时报错。
+    // 标题栏位于 Navigator 和 Overlay 之外的 MaterialApp.builder 层，
+    // Tooltip 所需的 Overlay 祖先在此处不可用。
     return FocusOutline(
         child: SizedBox(
       width: 44,

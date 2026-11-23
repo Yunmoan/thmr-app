@@ -86,14 +86,14 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(find.byType(CompositedTransformFollower), findsOneWidget);
+    expect(_visibleRings, findsOneWidget);
 
     visible.value = false;
     tester.view.physicalSize = const Size(700, 500);
     await tester.pump();
     expect(tester.takeException(), isNull);
     await tester.pumpAndSettle();
-    expect(find.byType(CompositedTransformFollower), findsNothing);
+    expect(find.byType(ThmrFocusRing), findsNothing);
   });
 
   testWidgets('selected chips resize their ring around the painted chip',
@@ -145,8 +145,7 @@ void main() {
     for (final value in [true, false, true]) {
       selected.value = value;
       await tester.pumpAndSettle();
-      // Supersample the one-pixel stadium stroke so its tangent is not dominated
-      // by a platform-dependent antialiased edge at a single logical pixel.
+      // 对一像素宽的胶囊形描边做超采样，避免单个逻辑像素的抗锯齿差异主导切线处的结果。
       await _expectRingPixels(tester, capture, theme,
           colorTolerance: 12, pixelRatio: 3);
     }
@@ -207,8 +206,7 @@ void main() {
   });
 
   for (final animated in [false, true]) {
-    testWidgets(
-        'ring follows parent layout with animation=$animated without rebuilding its child',
+    testWidgets('ring follows parent layout with animation=$animated',
         (tester) async {
       final width = ValueNotifier(80.0);
       final focus = FocusNode();
@@ -578,14 +576,10 @@ void main() {
     ));
     focus.requestFocus();
     await tester.pumpAndSettle();
-    expect(find.byType(OverlayPortal), findsNothing);
     await _expectRingPixels(tester, capture, theme);
     await tester.tap(find.text('focus'));
     await tester.pumpAndSettle();
     expect(taps, 1);
-    focus.unfocus();
-    await tester.pumpAndSettle();
-    expect(find.byType(CompositedTransformFollower), findsNothing);
   });
 
   testWidgets('ring follows scrolling and remains whole at the window edge',

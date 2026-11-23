@@ -1,11 +1,9 @@
 cmake_minimum_required(VERSION 3.13)
 project(runner LANGUAGES CXX)
 
-# Define the application target. To change its name, change BINARY_NAME in the
-# top-level CMakeLists.txt, not the value here, or `flutter run` will no longer
-# work.
+# 使用顶层 CMakeLists.txt 的 BINARY_NAME 定义应用目标，保证 flutter run 能定位可执行文件。
 #
-# Any new source files that you add to the application should be added here.
+# 应用新增的原生源文件应列入此目标。
 add_executable(${BINARY_NAME}
   "main.cc"
   "my_application.cc"
@@ -15,14 +13,13 @@ add_executable(${BINARY_NAME}
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
 )
 
-# Apply the standard set of build settings. This can be removed for applications
-# that need different build settings.
+# 应用共用编译选项。
 apply_standard_settings(${BINARY_NAME})
 
-# Add preprocessor definitions for the application ID.
+# 通过预处理宏传入应用 ID。
 add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 
-# Add dependency libraries. Add any application-specific dependencies here.
+# 链接系统库和应用专用依赖。
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 

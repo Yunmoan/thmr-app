@@ -50,7 +50,7 @@ class _YesterdayPlaylistState extends ConsumerState<YesterdayPlaylist> {
 
   @override
   Widget build(BuildContext context) {
-    // The home shell keeps inactive tabs mounted with their tickers disabled.
+    // 主界面保留不可见标签页的挂载状态，并暂停其 Ticker。
     if (!TickerMode.valuesOf(context).enabled) return const SizedBox.shrink();
 
     final catalog = ref.watch(channelCatalogProvider);

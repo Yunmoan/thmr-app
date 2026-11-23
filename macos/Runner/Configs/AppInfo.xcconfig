@@ -1,14 +1,11 @@
-// Application-level settings for the Runner target.
+// Runner target 的应用信息。
 //
-// This may be replaced with something auto-generated from metadata (e.g., pubspec.yaml) in the
-// future. If not, the values below would default to using the project name when this becomes a
-// 'flutter create' template.
 
-// The application's name. By default this is also the title of the Flutter window.
+// 应用显示名称，默认也用作 Flutter 窗口标题。
 PRODUCT_NAME = THMR
 
-// The application's bundle identifier
+// 应用的 Bundle ID。
 PRODUCT_BUNDLE_IDENTIFIER = cn.yunmoan.thmr.thmrApp
 
-// The copyright displayed in application information
+// 在应用信息中显示的版权声明。
 PRODUCT_COPYRIGHT = Copyright © 2026 cn.yunmoan.thmr. All rights reserved.

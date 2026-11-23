@@ -1,7 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
-/// Changes the volume in five-point steps while the pointer is over [child].
+/// 指针位于 [child] 上方时，滚轮每格调整五个音量点。
 class VolumeWheelControl extends StatelessWidget {
   const VolumeWheelControl({
     super.key,

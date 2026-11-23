@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/thmr_motion.dart';
 import '../../core/theme/thmr_theme.dart';
 
-/// 曲目封面:圆角、细描边;加载中、无封面或加载失败时使用官方占位图
-/// (提取自 Web 端 public/assets/cover-fallback.svg 的内嵌 PNG)。
+/// 曲目封面，加载中、无封面或加载失败时显示 THMR 标志。
 class TrackCover extends StatelessWidget {
   const TrackCover({
     super.key,
@@ -17,14 +16,14 @@ class TrackCover extends StatelessWidget {
   final double size;
   final double radius;
 
-  /// Use the same decoded thumbnail in visible covers and background preloads.
+  /// 可见封面与后台预加载共用同样的缩略图解码配置。
   static ImageProvider<Object> providerFor(String url,
       {required int cacheWidth}) {
     return ResizeImage.resizeIfNeeded(
       cacheWidth,
       null,
       url.isEmpty
-          ? const AssetImage('assets/brand/cover-fallback.png')
+          ? const AssetImage('assets/brand/logo.png')
           : NetworkImage(url),
     );
   }
@@ -56,7 +55,7 @@ class TrackCover extends StatelessWidget {
   }
 }
 
-/// Shared loading behavior for covers with different sizes and decorations.
+/// 不同尺寸与装饰的封面共用的加载逻辑。
 class TrackCoverImage extends StatelessWidget {
   const TrackCoverImage({
     super.key,
@@ -82,8 +81,7 @@ class TrackCoverImage extends StatelessWidget {
     if (url.isEmpty) return placeholder();
 
     return Image(
-      // A new source starts at the placeholder instead of retaining the old
-      // track's image or inheriting its completed fade animation.
+      // 图片来源变化时，从占位图重新开始，避免沿用旧封面或旧封面已完成的淡入动画。
       key: ValueKey((url, cacheWidth)),
       image: TrackCover.providerFor(url, cacheWidth: cacheWidth),
       fit: fit,

@@ -292,7 +292,7 @@ class _ServiceCard extends StatelessWidget {
                   .bodySmall
                   ?.copyWith(color: tokens.mutedInk)),
           const SizedBox(height: 6),
-          // Status and latency share one row; the metric stays muted.
+          // 状态与延迟放在同一行，延迟使用弱化的文字颜色。
           Row(
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
@@ -334,7 +334,7 @@ class _ServiceCard extends StatelessWidget {
   }
 }
 
-/// Compact key-value row for service cards (denser than [_Detail]).
+/// 服务卡片中的键值行，间距比 [_Detail] 更小。
 class _Meta extends StatelessWidget {
   const _Meta(this.label, this.value);
   final String label;

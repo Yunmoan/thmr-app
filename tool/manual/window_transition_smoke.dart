@@ -1,6 +1,5 @@
-// Runs the real Windows runner, DWM cloak and raster fence without network or
-// audio. Run: flutter run -d windows -t tool/window_transition_smoke.dart
-// The probe exits automatically and never writes application preferences.
+// 检查真实 Windows runner、DWM 窗口隐藏与光栅化同步，完成后退出。
+// 运行步骤见 docs/development/verification.md。
 import 'dart:io';
 import 'dart:ffi' as ffi;
 
@@ -22,8 +21,7 @@ Future<void> main() async {
   };
   final container = ProviderContainer();
   await container.read(settingsProvider.notifier).ready;
-  // Avoid font downloads and polling: this uses the production surface with
-  // simple colored content, while retaining its actual transition animation.
+  // 使用正式窗口切换及其动画，内容换成简单色块，避免触发字体下载或轮询。
   await windowManager.ensureInitialized();
   await windowManager.waitUntilReadyToShow(const WindowOptions(
     titleBarStyle: TitleBarStyle.hidden,
@@ -65,7 +63,7 @@ Future<void> main() async {
       final maximize = cycle.isOdd;
       if (maximize) {
         await windowManager.maximize();
-        // The title-bar path posts a command, so wait for actual native state.
+        // 标题栏路径只投递命令，测试需等原生状态真正更新。
         final deadline = DateTime.now().add(const Duration(seconds: 3));
         while (!await windowManager.isMaximized()) {
           if (DateTime.now().isAfter(deadline)) {
@@ -126,8 +124,8 @@ Future<void> main() async {
 }
 
 Never _exitProbe(int code) {
-  // Match the app's Windows exit path: a registered media DLL can block normal
-  // ExitProcess during teardown, even though this probe never starts playback.
+  // 沿用应用的 Windows 退出路径。即使探针从未启动播放，媒体 DLL 仍可能在卸载时阻塞常规
+  // ExitProcess。
   final kernel = ffi.DynamicLibrary.open('kernel32.dll');
   final current = kernel.lookupFunction<ffi.Pointer<ffi.Void> Function(),
       ffi.Pointer<ffi.Void> Function()>('GetCurrentProcess');

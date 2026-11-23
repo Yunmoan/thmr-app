@@ -97,7 +97,7 @@ async function main() {
     fs.writeFileSync(opt.output, JSON.stringify(envelope, null, 2) + '\n');
     console.log(`Signed THMR manifest: ${opt.output}`);
   } else if (command === 'notes') {
-    // Preview builds use the same user-facing changes as their core version.
+    // 预览构建沿用对应基础版本的用户可见更新说明。
     const notes = releaseNotes((opt.version || '').split('-')[0]);
     if (opt.output) fs.writeFileSync(opt.output, notes + '\n');
     else console.log(notes);

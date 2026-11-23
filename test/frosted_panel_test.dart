@@ -26,9 +26,7 @@ class _Texture extends CustomPainter {
   bool shouldRepaint(_Texture oldDelegate) => false;
 }
 
-/// Blur anti-aliasing differs slightly between Windows, where the baselines
-/// were captured, and the Linux CI renderer. A small allowance keeps the
-/// pixel baseline useful without failing on cross-platform edge pixels.
+/// 基准图在 Windows 上生成。Linux CI 的模糊抗锯齿略有不同，因此允许少量边缘像素差异。
 class _TolerantGoldenComparator extends LocalFileComparator {
   _TolerantGoldenComparator(super.testFile);
 

@@ -43,7 +43,7 @@ bool usesPhoneLayout(BuildContext context, WidgetRef ref,
             .valueOrNull;
     if (isPad != null) return !isPad;
   }
-  // The display stays tablet-sized when the view is in a split window.
+  // 分屏只缩小应用视图，平板判断仍以整块屏幕的尺寸为准。
   final display = View.maybeOf(context)?.display;
   if (display != null && !display.size.isEmpty) {
     return display.size.shortestSide / display.devicePixelRatio < 600;

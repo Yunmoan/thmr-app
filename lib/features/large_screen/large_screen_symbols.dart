@@ -17,8 +17,7 @@ enum LargeScreenSymbol {
   fit,
 }
 
-/// Small line drawings use the same ink and one-pixel visual weight as the
-/// existing player controls. Preview diagrams explain the actual layout choice.
+/// 小图标沿用播放器控件的颜色和一像素线宽，预览图对应实际布局选项。
 class LargeScreenGlyph extends StatelessWidget {
   const LargeScreenGlyph(this.symbol, {super.key, this.size = 22, this.color});
 

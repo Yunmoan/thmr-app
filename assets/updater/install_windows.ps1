@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$PlanPath, [switch]$ElevatedWorker)
+﻿param([Parameter(Mandatory=$true)][string]$PlanPath, [switch]$ElevatedWorker)
 $ErrorActionPreference = 'Stop'
 $transaction = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($PlanPath))
 $plan = $null
@@ -54,7 +54,7 @@ function Remove-BackupTree([string]$directory, [string]$root) {
 }
 function Start-UpdatedApp {
     if ($ElevatedWorker) {
-        # The original user's unelevated supervisor launches the player.
+        # 由原用户会话中未提权的监督进程重新启动播放器。
         [IO.File]::WriteAllText((Join-Path $transaction 'launch-new'), $plan.token)
         for ($attempt=0; $attempt -lt 100; $attempt++) {
             $childFile = Join-Path $transaction 'child.json'

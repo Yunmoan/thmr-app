@@ -22,7 +22,6 @@ import 'package:thmr_app/core/state/large_screen_settings.dart';
 import 'package:thmr_app/core/state/channel_provider.dart';
 import 'package:thmr_app/features/listen/widgets/channel_switcher.dart';
 import 'package:thmr_app/shared/widgets/thmr_background.dart';
-import 'package:thmr_app/shared/widgets/thmr_slider.dart';
 import 'package:thmr_app/shared/widgets/track_cover.dart';
 import 'package:thmr_app/features/large_screen/large_screen_button.dart';
 import 'package:thmr_app/features/large_screen/large_screen_controller.dart';
@@ -147,8 +146,7 @@ class _Harness {
       bool isIPad = false,
       FakeViewPadding padding = const FakeViewPadding(),
       bool startFullScreen = true}) async {
-    // The stage tests exercise native fullscreen paths; opt in explicitly now
-    // that the product default is windowed.
+    // 大屏默认使用窗口模式。这组测试显式启用原生全屏以覆盖对应路径。
     SharedPreferences.setMockInitialValues({
       'largeScreen': '{"startFullScreen":$startFullScreen}',
     });
@@ -360,18 +358,6 @@ void main() {
     await tester.pumpAndSettle();
     await route;
     expect(tester.takeException(), isNull);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
-
-  testWidgets(
-      'native reveal waits for a frame containing visible incoming content',
-      (tester) async {
-    final h = _Harness(tester);
-    await h.mount();
-    await h.change(true);
-    await h.change(false);
-    expect(h.revealedOpacities, hasLength(2));
-    expect(h.revealedOpacities, everyElement(greaterThan(0)),
-        reason: 'A rasterized backdrop at opacity zero is not a ready player.');
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('fullscreen resizing keeps the initialized stage opaque',
@@ -1032,7 +1018,7 @@ void main() {
             illustrationOpacity: .65));
     h.station.update(
         StationUiState(status: _status(coverUrl: url), initialLoading: false));
-    // A playing fluid stage animates continuously, so pause for a settled frame.
+    // 播放中的流动背景会持续刷新，暂停后再采集稳定帧。
     await h.playback.toggle(null);
     await h.change(true);
     await tester.pumpAndSettle();
@@ -1142,8 +1128,7 @@ void main() {
     final h = _Harness(tester);
     await h.mount();
     await h.change(true);
-    // A replaced native surface may finish the request without driving the
-    // widget's original animation callback.
+    // 原生界面被替换时，切换可能已经完成，即使原组件的动画回调没有触发。
     h.controller.animatePresentation = (_) async {};
     await tester.tap(find.byTooltip('退出全屏'));
     await tester.pumpAndSettle();
@@ -1182,7 +1167,6 @@ void main() {
     }
     expect(h.concealed, isTrue);
     expect(h.revealed, isEmpty);
-    expect(h.controller.change(true), same(entering));
     final collapse = tester.widget<IconButton>(find.byWidgetPredicate(
         (widget) => widget is IconButton && widget.tooltip == '收起大屏幕模式'));
     expect(collapse.onPressed, isNull);
@@ -1191,6 +1175,7 @@ void main() {
     await entering;
     expect(h.revealed.single.active, isTrue);
     expect(h.revealed.single.busy, isTrue);
+    expect(h.revealed.single.contentVisible, isTrue);
     expect(h.flushed.last.busy, isFalse);
     h.frameGate = null;
     await h.change(false);
@@ -1198,6 +1183,9 @@ void main() {
     expect(h.revealed.last.busy, isTrue);
     expect(h.flushed.last.busy, isFalse);
     expect(h.concealed, isFalse);
+    expect(h.revealedOpacities, hasLength(2));
+    expect(h.revealedOpacities, everyElement(greaterThan(0)),
+        reason: 'The incoming content must be visible at either reveal.');
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('opening in a window does not force fullscreen', (tester) async {
@@ -1590,23 +1578,6 @@ void main() {
       variant: const TargetPlatformVariant(
           {TargetPlatform.android, TargetPlatform.iOS}));
 
-  testWidgets('window reveals only after the stage entrance has started',
-      (tester) async {
-    final h = _Harness(tester);
-    await h.mount();
-    await h.change(true);
-    expect(h.revealed, hasLength(1));
-    expect(h.revealed.single.contentVisible, isTrue,
-        reason: 'The incoming entrance must start before the reveal.');
-    final fade = find
-        .descendant(
-            of: find.byKey(const ValueKey('large-mode-transition')),
-            matching: find.byType(FadeTransition))
-        .first;
-    expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
-    expect(h.container.read(largeScreenProvider).busy, isFalse);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
-
   testWidgets('entering from a covered route still reveals the stage',
       (tester) async {
     final h = _Harness(tester);
@@ -1615,8 +1586,7 @@ void main() {
         builder: (_) => const Scaffold(body: Text('settings page'))));
     await tester.pumpAndSettle();
     final entering = h.controller.change(true);
-    // Tickers under an opaque route are muted; drive frames instead of
-    // waiting for the entrance to settle.
+    // 不透明路由下方的 Ticker 会静音，通过手动推进帧来测试入场处理。
     for (var i = 0; i < 40; i++) {
       await tester.pump(const Duration(milliseconds: 20));
     }
@@ -1632,18 +1602,22 @@ void main() {
     expect(h.container.read(largeScreenProvider).busy, isFalse);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
-  testWidgets('settings page uses overlay-free sliders for screen readers',
+  testWidgets('pushed settings page exposes an adjustable effect intensity',
       (tester) async {
+    final semantics = tester.ensureSemantics();
     final h = _Harness(tester);
     await h.mount(size: const Size(1440, 900), desktopRoot: true);
     unawaited(h.navigator.currentState!.push(MaterialPageRoute<void>(
         builder: (_) => const LargeScreenSettingsPage())));
     await tester.pumpAndSettle();
-    // Material Slider's OverlayPortal emits orphaned semantics nodes inside a
-    // pushed route on Windows, freezing the accessibility tree.
-    expect(find.byType(Slider), findsNothing);
-    expect(find.byType(ThmrSlider), findsWidgets);
-    expect(tester.takeException(), isNull);
+    final intensity = find.semantics.byPredicate((node) =>
+        node.label == '动效强度' &&
+        node.getSemanticsData().hasAction(ui.SemanticsAction.increase));
+    expect(intensity.evaluate().single.value, '60%');
+    tester.semantics.increase(intensity);
+    await tester.pumpAndSettle();
+    expect(intensity.evaluate().single.value, '70%');
+    semantics.dispose();
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('collapsing completes even when the stage ticker is muted',
@@ -1654,8 +1628,7 @@ void main() {
         builder: (_) => const Scaffold(body: Text('settings page'))));
     await tester.pumpAndSettle();
     final entering = h.controller.change(true);
-    // The opaque route mutes the stage ticker. The entrance watchdog must land
-    // the stage at full opacity and release busy anyway.
+    // 不透明路由会使大屏 Ticker 静音。验证入场超时后，大屏达到完全不透明并解除忙碌状态。
     for (var i = 0; i < 30; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }

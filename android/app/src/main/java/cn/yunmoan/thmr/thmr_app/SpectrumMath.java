@@ -1,6 +1,6 @@
 package cn.yunmoan.thmr.thmr_app;
 
-/** PCM-normalized real FFT; adaptive band mapping is shared in Dart. */
+/** 对 PCM 计算归一化的实数 FFT，自适应频带映射在 Dart 端共用。 */
 final class SpectrumMath {
     static final int FFT_SIZE = 2048;
 

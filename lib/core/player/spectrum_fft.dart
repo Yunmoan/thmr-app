@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-/// A bounded PCM window. Decode and FFT run in the spectrum worker isolate.
+/// 有上限的 PCM 采样窗口。解码和 FFT 都在频谱 worker isolate 中运行。
 class PcmSpectrumDecoder {
   static const windowSize = 2048;
   final _samples = Float32List(windowSize);
@@ -36,7 +36,7 @@ class PcmSpectrumDecoder {
   }
 }
 
-/// Radix-2 FFT with a Hann window; amplitudes are normalized to input PCM.
+/// 使用 Hann 窗的基 2 FFT，振幅按输入 PCM 归一化。
 Float32List pcmMagnitudes(Float32List samples) {
   final n = samples.length;
   if (n < 2 || (n & (n - 1)) != 0) {

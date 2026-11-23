@@ -5,7 +5,7 @@ import '../../../shared/widgets/player_panel_layout.dart';
 import '../../../shared/widgets/thmr_panel.dart';
 import 'queue_strip.dart' show queueStripHeight;
 
-/// Uses the same player geometry and breakpoint as the loaded channel.
+/// 骨架屏沿用加载完成后的播放器尺寸和布局断点。
 class ChannelLoadingSkeleton extends StatelessWidget {
   const ChannelLoadingSkeleton(
       {super.key, required this.switching, this.wide, this.showVote = false});

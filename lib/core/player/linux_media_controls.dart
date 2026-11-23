@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-/// The adapter caches state before the first frame starts the native service.
-/// D-Bus commands enter the same controller callbacks as on-screen controls.
+/// 原生服务在首帧后启动，适配器先缓存媒体状态。
+/// D-Bus 命令与界面按钮调用同一组播放控制回调。
 class LinuxMediaControls {
   LinuxMediaControls({
     required this.play,

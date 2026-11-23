@@ -25,7 +25,7 @@ String _randomToken() => List.generate(32, (_) => Random.secure().nextInt(256))
     .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
     .join();
 
-/// All downloaded bytes are checked against the signed manifest before staging.
+/// 下载完成后，对照签名清单校验文件长度和 SHA-256，通过后才暂存安装包。
 class UpdatePackageManager {
   UpdatePackageManager(
       {Dio? client,
@@ -98,7 +98,7 @@ class UpdatePackageManager {
                 }));
         if (response.statusCode == 200) break;
         final location = response.headers.value('location');
-        // Consume redirect bodies so HTTP connections are released.
+        // 读完重定向响应的响应体，以释放 HTTP 连接。
         await response.data?.stream.drain<void>();
         if (![301, 302, 303, 307, 308].contains(response.statusCode) ||
             location == null ||
@@ -134,7 +134,7 @@ class UpdatePackageManager {
     } catch (error) {
       try {
         await sink?.close();
-      } catch (_) {/* Continue removing the partial file. */}
+      } catch (_) {/* 仍需删除未下载完的文件。 */}
       if (await partial.exists()) await partial.delete();
       if (error is UpdateCheckException) rethrow;
       if (error is DioException && CancelToken.isCancel(error)) {
@@ -214,7 +214,7 @@ class UpdatePackageManager {
     File? abortFile;
     try {
       await unpack
-          .create(); // Fail before quitting if the installation is read-only.
+          .create(); // 退出前检查安装位置是否可写。
       await _extractChecked(file, artifact, unpack);
       final payload = Platform.isMacOS
           ? Directory(p.join(unpack.path, 'THMR.app'))
@@ -381,8 +381,12 @@ class UpdatePackageManager {
       };
       final planFile = File(p.join(tx.path, 'plan.json'));
       final helper = File(p.join(tx.path, 'install.ps1'));
-      await helper.writeAsString(
-          await rootBundle.loadString('assets/updater/install_windows.ps1'),
+      // 保留 UTF-8 BOM，供 Windows PowerShell 5.1 识别脚本编码。
+      final helperData =
+          await rootBundle.load('assets/updater/install_windows.ps1');
+      await helper.writeAsBytes(
+          helperData.buffer
+              .asUint8List(helperData.offsetInBytes, helperData.lengthInBytes),
           flush: true);
       await File(p.join(cache.path, 'last-transaction'))
           .writeAsString('tx-$token', flush: true);
@@ -391,8 +395,8 @@ class UpdatePackageManager {
         await planFile.writeAsString(jsonEncode(plan), flush: true);
         if (await result.exists()) await result.delete();
         process?.close();
-        // The unelevated supervisor keeps the original user session for restart.
-        // Its worker requests UAC only when writing the installation requires it.
+        // 未提权的监督进程保留原用户会话，用于重启播放器。只有写入安装目录需要更高权限时，
+        // 安装子进程才请求 UAC 提权。
         process = await startWindowsUpdateProcess(
             helper: helper.path,
             plan: planFile.path,
@@ -444,7 +448,7 @@ class UpdatePackageManager {
       if (!started) {
         await cancel.writeAsString('cancel', flush: true);
         if (await payload.exists()) await payload.delete(recursive: true);
-        // A protected sibling is cleaned by the elevated worker itself.
+        // 需要提权才能访问的相邻暂存目录，由已提权的安装子进程自行清理。
         try {
           if (await stage.exists()) {
             await _removeStage(stage, parent, '.thmr-update-');
@@ -517,7 +521,7 @@ class UpdatePackageManager {
   }
 }
 
-/// Probe only fresh, randomly named entries; never alter existing app files.
+/// 使用随机命名的新条目探测写权限，避免碰触已有应用文件。
 Future<bool> windowsUpdateNeedsElevation(String target, String token) async {
   final parentProbe =
       Directory(p.join(p.dirname(target), '.thmr-access-$token'));
@@ -587,7 +591,7 @@ void validateUpdateArchive(Archive archive) {
   }
 }
 
-/// Acknowledge only our own transaction and only after the first Flutter frame.
+/// Flutter 首帧完成后，仅确认属于当前安装的更新事务。
 Future<void> acknowledgeInstalledUpdate(List<String> args) async {
   try {
     final index = args.indexOf('--thmr-update-ack');
@@ -615,5 +619,5 @@ Future<void> acknowledgeInstalledUpdate(List<String> args) async {
       return;
     }
     await File(expected).writeAsString(token, flush: true);
-  } catch (_) {/* The helper will restore the previous version on timeout. */}
+  } catch (_) {/* 安装辅助程序等不到有效确认时会恢复上一版本。 */}
 }

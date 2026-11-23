@@ -4,8 +4,7 @@ import '../config.dart';
 import '../models/models.dart';
 import 'radio_api.dart';
 
-/// THMR 账号后端(FLUTTER.md 7.2)。
-/// App 采用 Bearer 方案:WebView 提取一次 thmr_session,之后全部走 header。
+/// THMR 业务 API。已登录请求使用从 WebView 验证取得的 Bearer 会话。
 class ThmrApi {
   ThmrApi({String? baseUrl}) : _dio = Dio() {
     _dio.options
@@ -13,7 +12,7 @@ class ThmrApi {
       ..connectTimeout = const Duration(seconds: 8)
       ..receiveTimeout = const Duration(seconds: 15)
       ..validateStatus = (s) => s != null && s < 500;
-    // Dart 默认 UA(Dart/x.x)会被站点防火墙按机器人拦截,显式声明客户端 UA
+    // 显式发送客户端 User-Agent，避免站点防火墙将 Dart 默认 User-Agent 识别为机器人。
     _dio.options.headers['User-Agent'] =
         'THMR-Client/1.0 (+https://thmr.yunmoan.cn)';
   }
@@ -84,7 +83,7 @@ class ThmrApi {
         RegExp(r'(?:^|,)\s*vote\s*:\s*true\s*(?:,|$)').hasMatch(features);
   }
 
-  /// 他人分享(公开)。410 = 分享已过期。
+  /// 读取公开分享，HTTP 410 表示分享已过期。
   Future<(Collection, List<CollectionItem>)> sharedCollection(
       String slug) async {
     final j = await _getJson('/api/collections/${Uri.encodeComponent(slug)}');
@@ -111,7 +110,7 @@ class ThmrApi {
     final r = await _dio
         .patch<Object?>('/api/auth/profile', data: {'nickname': nickname});
     if (r.statusCode != 200) _throwApiError(r);
-    // Backend replies {ok, nickname}; refresh the full profile.
+    // 昵称更新只返回 {ok, nickname}，随后重新获取完整用户资料。
     final user = await me();
     if (user == null) {
       throw ApiException(401, 'authentication required');
@@ -126,8 +125,7 @@ class ThmrApi {
   Future<List<Collection>> collections() async {
     final r = await _dio.get<Object?>('/api/me/collections');
     if (r.statusCode != 200) _throwApiError(r);
-    // The endpoint returns a bare JSON array (FLUTTER.md: first item =
-    // default collection). Be liberal in what we accept.
+    // 兼容直接返回列表，以及将列表放在 collections 或 data 字段中的响应。
     final data = r.data;
     final List raw;
     if (data is List) {
@@ -186,7 +184,7 @@ class ThmrApi {
     return FavoritesStatus.fromJson(j);
   }
 
-  /// Export payload as text (json / m3u / csv).
+  /// 以文本形式返回导出内容，支持 JSON、M3U 和 CSV。
   Future<String> exportContent(String cid, String format) async {
     final r = await _dio.get<Object?>(
       '/api/me/collections/$cid/export',
@@ -237,7 +235,7 @@ class ThmrApi {
   }
 }
 
-/// The public endpoint omits account-only fields such as collection.share.
+/// 公开接口省略 collection.share 等账号私有字段。
 (Collection, List<CollectionItem>) parseSharedCollection(
     Map<String, dynamic> payload) {
   final collection = Collection.fromJson(

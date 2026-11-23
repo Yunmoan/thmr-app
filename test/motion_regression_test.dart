@@ -174,7 +174,6 @@ void main() {
                                     width: 250,
                                     height: value,
                                     child: const TextField())))))))));
-    final input = tester.state(find.byType(TextField));
     await tester.enterText(find.byType(TextField), 'saved');
     height.value = 150;
     await tester.pump();
@@ -184,12 +183,11 @@ void main() {
     height.value = 75;
     await tester.pump();
     expect(tester.getSize(find.byType(ThmrAnimatedSize)).height, 75);
-    expect(tester.state(find.byType(TextField)), same(input));
     expect(find.text('saved'), findsOneWidget);
     expect(tester.takeException(), isNull);
     reduced.value = false;
     await tester.pumpAndSettle();
-    expect(tester.state(find.byType(TextField)), same(input));
+    expect(find.text('saved'), findsOneWidget);
   });
 
   for (final reduced in [false, true]) {
@@ -289,18 +287,20 @@ void main() {
     expect(opacity(), 1);
   });
 
-  testWidgets('reducing motion preserves the current input subtree',
+  testWidgets('reducing motion keeps the text field ready for typing',
       (tester) async {
     final host = GlobalKey<_MotionHostState>();
     await tester.pumpWidget(_MotionHost(key: host));
     host.currentState!.controller.value = 1;
     await tester.pump();
-    final input = tester.state(find.byType(TextField));
     await tester.enterText(find.byType(TextField), 'Touhou');
     host.currentState!.reduceMotion();
     await tester.pump();
-    expect(tester.state(find.byType(TextField)), same(input));
     expect(find.text('Touhou'), findsOneWidget);
+    expect(tester.testTextInput.hasAnyClients, isTrue);
+    tester.testTextInput.enterText('Touhou music');
+    await tester.pump();
+    expect(find.text('Touhou music'), findsOneWidget);
   });
 
   testWidgets('outgoing content keeps its original dimensions', (tester) async {

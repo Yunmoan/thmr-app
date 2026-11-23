@@ -1,4 +1,4 @@
-"""Apply compatibility fixes to resolved Android plugins, idempotently."""
+"""为已解析的 Android 插件应用可重复执行的兼容性修补。"""
 
 import json
 from pathlib import Path
@@ -7,7 +7,7 @@ from urllib.request import url2pathname
 
 
 def fix_file_picker(source):
-    # AGP 9 does not imply built-in Kotlin when the app explicitly opts out.
+    # 应用显式禁用 AGP 内置 Kotlin 时，AGP 9 仍使用独立 Kotlin Gradle 插件。
     marker = "def thmrUseLegacyKotlin ="
     if marker in source or "if (!isAgp9OrAbove)" not in source:
         return source

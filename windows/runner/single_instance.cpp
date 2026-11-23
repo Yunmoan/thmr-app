@@ -7,8 +7,8 @@ SingleInstance::~SingleInstance() {
 }
 
 SingleInstance::Result SingleInstance::Acquire() {
-  // Create the event first so even a second launch before window creation can
-  // queue activation. Local scopes the objects to the interactive session.
+  // 先创建激活事件，后续实例即使在窗口创建前启动也能发出激活请求。
+  // Local 将对象限制在当前交互会话。
   activation_event_ = CreateEventW(
       nullptr, FALSE, FALSE, L"Local\\cn.yunmoan.thmr.activate");
   mutex_ = CreateMutexW(nullptr, FALSE, L"Local\\cn.yunmoan.thmr.instance");
@@ -24,7 +24,7 @@ SingleInstance::Result SingleInstance::Acquire() {
   if (const HWND window = FindWindowW(kThmrWindowClass, nullptr)) {
     DWORD process_id = 0;
     GetWindowThreadProcessId(window, &process_id);
-    // Transfer the user's launch foreground permission to the existing app.
+    // 将本次用户启动授予的前台窗口权限移交给现有实例。
     if (process_id) AllowSetForegroundWindow(process_id);
   }
   return SetEvent(activation_event_) ? Result::secondary : Result::error;

@@ -6,8 +6,7 @@ import '../../shared/widgets/thmr_background.dart';
 import 'mini_player.dart';
 import '../large_screen/large_screen_controller.dart';
 
-/// One native window, with stable slots for the retained main tree and the
-/// animated mini surface. Native presentation controls when this is exposed.
+/// 同一原生窗口为主界面和带动画的迷你播放器保留固定位置。窗口的显示时机由原生切换流程控制。
 class DesktopPlayerSurface extends ConsumerStatefulWidget {
   const DesktopPlayerSurface({
     super.key,
@@ -49,8 +48,8 @@ class _DesktopPlayerSurfaceState extends ConsumerState<DesktopPlayerSurface> {
               child: TickerMode(
                 enabled: !mini,
                 child: LayoutBuilder(builder: (context, constraints) {
-                  // Native bounds include non-client borders; preserve the real
-                  // Flutter content extent so hidden pages do not reflow/scroll.
+                  // 原生窗口边界包含非客户区边框，需保留 Flutter 内容的实际尺寸，
+                  // 避免隐藏页面重新布局或滚动。
                   if (!mini) _mainContentSize = constraints.biggest;
                   final size = _mainContentSize ?? kMainMinWindowSize;
                   return Offstage(

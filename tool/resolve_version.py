@@ -1,6 +1,6 @@
-"""Resolve one version/build number for all clients, without changing servers.
+"""为各客户端统一解析版本和构建号。
 
-Priority: v* release tag > manual workflow input > pubspec.yaml.
+优先级依次为 v* 发布标签、手动工作流输入、pubspec.yaml。
 """
 
 import os

@@ -56,7 +56,7 @@ while [ "$count" -lt "$timeout" ]; do
   if [ -f "$ack" ] && [ "$(cat -- "$ack")" = "$token" ]; then
     trap - EXIT HUP INT TERM
     status success 'Update installed and application started'
-    # backup was checked as a direct, non-linked sibling before any mutation.
+    # 备份路径已验证为同父目录下的新路径。删除备份前再次检查其父目录和符号链接状态。
     [ "$(dirname -- "$backup")" = "$parent" ] && [ ! -L "$backup" ] || exit 2
     rm -rf -- "$backup"
     exit 0

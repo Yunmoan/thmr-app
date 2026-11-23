@@ -2,13 +2,11 @@ import Cocoa
 import FlutterMacOS
 import MediaPlayer
 
-/// System media controls glue for macOS: publishes track metadata to
-/// MPNowPlayingInfoCenter (Control Center / Now Playing widget) and routes
-/// MPRemoteCommandCenter commands (media keys) back to Dart.
+/// 将 macOS 曲目信息发布到 MPNowPlayingInfoCenter，供控制中心和 Now Playing 使用，
+/// 并将 MPRemoteCommandCenter 的媒体键命令转交给 Dart。
 ///
-/// Mirrors linux/runner/linux_media.cc: the Dart adapter owns the state and
-/// pushes it through the `thmr/macos_media` channel; this side only renders
-/// what it receives.
+/// 与 linux/runner/linux_media.cc 类似，Dart 管理媒体状态，通过 thmr/macos_media 发送快照，
+/// 原生侧负责向系统发布。
 final class MediaControls: NSObject {
   static let shared = MediaControls()
 
@@ -21,7 +19,7 @@ final class MediaControls: NSObject {
   private var fallbackArtwork: NSImage?
 
   func attach(messenger: FlutterBinaryMessenger) {
-    // The engine's messenger (FlutterViewController no longer conforms).
+    // 使用 Flutter 引擎的 binary messenger。
     let channel = FlutterMethodChannel(
       name: "thmr/macos_media", binaryMessenger: messenger)
     channel.setMethodCallHandler { [weak self] call, result in
@@ -68,13 +66,13 @@ final class MediaControls: NSObject {
       self?.send("stop")
       return .success
     }
-    // F8 / hardware play-pause key: decide from the last known state.
+    // F8 或硬件播放暂停键根据最后收到的播放状态选择操作。
     center.togglePlayPauseCommand.addTarget { [weak self] _ in
       guard let self else { return .commandFailed }
       self.send(self.isPlaying ? "pause" : "play")
       return .success
     }
-    // Live radio has no seeking or track skipping.
+    // 直播不支持定位或切换曲目。
     center.changePlaybackPositionCommand.isEnabled = false
     center.nextTrackCommand.isEnabled = false
     center.previousTrackCommand.isEnabled = false
@@ -145,7 +143,7 @@ final class MediaControls: NSObject {
       [weak self] data, _, _ in
       guard let self, let data, let image = NSImage(data: data) else { return }
       DispatchQueue.main.async {
-        // Ignore stale downloads when the track changed in the meantime.
+        // 封面下载返回时，忽略已经切换走的曲目。
         guard self.currentArtworkURL == urlString else { return }
         self.applyArtwork(image)
       }

@@ -1,4 +1,4 @@
-// Personal collections, public playback history and shared links.
+// 个人收藏夹、公开播放历史及他人分享入口。
 
 import 'package:flutter/material.dart';
 import '../../core/theme/thmr_motion.dart';

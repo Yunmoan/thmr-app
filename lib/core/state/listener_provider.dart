@@ -23,7 +23,7 @@ class SiteListenersPoller extends StateNotifier<int?> {
       final total = await _api.siteListeners();
       if (mounted) state = total;
     } catch (_) {
-      // Keep the latest total from this source through a transient failure.
+      // 暂时请求失败时，保留当前来源最近取得的收听总数。
     } finally {
       if (mounted) _timer = Timer(const Duration(seconds: 30), _refresh);
     }

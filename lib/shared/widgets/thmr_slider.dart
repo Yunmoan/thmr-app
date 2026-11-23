@@ -3,13 +3,10 @@ import 'package:flutter/services.dart';
 
 import '../../core/theme/thmr_focus_ring.dart';
 
-/// A slider that paints and describes itself.
+/// 自行绘制并提供无障碍语义的滑杆。
 ///
-/// Material's Slider always wraps its value indicator in an OverlayPortal.
-/// On Windows that emits an orphaned semantics node when the slider lives in a
-/// pushed route ("N will not be in the tree and is not the new root"), which
-/// can freeze the whole accessibility tree. This control has no overlay and
-/// exposes the same slider semantics.
+/// Material Slider 使用 OverlayPortal 承载数值提示。在推入的 Windows 页面中，
+/// 该路径曾产生孤立的语义节点并使无障碍树停止更新。本控件直接提供滑杆语义，无需 OverlayPortal。
 class ThmrSlider extends StatefulWidget {
   const ThmrSlider({
     super.key,

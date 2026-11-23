@@ -6,7 +6,7 @@ import '../../shared/widgets/focus_outline.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/thmr_panel.dart';
 
-/// The app identity, project links and attribution in one responsive panel.
+/// 在同一个响应式面板展示应用信息、项目链接和贡献者。
 class AboutPanel extends StatelessWidget {
   const AboutPanel({super.key, this.version});
 
@@ -95,9 +95,8 @@ class AboutPanel extends StatelessWidget {
   }
 }
 
-// Snapshot of https://api.github.com/repos/Yunmoan/thmr-app/contributors
-// verified on 2026-11-08. The author is credited separately above the list.
-const _contributors = ['AoralsFout', 'lbw14514'];
+// 贡献者按下列顺序显示，新增条目的步骤见 README.md。
+const _contributors = ['AoralsFout', 'lbw14514', 'kimi-tsuki'];
 
 class _ProjectCommunity extends StatelessWidget {
   const _ProjectCommunity();
@@ -182,7 +181,7 @@ class _ProjectCommunity extends StatelessWidget {
   }
 }
 
-/// Reflow before either a narrow viewport or large text crowds the link cards.
+/// 窄视口或大字体会挤压链接卡片时，提前调整排列方式。
 class _LinkGrid extends StatelessWidget {
   const _LinkGrid({required this.children});
 
@@ -211,7 +210,7 @@ Future<void> _openExternalUrl(String url) async {
   try {
     await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   } catch (_) {
-    // External URL handlers are optional on some platforms.
+    // 有些平台可能未配置外部链接处理程序。
   }
 }
 

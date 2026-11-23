@@ -3,8 +3,8 @@ import 'package:dio/dio.dart';
 import '../config.dart';
 import '../models/models.dart';
 
-/// Radio 后端 — 全部免登录(FLUTTER.md 7.1)。
-/// 所有 /api/* 响应带 Cache-Control: no-store,不做 HTTP 层缓存。
+/// Radio 流媒体 API。请求无需账号会话。
+/// 客户端未为 Radio API 配置 HTTP 响应缓存。
 class RadioApi {
   RadioApi({RadioApi? debugClient, String? baseUrl})
       : _dio = (debugClient?._dio ?? Dio()) {
@@ -18,7 +18,8 @@ class RadioApi {
   final Dio _dio;
   String get baseUrl => _dio.options.baseUrl;
 
-  /// streamToken 存在时追加到流地址 / 反馈接口(状态、封面可不带,带上也无害)。
+  /// 配置了 streamToken 时，状态、队列和反馈请求携带 token。
+  /// 直播流 URL 由 streamUrl 单独添加 token。
   Map<String, String> get _tokenQuery => appConfig.streamToken.isEmpty
       ? const {}
       : {'token': appConfig.streamToken};
@@ -40,8 +41,7 @@ class RadioApi {
   Object? _resolveCovers(Object? value) {
     if (value is List) return value.map(_resolveCovers).toList();
     if (value is Map) {
-      // Must rebuild as Map<String, dynamic>: Map.map() would widen nested
-      // maps to Map<dynamic, Object?>, breaking the strict casts in models.
+      // 显式构造 Map<String, dynamic>，保证递归处理后的嵌套对象仍能通过模型的类型转换。
       final resolved = <String, dynamic>{};
       for (final entry in value.entries) {
         final key = entry.key as String;
@@ -117,7 +117,7 @@ class RadioApi {
         : '$base?token=${Uri.encodeQueryComponent(appConfig.streamToken)}';
   }
 
-  /// 曲目反馈(7.3)。返回 autoSkipped 等字段。
+  /// 提交曲目反馈，返回当前曲目匹配和自动切歌结果。
   Future<FeedbackResult> feedback({
     required String stationId,
     required String type,

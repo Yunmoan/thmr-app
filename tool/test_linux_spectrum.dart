@@ -1,5 +1,4 @@
-// Runs with the standalone Dart VM and an empty PATH: no Flutter engine,
-// ffmpeg executable, audio device or external network service is required.
+// 使用独立 Dart VM 和空 PATH 运行，无需 Flutter 引擎、ffmpeg 可执行文件、音频设备或外部网络服务。
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
@@ -21,8 +20,8 @@ Future<void> checkTone(
     request.response.bufferOutput = false;
     request.response.headers.contentType = ContentType('audio', 'mpeg');
     try {
-      // Deliberately split MP3 frames across irregular network chunks.
-      // Repeat the two-second fixture to cover the adaptation hold and glide.
+      // 故意使用不规则的网络分块切开 MP3 帧。
+      // 重复两秒的测试音频，覆盖自适应带宽的保持和过渡。
       final repeated = Uint8List(audio.length * 5);
       for (var i = 0; i < 5; i++) {
         repeated.setRange(i * audio.length, (i + 1) * audio.length, audio);

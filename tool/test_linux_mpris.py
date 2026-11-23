@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Compile the production GIO service and exercise its public D-Bus contract.
+"""编译正式使用的 GIO 媒体服务，并验证其公开的 D-Bus 接口。
 
-Requires a C++ compiler, gio-2.0 development files, dbus-run-session and PyGObject.
-Uses an isolated session bus; does not touch the running player or user settings.
+依赖 C++ 编译器、gio-2.0 开发文件、dbus-run-session 和 PyGObject。
+测试在隔离的会话总线上运行，避免影响正在运行的播放器和用户设置。
 """
 import os
 from pathlib import Path

@@ -3,10 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-/// Dart adapter for macOS Now Playing (MPNowPlayingInfoCenter) and media
-/// keys (MPRemoteCommandCenter), mirroring [LinuxMediaControls]: state is
-/// cached until the native side attaches, then every change is pushed as a
-/// whole so neither side tracks partial updates.
+/// macOS 媒体控制适配器，对接 MPNowPlayingInfoCenter 和 MPRemoteCommandCenter。
+/// Dart 管理共享媒体状态。原生接入前缓存更新，接入后按快照推送。
 class MacosMediaControls {
   MacosMediaControls({
     required this.play,

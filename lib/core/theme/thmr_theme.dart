@@ -9,7 +9,7 @@ import 'thmr_motion.dart';
 export 'thmr_colors.dart' show AccentTheme;
 
 /// THMR 主题工厂:把 tokens.css 的语义色映射进 Material 3。
-/// 排版与 Web 端一致 — 思源宋体(Noto Serif SC)通栏,行高 1.62。
+/// 排版参考 Web 端，正文使用思源宋体（Noto Serif SC）与 1.62 倍行高。
 class ThmrTheme {
   const ThmrTheme._();
 
@@ -20,7 +20,7 @@ class ThmrTheme {
 
   static ThemeData _build(AccentTheme theme, Brightness brightness) {
     final preset = ThmrTokens.resolve(theme, brightness);
-    // Preserve Reimu's original crimson and pale button labels in both modes.
+    // 浅色和深色模式都保留灵梦的原始绯红配色和浅色按钮标签。
     final t = theme == AccentTheme.reimu ? preset : preset.accessible();
     final accent = t.accent;
     final base = GoogleFonts.notoSerifScTextTheme();
