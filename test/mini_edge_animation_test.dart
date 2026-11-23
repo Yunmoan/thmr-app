@@ -8,6 +8,7 @@ import 'package:thmr_app/core/platform/window_presentation.dart';
 import 'package:thmr_app/core/state/settings_provider.dart';
 import 'package:thmr_app/core/state/station_provider.dart';
 import 'package:thmr_app/features/mini/mini_player.dart';
+import 'package:thmr_app/shared/widgets/track_cover.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'fixtures/mini_window_mock.dart';
@@ -34,8 +35,8 @@ void main() {
     harness.position = const Offset(3940, 180);
     harness.listener.onWindowMoved();
     await harness.advance(420);
-    expect(harness.position, const Offset(4456, 180));
-    expect(body, findsNothing);
+    expect(harness.position, const Offset(4444, 180));
+    expect(body, findsOneWidget);
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: const Offset(8, 55));
@@ -60,6 +61,51 @@ void main() {
       final logicalTop = tester.getTopLeft(summary).dy;
       final desktopTop = harness.position.dy + logicalTop * (dpi / 96);
       expect(desktopTop, closeTo(0, 1e-6));
+    });
+  }
+
+  for (final edge in [MiniEdge.left, MiniEdge.right]) {
+    testWidgets('compact $edge keeps the actual player at the desktop edge',
+        (tester) async {
+      const dpi = 120;
+      const scale = dpi / 96;
+      final left = edge == MiniEdge.left;
+      final desktopEdge = left
+          ? primaryMiniDisplay.workArea.left
+          : primaryMiniDisplay.workArea.right;
+      final harness = _EdgeHarness(tester)
+        ..position = Offset(
+            left ? 8 : desktopEdge - kMiniWindowSize.width * scale - 8, 100);
+      await harness.mount(dpi: dpi);
+      final cover = find.byType(TrackCover);
+      final close = find.byIcon(Icons.close_rounded);
+      final coverElement = tester.element(cover);
+      final coverRect = tester.getRect(cover);
+      final closeRect = tester.getRect(close);
+      harness.listener.onWindowMoved();
+      await harness.advance(420);
+
+      expect(tester.element(cover), same(coverElement));
+      expect(tester.getRect(cover), coverRect);
+      expect(tester.getRect(close), closeRect);
+      expect(find.byKey(const ValueKey('mini-edge-tab')), findsNothing);
+      final clip = tester.widget<ClipRect>(_peekClip);
+      final strip = clip.clipper!.getClip(kMiniWindowSize);
+      expect(strip.width, 24);
+      expect(harness.position.dx + (left ? strip.left : strip.right) * scale,
+          closeTo(desktopEdge, 1e-6));
+      expect(strip.overlaps(coverRect), !left);
+      expect(strip.overlaps(closeRect), left);
+      expect(close.hitTestable(), findsNothing);
+      final reveal = find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.label == '展开迷你播放器',
+      );
+      await tester.tap(reveal);
+      await harness.advance(220);
+      expect(_peekClip, findsNothing);
+      expect(tester.element(cover), same(coverElement));
+      expect(harness.position.dx,
+          left ? 0 : desktopEdge - kMiniWindowSize.width * scale);
     });
   }
 
@@ -152,7 +198,7 @@ void main() {
     expect(gaps.reduce((a, b) => a + b) / gaps.length, lessThanOrEqualTo(17),
         reason: 'An 8ms native reply must not add to the frame interval. '
             'Observed position update gaps: $gaps');
-    expect(harness.position, const Offset(-328, 100));
+    expect(harness.position, const Offset(-320, 100));
     expect(harness.maxPendingMoves, 1,
         reason: 'Slow window calls must not build a queue of stale positions.');
 
@@ -163,7 +209,7 @@ void main() {
     await mouse.moveTo(const Offset(500, 200));
     await tester.pump(const Duration(milliseconds: 450));
     await harness.advance(208);
-    expect(harness.position, const Offset(-328, 100));
+    expect(harness.position, const Offset(-320, 100));
     await mouse.removePointer();
   });
 
@@ -174,7 +220,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 180));
     await harness.advance(48);
     expect(harness.position.dx, lessThan(0));
-    expect(harness.position.dx, greaterThan(-328));
+    expect(harness.position.dx, greaterThan(-320));
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: const Offset(340, 55));
@@ -193,7 +239,7 @@ void main() {
     harness.listener.onWindowMoved();
     await tester.pump(const Duration(milliseconds: 180));
     await harness.advance(224);
-    expect(harness.position, const Offset(-328, 100));
+    expect(harness.position, const Offset(-320, 100));
     expect(harness.maxPendingMoves, 1);
     final finishedMoves = harness.moveTimes.length;
     await harness.advance(200);
@@ -221,16 +267,10 @@ void main() {
     harness.listener.onWindowMoved();
     await tester.pump(const Duration(milliseconds: 180));
     await tester.pump();
-    expect(harness.position, const Offset(-328, 100));
+    expect(harness.position, const Offset(-320, 100));
     expect(harness.moveTimes, hasLength(1));
-    final tab = find.byKey(const ValueKey('mini-edge-tab'));
-    expect(
-        tester
-            .widget<Opacity>(
-                find.descendant(of: tab, matching: find.byType(Opacity)))
-            .opacity,
-        1,
-        reason: 'Reduced motion must also skip the blue tab fade.');
+    expect(tester.widget<ClipRect>(_peekClip).clipper!.getClip(kMiniWindowSize),
+        const Rect.fromLTWH(320, 0, 24, 112));
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: const Offset(340, 55));
@@ -240,6 +280,9 @@ void main() {
     await mouse.removePointer();
   });
 }
+
+Finder get _peekClip => find.byWidgetPredicate(
+    (widget) => widget is ClipRect && widget.clipper != null);
 
 class _EdgeHarness {
   _EdgeHarness(this.tester, {this.nativeLatency = Duration.zero});

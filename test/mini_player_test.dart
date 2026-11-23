@@ -20,7 +20,7 @@ import 'package:thmr_app/shared/widgets/volume_slider.dart';
 import 'fixtures/mini_window_mock.dart';
 
 void main() {
-  testWidgets('side edge hides to a mouse-revealable strip', (tester) async {
+  testWidgets('side peek expands on activation or hover', (tester) async {
     SharedPreferences.setMockInitialValues({});
     Future<void> advance(int milliseconds) async {
       for (var elapsed = 0; elapsed < milliseconds; elapsed += 20) {
@@ -67,11 +67,14 @@ void main() {
     ));
     final listener =
         tester.state(find.byType(MiniPlayerWindow)) as WindowListener;
+    final reveal = find.byWidgetPredicate(
+      (widget) => widget is Semantics && widget.properties.label == '展开迷你播放器',
+    );
     listener.onWindowMoved();
     await advance(420);
-    expect(positions.last, const Offset(-328, 100));
+    expect(positions.last, const Offset(-320, 100));
     expect(hides, 0);
-    expect(find.text('暂无播放'), findsNothing);
+    expect(reveal, findsOneWidget);
 
     // 再次启动时，即使 HWND 已可见且未收到新显示事件，也应展开缩在屏幕外的迷你播放器。
     await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
@@ -82,17 +85,17 @@ void main() {
     );
     await advance(220);
     expect(positions.last, const Offset(0, 100));
-    expect(find.text('暂无播放'), findsOneWidget);
+    expect(reveal, findsNothing);
     position = const Offset(8, 100);
     listener.onWindowMoved();
     await advance(420);
-    expect(find.text('暂无播放'), findsNothing);
+    expect(reveal, findsOneWidget);
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: const Offset(340, 55));
     await advance(220);
     expect(positions.last, const Offset(0, 100));
-    expect(find.text('暂无播放'), findsOneWidget);
+    expect(reveal, findsNothing);
 
     await ProviderScope.containerOf(
             tester.element(find.byType(MiniPlayerWindow)))

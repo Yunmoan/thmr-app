@@ -454,7 +454,7 @@ class _MiniSizeAndEdgeSettings extends ConsumerWidget {
       MiniPlayerSizePreset.large => '大号 384×132',
     };
     final edgeDescription = switch (settings.miniEdgeHideMode) {
-      MiniEdgeHideMode.compact => '顶边保留封面、歌名和作者',
+      MiniEdgeHideMode.compact => '顶边显示曲目信息，侧边露出窗口边缘',
       MiniEdgeHideMode.tab => '悬停或点击小条展开',
       MiniEdgeHideMode.hidden => '原位置悬停唤出',
     };
@@ -551,7 +551,7 @@ class _MiniEdgeChoice extends StatelessWidget {
     final (label, caption, svg) = switch (mode) {
       MiniEdgeHideMode.compact => (
           '二段式摘要',
-          '顶边显示封面、歌名和作者；侧边显示小条',
+          '顶边显示封面、歌名和作者，侧边露出原窗口的一小段',
           'assets/icons/mini_edge_compact.svg',
         ),
       MiniEdgeHideMode.tab => (

@@ -259,6 +259,7 @@ class _MiniPlayerTransitionState extends ConsumerState<MiniPlayerTransition>
 enum MiniEdge { top, left, right }
 
 const _miniHiddenExtent = 3.0;
+const _miniSidePeekExtent = 24.0;
 
 class MiniEdgePlacement {
   const MiniEdgePlacement(this.edge, this.expanded, this._size, this._scale);
@@ -542,13 +543,12 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
   }
 
   double _visibleExtent(MiniEdgeHideMode mode, MiniEdgePlacement? placement) {
-    if (mode == MiniEdgeHideMode.compact &&
-        placement != null &&
-        placement.edge == MiniEdge.top) {
-      // 摘要贴在 Flutter 视图底边时，使用 HWND 实际露出的物理高度。
-      return placement._pixelAlignedExtent(
-        miniSummaryHeight(MediaQuery.textScalerOf(context)),
-      );
+    if (mode == MiniEdgeHideMode.compact && placement != null) {
+      // 使用 HWND 实际露出的物理像素对齐摘要。
+      final extent = placement.edge == MiniEdge.top
+          ? miniSummaryHeight(MediaQuery.textScalerOf(context))
+          : _miniSidePeekExtent;
+      return placement._pixelAlignedExtent(extent);
     }
     return mode == MiniEdgeHideMode.hidden ? _miniHiddenExtent : 16.0;
   }
@@ -680,6 +680,9 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     final placement = _placement;
     final edge = placement?.edge;
     final visibleExtent = _visibleExtent(mode, placement);
+    final sidePeek = mode == MiniEdgeHideMode.compact &&
+        edge != null &&
+        edge != MiniEdge.top;
     final tabAlignment = switch (edge) {
       MiniEdge.top => Alignment.bottomCenter,
       MiniEdge.left => Alignment.centerRight,
@@ -708,7 +711,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
             child: Stack(
           fit: StackFit.expand,
           children: [
-            if (!_tucked)
+            if (!_tucked || sidePeek)
               ValueListenableBuilder<double>(
                 valueListenable: _edgeProgress,
                 child: _MiniPlayerBody(
@@ -718,16 +721,33 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
                   playbackState: widget.playbackState,
                 ),
                 builder: (context, progress, child) {
-                  // 原生窗口为摘要或悬停触发条预留空间。主体也要滑过这段距离，
-                  // 避免动画结束时仍可见的部分突然消失。
-                  final remaining = visibleExtent * progress;
+                  final peeking = sidePeek && (_tucked || progress > 0);
+                  // 顶边摘要和触发条需要让主体滑过预留空间。侧边摘要沿用原窗口位置。
+                  final remaining = sidePeek ? 0.0 : visibleExtent * progress;
                   final offset = switch (edge) {
                     MiniEdge.top => Offset(0, -remaining),
                     MiniEdge.left => Offset(-remaining, 0),
                     MiniEdge.right => Offset(remaining, 0),
                     null => Offset.zero,
                   };
-                  return Transform.translate(offset: offset, child: child);
+                  return ClipRect(
+                    clipBehavior: peeking ? Clip.hardEdge : Clip.none,
+                    clipper: peeking
+                        ? _MiniSidePeekClipper(
+                            edge, visibleExtent, _tucked ? 1 : progress)
+                        : null,
+                    child: ExcludeSemantics(
+                      excluding: peeking,
+                      child: ExcludeFocus(
+                        excluding: peeking,
+                        child: IgnorePointer(
+                          ignoring: peeking,
+                          child:
+                              Transform.translate(offset: offset, child: child),
+                        ),
+                      ),
+                    ),
+                  );
                 },
               ),
             if (edge == MiniEdge.top && mode == MiniEdgeHideMode.compact)
@@ -739,7 +759,9 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
                   onTap: () => unawaited(_reveal()),
                 ),
               )),
-            if (_tucked && edge != null && mode == MiniEdgeHideMode.hidden)
+            if (_tucked &&
+                edge != null &&
+                (sidePeek || mode == MiniEdgeHideMode.hidden))
               Align(
                 alignment: tabAlignment,
                 child: Semantics(
@@ -751,22 +773,26 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
                         child: InkWell(
                       onTap: () => unawaited(_reveal()),
                       child: ColoredBox(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.01),
+                        color: sidePeek
+                            ? Colors.transparent
+                            : Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.01),
                         child: SizedBox(
-                          width: edge == MiniEdge.top ? double.infinity : 3,
-                          height: edge == MiniEdge.top ? 3 : double.infinity,
+                          width: edge == MiniEdge.top
+                              ? double.infinity
+                              : visibleExtent,
+                          height: edge == MiniEdge.top
+                              ? visibleExtent
+                              : double.infinity,
                         ),
                       ),
                     )),
                   ),
                 ),
               ),
-            if (edge != null &&
-                (mode == MiniEdgeHideMode.tab ||
-                    (mode == MiniEdgeHideMode.compact && edge != MiniEdge.top)))
+            if (edge != null && mode == MiniEdgeHideMode.tab)
               _edgeTab(Align(
                 alignment: tabAlignment,
                 child: SizedBox(
@@ -890,6 +916,27 @@ class _MiniCompactSummary extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _MiniSidePeekClipper extends CustomClipper<Rect> {
+  const _MiniSidePeekClipper(this.edge, this.extent, this.progress);
+
+  final MiniEdge edge;
+  final double extent;
+  final double progress;
+
+  @override
+  Rect getClip(Size size) {
+    final width = size.width - (size.width - extent) * progress;
+    return Rect.fromLTWH(
+        edge == MiniEdge.left ? size.width - width : 0, 0, width, size.height);
+  }
+
+  @override
+  bool shouldReclip(_MiniSidePeekClipper oldClipper) =>
+      edge != oldClipper.edge ||
+      extent != oldClipper.extent ||
+      progress != oldClipper.progress;
 }
 
 class _MiniIllustration extends StatelessWidget {
