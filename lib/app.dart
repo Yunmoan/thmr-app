@@ -14,6 +14,8 @@ import 'features/mini/mini_player.dart' show miniPlayerProvider;
 import 'features/large_screen/large_screen_controller.dart';
 import 'features/shell/home_shell.dart';
 import 'features/account/update_panel.dart';
+import 'shared/widgets/desktop_title_bar.dart';
+import 'shared/widgets/developer_mode_strip.dart';
 import 'shared/widgets/thmr_background.dart';
 
 // 构建 Material 主题时也会解析字体。仅订阅影响主题的偏好，避免播放状态或码率变化触发重建。
@@ -45,27 +47,36 @@ class ThmrApp extends ConsumerWidget {
       //
       // Windows 迷你模式保留主界面的挂载状态和原尺寸，切回时可恢复标签页与滚动位置。
       builder: (context, child) {
-        if (kIsWeb || !Platform.isWindows) {
-          return AppInput(
-              navigatorKey: navigatorKey,
-              child: ThmrFocusLayer(
-                  reserveEdgeSpace:
-                      !ref.watch(largeScreenProvider.select((s) => s.active)),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      const ThmrBackground(child: SizedBox.expand()),
-                      child ?? const SizedBox.expand(),
-                    ],
-                  )));
-        }
+        final navigator = child ?? const SizedBox.expand();
+        final windows = !kIsWeb && Platform.isWindows;
+        final mini = windows && ref.watch(miniPlayerProvider);
+        final large = ref.watch(largeScreenProvider.select((s) => s.active));
         return AppInput(
-            navigatorKey: navigatorKey,
-            child: ThmrFocusLayer(
-                reserveEdgeSpace: !ref.watch(miniPlayerProvider) &&
-                    !ref.watch(largeScreenProvider.select((s) => s.active)),
-                child: DesktopPlayerSurface(
-                    child: child ?? const SizedBox.expand())));
+          navigatorKey: navigatorKey,
+          child: ThmrFocusLayer(
+            reserveEdgeSpace: !mini && !large,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (windows)
+                  DesktopPlayerSurface(child: navigator)
+                else ...[
+                  const ThmrBackground(child: SizedBox.expand()),
+                  navigator,
+                ],
+                if (!mini)
+                  Positioned(
+                    top: windows && !large
+                        ? DesktopTitleBar.height
+                        : MediaQuery.viewPaddingOf(context).top,
+                    left: 0,
+                    right: 0,
+                    child: const DeveloperModeStrip(),
+                  ),
+              ],
+            ),
+          ),
+        );
       },
       home: const AppUpdateMonitor(child: HomeShell()),
     );

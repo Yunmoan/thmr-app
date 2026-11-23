@@ -9,6 +9,8 @@ import 'focus_outline.dart';
 class DesktopTitleBar extends StatelessWidget {
   const DesktopTitleBar({super.key, this.onMini});
 
+  static const height = 38.0;
+
   /// 迷你模式入口(标题栏画中画按钮),回调由 ThmrApp 注入。
   final VoidCallback? onMini;
 
@@ -16,7 +18,7 @@ class DesktopTitleBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).thmr;
     return Container(
-      height: 38,
+      height: height,
       color: tokens.pageBg,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -100,7 +102,7 @@ class _CaptionButton extends StatelessWidget {
     return FocusOutline(
         child: SizedBox(
       width: 44,
-      height: 38,
+      height: DesktopTitleBar.height,
       child: Material(
         color: Colors.transparent,
         child: InkWell(

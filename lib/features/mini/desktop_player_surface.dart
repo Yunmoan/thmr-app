@@ -44,7 +44,7 @@ class _DesktopPlayerSurfaceState extends ConsumerState<DesktopPlayerSurface> {
             Padding(
               padding: mini || large
                   ? EdgeInsets.zero
-                  : const EdgeInsets.only(top: 38),
+                  : const EdgeInsets.only(top: DesktopTitleBar.height),
               child: TickerMode(
                 enabled: !mini,
                 child: LayoutBuilder(builder: (context, constraints) {

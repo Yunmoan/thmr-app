@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -51,7 +52,7 @@ final miniPlayerSizeProvider =
     StateNotifierProvider<MiniPlayerSizeController, MiniPlayerSizePreset>(
         (ref) => MiniPlayerSizeController());
 
-/// 应用偏好，包括外观、播放源、每个频道的码率、启动行为和桌面窗口设置。
+/// 应用偏好，包括外观、播放、启动行为、桌面窗口设置和开发者模式。
 class AppSettings {
   final ThemeMode themeMode;
   final Map<String, String> bitrateByStation;
@@ -61,6 +62,7 @@ class AppSettings {
   final MiniEdgeHideMode miniEdgeHideMode;
   final bool miniShowIllustration;
   final RadioSourcePreference radioSource;
+  final bool developerMode;
 
   /// 关闭按钮行为(仅桌面端生效)。
   final CloseAction closeAction;
@@ -75,6 +77,7 @@ class AppSettings {
     this.miniShowIllustration = true,
     this.closeAction = CloseAction.ask,
     this.radioSource = RadioSourcePreference.automatic,
+    this.developerMode = kDebugMode,
   });
 
   String bitrateFor(String stationId) => bitrateByStation[stationId] ?? '';
@@ -89,6 +92,7 @@ class AppSettings {
     bool? miniShowIllustration,
     CloseAction? closeAction,
     RadioSourcePreference? radioSource,
+    bool? developerMode,
   }) =>
       AppSettings(
         themeMode: themeMode ?? this.themeMode,
@@ -100,16 +104,23 @@ class AppSettings {
         miniShowIllustration: miniShowIllustration ?? this.miniShowIllustration,
         closeAction: closeAction ?? this.closeAction,
         radioSource: radioSource ?? this.radioSource,
+        developerMode: developerMode ?? this.developerMode,
       );
 }
 
 class SettingsController extends StateNotifier<AppSettings> {
-  SettingsController() : super(const AppSettings()) {
+  SettingsController({this.debugBuild = kDebugMode})
+      : super(AppSettings(developerMode: debugBuild)) {
     ready = _load();
   }
 
-  /// 关闭窗口按钮的行为，仅桌面端使用。
+  /// 启动时读取已保存的应用偏好。
   late final Future<void> ready;
+  final bool debugBuild;
+
+  // 分开保存调试构建和正式构建的开关，避免覆盖安装时意外开启正式版的开发者模式。
+  String get _developerModeKey =>
+      debugBuild ? 'developerMode.debug' : 'developerMode';
 
   int _revision = 0;
 
@@ -140,6 +151,7 @@ class SettingsController extends StateNotifier<AppSettings> {
       miniEdgeHideMode: miniEdgeHideMode,
       miniShowIllustration: prefs.getBool('miniShowIllustration') ?? true,
       themeMode: ThemeMode.values[modeIdx.clamp(0, 2)],
+      developerMode: prefs.getBool(_developerModeKey) ?? debugBuild,
       bitrateByStation:
           (prefs.getStringList('bitrateByStation') ?? const <String>[])
               .fold<Map<String, String>>({}, (m, entry) {
@@ -208,6 +220,15 @@ class SettingsController extends StateNotifier<AppSettings> {
     state = state.copyWith(miniShowIllustration: value);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('miniShowIllustration', value);
+  }
+
+  Future<void> setDeveloperMode(bool enabled) async {
+    await ready;
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setBool(_developerModeKey, enabled)) {
+      throw StateError('无法保存开发者模式设置');
+    }
+    if (mounted) state = state.copyWith(developerMode: enabled);
   }
 
   /// 记录码率选择(按 station 隔离持久化)。

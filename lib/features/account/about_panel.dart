@@ -1,21 +1,91 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../shared/widgets/focus_outline.dart';
+import '../../core/state/settings_provider.dart';
+import '../../core/theme/thmr_motion.dart';
 import '../../core/theme/thmr_theme.dart';
+import '../../shared/widgets/focus_outline.dart';
 import '../../shared/widgets/thmr_panel.dart';
 
 /// 在同一个响应式面板展示应用信息、项目链接和贡献者。
-class AboutPanel extends StatelessWidget {
+class AboutPanel extends ConsumerStatefulWidget {
   const AboutPanel({super.key, this.version});
 
   final String? version;
 
   @override
+  ConsumerState<AboutPanel> createState() => _AboutPanelState();
+}
+
+class _AboutPanelState extends ConsumerState<AboutPanel> {
+  int _versionTaps = 0;
+  Timer? _resetTaps;
+  bool _saving = false;
+
+  void _tapVersion() {
+    _resetTaps?.cancel();
+    if (++_versionTaps == 7) {
+      _versionTaps = 0;
+      unawaited(_setDeveloperMode(true));
+    } else {
+      _resetTaps = Timer(const Duration(seconds: 2), () => _versionTaps = 0);
+    }
+  }
+
+  Future<void> _setDeveloperMode(bool enabled) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      if (enabled) {
+        final confirmed = await showThmrDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('启用开发者模式？'),
+            content: const Text('启用后窗口顶部会显示黄灰斜纹。你可以在「关于」中关闭。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('启用'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted || confirmed != true) return;
+      }
+      await ref.read(settingsProvider.notifier).setDeveloperMode(enabled);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showThmrSnackBar(
+          context,
+          const SnackBar(content: Text('无法保存开发者模式设置，请重试。')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _resetTaps?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.thmr;
+    final enabled = ref.watch(settingsProvider.select((s) => s.developerMode));
+    final showSwitch =
+        enabled || ref.read(settingsProvider.notifier).debugBuild;
     return ThmrPanel(
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -47,17 +117,23 @@ class AboutPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          DecoratedBox(
-            decoration: BoxDecoration(
+          FocusOutline(
+            child: Material(
               color: tokens.accentSoft,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: tokens.panelBorder),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              child: Text('客户端 · v${version ?? '…'}',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                      color: tokens.ink, fontWeight: FontWeight.w700)),
+              shape: StadiumBorder(side: BorderSide(color: tokens.panelBorder)),
+              child: InkWell(
+                customBorder: const StadiumBorder(),
+                onTap: !showSwitch && !_saving && widget.version != null
+                    ? _tapVersion
+                    : null,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  child: Text('客户端 · v${widget.version ?? '…'}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                          color: tokens.ink, fontWeight: FontWeight.w700)),
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -73,6 +149,22 @@ class AboutPanel extends StatelessWidget {
           const _ProjectCommunity(),
           const SizedBox(height: 18),
           Divider(color: tokens.panelBorder, height: 1),
+          if (showSwitch) ...[
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('开发者模式'),
+              subtitle: Text(
+                '如果您是开发者，或者需要进行功能调试，可打开此选项。',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: tokens.mutedInk, height: 1.45),
+              ),
+              value: enabled,
+              onChanged: _saving ? null : _setDeveloperMode,
+            ),
+            const SizedBox(height: 8),
+            Divider(color: tokens.panelBorder, height: 1),
+          ],
           const SizedBox(height: 14),
           Text('版权与服务',
               style: theme.textTheme.labelLarge

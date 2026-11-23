@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:thmr_app/core/theme/thmr_theme.dart';
 import 'package:thmr_app/features/account/about_panel.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   for (final brightness in [Brightness.light, Brightness.dark]) {
     for (final width in [320.0, 920.0]) {
       testWidgets('关于区域在 $brightness、${width.toInt()}px 下可阅读', (tester) async {
@@ -15,13 +19,15 @@ void main() {
         final theme = brightness == Brightness.dark
             ? ThmrTheme.dark()
             : ThmrTheme.light();
-        await tester.pumpWidget(MaterialApp(
-          theme: theme,
-          home: const Scaffold(
-            body: SingleChildScrollView(
-              child: Padding(
-                padding: EdgeInsets.all(12),
-                child: AboutPanel(version: '0.1.3'),
+        await tester.pumpWidget(ProviderScope(
+          child: MaterialApp(
+            theme: theme,
+            home: const Scaffold(
+              body: SingleChildScrollView(
+                child: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: AboutPanel(version: '0.1.3'),
+                ),
               ),
             ),
           ),
@@ -32,8 +38,17 @@ void main() {
         expect(find.text('客户端 · v0.1.3'), findsOneWidget);
         expect(find.text('云默安'), findsOneWidget);
         expect(find.text('1094578162'), findsOneWidget);
-        final title = tester.widget<Text>(find.text('版权与服务'));
-        expect(title.style?.color, theme.thmr.ink);
+
+        final contributor = find.text('kimi-tsuki');
+        final developerMode = find.widgetWithText(SwitchListTile, '开发者模式');
+        final description = find.text('如果您是开发者，或者需要进行功能调试，可打开此选项。');
+        final copyright = find.text('版权与服务');
+        expect(description, findsOneWidget);
+        expect(tester.getBottomLeft(contributor).dy,
+            lessThan(tester.getTopLeft(developerMode).dy));
+        expect(tester.getBottomLeft(developerMode).dy,
+            lessThan(tester.getTopLeft(copyright).dy));
+        expect(tester.widget<Text>(copyright).style?.color, theme.thmr.ink);
       });
     }
   }

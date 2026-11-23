@@ -12,13 +12,14 @@ import 'dart:io' show ContentType, HttpServer, InternetAddress;
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
-import '../../core/theme/thmr_motion.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/config.dart';
 import '../../core/api/radio_api.dart';
 import '../../core/api/thmr_api.dart';
+import '../../core/config.dart';
+import '../../core/theme/thmr_motion.dart';
+import 'android_login_keyboard.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -35,12 +36,12 @@ class _LoginScreenState extends State<LoginScreen> {
   int _port = 0;
   bool _loopbackDecided = false;
   double _progress = 0;
+  double _keyboardInsetPixels = 0;
   bool _checking = false;
   Timer? _retry;
   int _attempts = 0;
   // 记录已尝试的 Cookie 值，后续轮询只验证新出现的值，减少重复请求。
   final Set<String> _triedTokens = {};
-  String? _diag;
 
   @override
   void initState() {
@@ -50,27 +51,41 @@ class _LoginScreenState extends State<LoginScreen> {
     _startLoopback();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    final inset = MediaQuery.viewInsetsOf(context).bottom *
+        View.of(context).devicePixelRatio;
+    if (inset == _keyboardInsetPixels) return;
+    _keyboardInsetPixels = inset;
+    final controller = _controller;
+    if (controller != null) {
+      unawaited(updateAndroidLoginKeyboard(controller, inset));
+    }
+  }
+
   Future<void> _initEnv() async {
     // WebViewEnvironment 属于 WebView2。其他平台直接创建原生 WebView，并使用默认 CookieManager。
-    if (defaultTargetPlatform != TargetPlatform.windows) {
-      if (mounted) setState(() => _envReady = true);
-      return;
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      try {
+        _env = await WebViewEnvironment.create(
+          settings: WebViewEnvironmentSettings(userDataFolder: 'thmr_webview'),
+        );
+      } catch (_) {
+        // 自定义环境不可用时使用默认环境。
+      }
     }
-    try {
-      _env = await WebViewEnvironment.create(
-        settings: WebViewEnvironmentSettings(userDataFolder: 'thmr_webview'),
-      );
-      _envReady = true;
-    } catch (e) {
-      _envReady = true;
-      if (mounted) setState(() => _diag = 'WebView 环境初始化失败:$e');
-    }
-    if (mounted) setState(() {});
+    if (mounted) setState(() => _envReady = true);
   }
 
   Future<void> _startLoopback() async {
     try {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      if (!mounted) {
+        await server.close(force: true);
+        return;
+      }
       _port = server.port;
       _loopback = server;
       server.listen((request) async {
@@ -82,15 +97,10 @@ class _LoginScreenState extends State<LoginScreen> {
         } catch (_) {
           // 关闭 WebView 时，正在处理的本地请求可能被取消。
         }
-        if (mounted) {
-          setState(() => _diag = '已收到登录回调,正在建立会话…');
-          await _checkSession(onLanding: true);
-        }
+        await _checkSession(onLanding: true);
       });
     } catch (_) {
-      if (mounted) {
-        setState(() => _diag = '本地回调服务不可用,改用页面内完成检测');
-      }
+      // 本地回调不可用时，改在网页落地后验证会话。
     }
     if (mounted) setState(() => _loopbackDecided = true);
   }
@@ -150,23 +160,9 @@ class _LoginScreenState extends State<LoginScreen> {
           _checking = false;
           _checkSession(onLanding: true);
         });
-        if (mounted) {
-          setState(() => _diag = '已授权,正在建立会话…(第 $_attempts 次)');
-        }
-        return;
       }
-      final names = cookies.map((c) => c.name).toSet().toList();
-      if (mounted) {
-        setState(() => _diag = names.isEmpty
-            ? '未读到任何 Cookie(环境异常,请重启应用再试)'
-            : '会话验证失败,当前 Cookie:$names');
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _diag = e is ApiException && e.statusCode == 403
-            ? '请求被站点防火墙拦截,请稍后重试或联系管理员'
-            : '会话读取失败,请截图反馈:$e');
-      }
+    } catch (_) {
+      // 保留登录页供用户重新加载，会话验证通过后才退出。
     } finally {
       _checking = false;
     }
@@ -214,6 +210,8 @@ class _LoginScreenState extends State<LoginScreen> {
     final ready = _envReady && _loopbackDecided;
     return Scaffold(
       backgroundColor: Colors.transparent,
+      // 键盘弹出时保留 Android 网页的布局高度。
+      resizeToAvoidBottomInset: defaultTargetPlatform != TargetPlatform.android,
       appBar: AppBar(
         title: const Text('登录 · Natayark 统一认证'),
         actions: [
@@ -234,55 +232,31 @@ class _LoginScreenState extends State<LoginScreen> {
               )
             : null,
       ),
-      body: Column(
-        children: [
-          if (_diag != null)
-            Material(
-              color:
-                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.10),
-              child: SizedBox(
-                width: double.infinity,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                  child: Text(_diag!,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.85))),
-                ),
-              ),
-            ),
-          Expanded(
-            child: !ready
-                ? const Center(child: CircularProgressIndicator())
-                : InAppWebView(
-                    webViewEnvironment: _env,
-                    initialUrlRequest:
-                        URLRequest(url: WebUri(_loginUri.toString())),
-                    initialSettings: InAppWebViewSettings(
-                        // 保持 WebView2 默认 Edge UA:畸形的自定义 UA
-                        // 会被站点防火墙按可疑请求拦截
-                        ),
-                    onWebViewCreated: (c) => _controller = c,
-                    onProgressChanged: (_, p) =>
-                        setState(() => _progress = p / 100),
-                    onLoadStop: (_, url) {
-                      // 本地回调完成页与 Web 落地页都可触发会话检查。
-                      final landed = url != null &&
-                          (url.host == '127.0.0.1' ||
-                              url.host == 'localhost' ||
-                              _isWebLanding(url));
-                      if (url != null && _isWebLanding(url)) {
-                        _controller?.stopLoading();
-                      }
-                      _checkSession(onLanding: landed);
-                    },
+      body: !ready
+          ? const Center(child: CircularProgressIndicator())
+          : InAppWebView(
+              webViewEnvironment: _env,
+              initialUrlRequest: URLRequest(url: WebUri(_loginUri.toString())),
+              initialSettings: InAppWebViewSettings(
+                  // 保持 WebView2 默认 Edge UA:畸形的自定义 UA
+                  // 会被站点防火墙按可疑请求拦截
                   ),
-          ),
-        ],
-      ),
+              onWebViewCreated: (c) => _controller = c,
+              onProgressChanged: (_, p) => setState(() => _progress = p / 100),
+              onLoadStop: (controller, url) {
+                if (_keyboardInsetPixels > 0) {
+                  unawaited(updateAndroidLoginKeyboard(
+                      controller, _keyboardInsetPixels));
+                }
+                // 本地回调完成页与 Web 落地页都可触发会话检查。
+                final webLanding = url != null && _isWebLanding(url);
+                if (webLanding) controller.stopLoading();
+                _checkSession(
+                    onLanding: webLanding ||
+                        url?.host == '127.0.0.1' ||
+                        url?.host == 'localhost');
+              },
+            ),
     );
   }
 }
