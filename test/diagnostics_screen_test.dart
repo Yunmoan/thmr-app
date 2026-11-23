@@ -11,11 +11,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:thmr_app/core/network/network_probe.dart';
 import 'package:thmr_app/core/state/diagnostics_provider.dart';
 import 'package:thmr_app/core/state/radio_source_provider.dart';
+import 'package:thmr_app/core/state/settings_provider.dart';
 import 'package:thmr_app/core/theme/thmr_theme.dart';
 import 'package:thmr_app/features/account/radio_source_panel.dart';
 import 'package:thmr_app/features/diagnostics/diagnostics_screen.dart';
 
 class _FixtureDiagnostics extends DiagnosticsService {
+  static const redirectedUrl = 'https://edge.example.test/health';
+
   @override
   Future<Map<String, String>> environment(String clientVersion) async => {
         '客户端版本': clientVersion,
@@ -34,7 +37,7 @@ class _FixtureDiagnostics extends DiagnosticsService {
   @override
   Future<NetworkProbeResult> check(DiagnosticTarget target) async =>
       NetworkProbeResult(
-        uri: Uri.parse(target.url),
+        uri: Uri.parse(target.id == 'openapi' ? redirectedUrl : target.url),
         statusCode: target.id == 'account' ? 403 : 200,
         elapsed: const Duration(milliseconds: 76),
         remoteAddress: '203.0.113.86',
@@ -205,6 +208,62 @@ void main() {
       });
     }
   }
+
+  testWidgets('developer mode toggles service URLs on screen and in TXT',
+      (tester) async {
+    tester.view.physicalSize = const Size(1280, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    String? exported;
+    final container = ProviderContainer(overrides: [
+      settingsProvider
+          .overrideWith((ref) => SettingsController(debugBuild: false)),
+      diagnosticsProvider.overrideWith((ref) => DiagnosticsController(
+            version: () async => 'test',
+            serviceFactory: _FixtureDiagnostics.new,
+          )),
+      diagnosticReportSaverProvider.overrideWithValue((text, _) async {
+        exported = text;
+        return null;
+      }),
+    ]);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child:
+          MaterialApp(theme: themeFor(false), home: const DiagnosticsScreen()),
+    ));
+    await tester.pumpAndSettle();
+
+    final service = diagnosticTargets.first;
+    for (final developerMode in [false, true, false]) {
+      await container
+          .read(settingsProvider.notifier)
+          .setDeveloperMode(developerMode);
+      await tester.pumpAndSettle();
+      final visibility = developerMode ? findsOneWidget : findsNothing;
+      expect(find.text(service.name), findsOneWidget);
+      expect(find.text('192.0.2.42'), findsOneWidget);
+      expect(find.text(publicIpLookupUrl), visibility);
+      expect(find.text(service.url), visibility);
+      expect(find.text(_FixtureDiagnostics.redirectedUrl), visibility);
+
+      await tester.tap(find.text('导出 TXT'));
+      await tester.pumpAndSettle();
+      expect(exported, contains('当前播放源：源 1'));
+      expect(exported, contains('76 ms'));
+      for (final address in [
+        publicIpLookupUrl,
+        service.url,
+        _FixtureDiagnostics.redirectedUrl,
+        radioSources.first.baseUrl,
+      ]) {
+        expect(exported,
+            developerMode ? contains(address) : isNot(contains(address)));
+      }
+    }
+  });
 
   testWidgets('manual source choice is usable on a narrow settings panel',
       (tester) async {

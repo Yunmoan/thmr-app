@@ -24,6 +24,29 @@ const diagnosticTargets = [
       'staticassets', 'Natayark 静态资源服务', 'https://staticassets.naids.com'),
 ];
 
+const publicIpLookupUrl = 'https://myip.ipip.net/json';
+
+final _serviceHosts = {
+  Uri.parse(publicIpLookupUrl).host,
+  for (final target in diagnosticTargets) Uri.parse(target.url).host,
+};
+final _urlInHeader =
+    RegExp(r'(?:[a-z][a-z0-9+.-]*:)?//[a-z0-9\[]', caseSensitive: false);
+
+/// CDN 响应头偶尔带有服务地址。普通诊断只展示不含地址的响应头。
+Map<String, String> diagnosticHeaders(NetworkProbeResult result,
+    {required bool showServiceUrls}) {
+  if (showServiceUrls) return result.headers;
+  final hosts = {..._serviceHosts, result.uri.host.toLowerCase()};
+  return {
+    for (final entry in result.headers.entries)
+      if (!_urlInHeader.hasMatch(entry.value) &&
+          !hosts.any((host) =>
+              host.isNotEmpty && entry.value.toLowerCase().contains(host)))
+        entry.key: entry.value,
+  };
+}
+
 class IpLocation {
   const IpLocation(this.ip, this.location);
   final String ip;
@@ -68,7 +91,7 @@ class DiagnosticsService {
       );
 
   Future<IpLocation> publicIp() async {
-    final result = await probe.get(Uri.parse('https://myip.ipip.net/json'),
+    final result = await probe.get(Uri.parse(publicIpLookupUrl),
         maxBytes: 16384, captureBody: true);
     if (!result.successful || result.body == null) {
       throw const FormatException('公网 IP 查询失败，可重新诊断');
@@ -152,13 +175,14 @@ class DiagnosticsSnapshot {
       );
 
   String toText(
-      {Map<String, String> playback = const {},
+      {bool showServiceUrls = false,
+      Map<String, String> playback = const {},
       Map<String, String> display = const {}}) {
     final out = StringBuffer('东方音乐电台 THMR · 网络诊断报告\n');
     out.writeln('检测时间：${startedAt?.toLocal().toIso8601String() ?? '未检测'}');
     out.writeln('检测状态：${running ? '进行中' : '已完成'}');
     out.writeln('\n[公网 IP 与属地]');
-    out.writeln('查询服务：https://myip.ipip.net/json');
+    if (showServiceUrls) out.writeln('查询服务：$publicIpLookupUrl');
     out.writeln('公网 IP：${ipLocation?.ip ?? ipError ?? '未获取'}');
     out.writeln('IP 属地：${ipLocation?.description ?? '未获取'}');
     out.writeln('\n[本机环境]');
@@ -172,20 +196,22 @@ class DiagnosticsSnapshot {
     out.writeln('\n[服务可访问性与 CDN 连接]');
     for (final target in diagnosticTargets) {
       out.writeln('\n${target.name}');
-      out.writeln('地址：${target.url}');
+      if (showServiceUrls) out.writeln('地址：${target.url}');
       final result = services[target.id];
       if (result == null) {
         out.writeln('结果：未完成');
         continue;
       }
       out.writeln('结果：${result.statusLabel}');
-      out.writeln('检测地址：${publicUrl(result.uri)}');
+      if (showServiceUrls) out.writeln('检测地址：${publicUrl(result.uri)}');
       out.writeln('响应耗时：${result.elapsed.inMilliseconds} ms');
       out.writeln('HTTP 状态：${result.statusCode ?? '未收到响应'}');
       out.writeln('实际连接 IP：${result.remoteAddress ?? '未获取'}');
       out.writeln('端口：${result.remotePort ?? '未获取'}');
       out.writeln('DNS 地址：${result.dnsAddresses.join(', ')}');
-      for (final entry in result.headers.entries) {
+      for (final entry
+          in diagnosticHeaders(result, showServiceUrls: showServiceUrls)
+              .entries) {
         out.writeln('${entry.key}：${entry.value}');
       }
     }

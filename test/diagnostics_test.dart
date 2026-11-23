@@ -31,7 +31,9 @@ class _Service extends DiagnosticsService {
         elapsed: const Duration(milliseconds: 45),
         headers: const {
           'eo-cache-status': 'HIT',
-          'eo-log-uuid': 'fixture-request'
+          'eo-log-uuid': 'fixture-request',
+          'server-timing': 'edge;desc="https://edge.example.test/check"',
+          'via': '1.1 radio.yunmoan.cn',
         });
   }
 
@@ -108,16 +110,23 @@ void main() {
     expect(service.closed, isTrue);
   });
 
-  test('the TXT report includes all targets, IP, CDN and memory results',
-      () async {
+  test('the TXT report shows service URLs only when requested', () async {
     final controller = DiagnosticsController(
         version: () async => 'test', serviceFactory: () => _Service());
     addTearDown(controller.dispose);
     await controller.run();
     final text = controller.state.toText(playback: {'当前播放源': '源 2'});
+    final developerText = controller.state.toText(showServiceUrls: true);
     for (final target in diagnosticTargets) {
-      expect(text, contains(target.url));
+      expect(text, contains(target.name));
+      expect(text, isNot(contains(Uri.parse(target.url).host)));
+      expect(developerText, contains(target.url));
     }
+    expect(text, isNot(contains(publicIpLookupUrl)));
+    expect(developerText, contains(publicIpLookupUrl));
+    expect(text, isNot(contains('https://edge.example.test/check')));
+    expect(developerText, contains('https://edge.example.test/check'));
+    expect(developerText, contains('via：1.1 radio.yunmoan.cn'));
     expect(text, contains('192.0.2.42'));
     expect(text, contains('123 MiB'));
     expect(text, contains('fixture-request'));

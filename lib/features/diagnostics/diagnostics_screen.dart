@@ -4,7 +4,6 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import '../../core/theme/thmr_motion.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/network_probe.dart';
@@ -12,6 +11,7 @@ import '../../core/state/channel_provider.dart';
 import '../../core/state/diagnostics_provider.dart';
 import '../../core/state/radio_source_provider.dart';
 import '../../core/state/settings_provider.dart';
+import '../../core/theme/thmr_motion.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../shared/widgets/thmr_panel.dart';
 
@@ -56,12 +56,15 @@ class _DiagnosticsScreenState extends ConsumerState<DiagnosticsScreen> {
     try {
       final source = ref.read(radioSourceProvider);
       final stationId = ref.read(activeStationIdProvider);
-      final profile = ref.read(settingsProvider).bitrateFor(stationId);
+      final settings = ref.read(settingsProvider);
+      final profile = settings.bitrateFor(stationId);
+      final showServiceUrls = settings.developerMode;
       final screen = MediaQuery.of(context);
-      final text = snapshot.toText(playback: {
+      final text = snapshot.toText(showServiceUrls: showServiceUrls, playback: {
         '选择模式': source.preference.label,
-        '当前播放源':
-            '${source.selected.label} · ${publicUrl(Uri.parse(source.selected.baseUrl))}',
+        '当前播放源': source.selected.label,
+        if (showServiceUrls)
+          '播放源地址': publicUrl(Uri.parse(source.selected.baseUrl)),
         '电台': stationId,
         '音质偏好': profile.isEmpty ? '电台默认' : profile,
         if (source.testedAt != null)
@@ -101,6 +104,8 @@ class _DiagnosticsScreenState extends ConsumerState<DiagnosticsScreen> {
   @override
   Widget build(BuildContext context) {
     final data = ref.watch(diagnosticsProvider);
+    final showServiceUrls = ref
+        .watch(settingsProvider.select((settings) => settings.developerMode));
     final tokens = Theme.of(context).thmr;
     final connected =
         data.services.values.where((result) => result.reachable).length;
@@ -205,7 +210,7 @@ class _DiagnosticsScreenState extends ConsumerState<DiagnosticsScreen> {
                         data.ipError ??
                         (data.running ? '查询中…' : '未获取')),
                 _Detail('IP 属地', data.ipLocation?.description ?? '未获取'),
-                const _Detail('查询服务', 'myip.ipip.net/json'),
+                if (showServiceUrls) const _Detail('查询服务', publicIpLookupUrl),
                 if (data.environment['本机 IP / 网络接口'] != null)
                   _Detail('本机 IP / 网络接口', data.environment['本机 IP / 网络接口']!),
               ])),
@@ -228,7 +233,8 @@ class _DiagnosticsScreenState extends ConsumerState<DiagnosticsScreen> {
                     child: _ServiceCard(
                         target: target,
                         result: data.services[target.id],
-                        running: data.running)),
+                        running: data.running,
+                        showServiceUrls: showServiceUrls)),
             ]);
           }),
           const SizedBox(height: 18),
@@ -251,15 +257,22 @@ class _DiagnosticsScreenState extends ConsumerState<DiagnosticsScreen> {
 
 class _ServiceCard extends StatelessWidget {
   const _ServiceCard(
-      {required this.target, required this.result, required this.running});
+      {required this.target,
+      required this.result,
+      required this.running,
+      required this.showServiceUrls});
   final DiagnosticTarget target;
   final NetworkProbeResult? result;
   final bool running;
+  final bool showServiceUrls;
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).thmr;
     final value = result;
+    final headers = value == null
+        ? const <String, String>{}
+        : diagnosticHeaders(value, showServiceUrls: showServiceUrls);
     final color = value == null
         ? tokens.mutedInk
         : value.reachable
@@ -285,12 +298,14 @@ class _ServiceCard extends StatelessWidget {
                 child: Text(target.name,
                     style: Theme.of(context).textTheme.titleSmall)),
           ]),
-          const SizedBox(height: 5),
-          Text(target.url,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: tokens.mutedInk)),
+          if (showServiceUrls) ...[
+            const SizedBox(height: 5),
+            Text(target.url,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: tokens.mutedInk)),
+          ],
           const SizedBox(height: 6),
           // 状态与延迟放在同一行，延迟使用弱化的文字颜色。
           Row(
@@ -311,7 +326,7 @@ class _ServiceCard extends StatelessWidget {
               ]),
           if (value != null) ...[
             const Divider(height: 16),
-            if (value.uri.toString() != target.url)
+            if (showServiceUrls && value.uri.toString() != target.url)
               _Meta('检测地址', publicUrl(value.uri)),
             _Meta(
                 '对端',
@@ -323,10 +338,10 @@ class _ServiceCard extends StatelessWidget {
                       ].join()),
             if (value.dnsAddresses.isNotEmpty)
               _Meta('DNS', value.dnsAddresses.join(' / ')),
-            if (value.headers.isNotEmpty)
+            if (headers.isNotEmpty)
               _Meta(
                   '响应头',
-                  value.headers.entries
+                  headers.entries
                       .map((e) => '${e.key}: ${e.value}')
                       .join('\n')),
           ],
