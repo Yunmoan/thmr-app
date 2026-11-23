@@ -17,7 +17,7 @@ final metaProvider = FutureProvider<ThmrMeta>((ref) async {
   return auth.api.meta();
 });
 
-/// 当前曲收藏状态(9.1)— 跟随 trackGeneration 在换曲后自动重查。
+/// 当前曲目的收藏状态，换曲时随 trackGeneration 重新查询。
 final favoritesStatusProvider =
     FutureProvider.autoDispose<FavoritesStatus>((ref) async {
   final stationId = ref.watch(activeStationIdProvider);
@@ -43,8 +43,7 @@ class CollectionCatalog {
   final DateTime? savedAt;
 }
 
-/// My collections, with the last successful account-scoped snapshot as a
-/// read-only fallback when a request cannot reach the server.
+/// 我的收藏夹。请求因网络问题无法完成时，以同一账号最近一次成功取得的快照提供只读访问。
 final collectionsProvider = FutureProvider<CollectionCatalog>((ref) async {
   final auth = ref.watch(authProvider);
   final userId = auth.user?.id;
@@ -57,7 +56,7 @@ final collectionsProvider = FutureProvider<CollectionCatalog>((ref) async {
       try {
         await cache.saveList(userId, list);
       } catch (_) {
-        // A storage failure must not hide a successful online response.
+        // 本地写入失败时，继续向界面返回已经取得的在线结果。
       }
       unawaited(_warmCollectionDetails(api, userId, list));
     }
@@ -92,7 +91,7 @@ Future<void> _warmCollectionDetails(
       if (cache.generation(userId) != generation) return;
       await cache.saveDetail(userId, detail, items);
     } catch (_) {
-      // Prefetch is best-effort. The visible list is already available.
+      // 列表已可展示，封面预加载失败时由可见组件自行加载。
       return;
     }
   }

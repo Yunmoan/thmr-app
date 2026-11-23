@@ -1,6 +1,6 @@
 package cn.yunmoan.thmr.thmr_app;
 
-/** Standalone javac/java check of Android's production FFT, without a device. */
+/** 通过 javac/java 独立验证 Android 正式使用的 FFT，无需连接设备。 */
 public final class SpectrumMathTest {
     public static void main(String[] args) {
         float[] pcm = new float[SpectrumMath.FFT_SIZE];

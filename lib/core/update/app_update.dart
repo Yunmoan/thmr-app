@@ -185,13 +185,13 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
       if (mounted && notice != null) {
         state = state.copyWith(installNotice: notice);
       }
-    } catch (_) {/* Keep the player usable when preference storage fails. */}
+    } catch (_) {/* 偏好写入失败时仍可继续使用播放器。 */}
   }
 
   Future<void> _save(Future<bool>? Function() write) async {
     try {
       await write();
-    } catch (_) {/* Session settings still apply. */}
+    } catch (_) {/* 该设置在当前会话中仍然生效。 */}
   }
 
   Future<void> setAutoCheck(bool value) async {

@@ -21,7 +21,7 @@ class PlaybackState {
   final bool userPaused; // 用户手动暂停 → 不自动恢复
   final double volume; // 0-100
   final double lastAudibleVolume; // 取消静音时恢复的音量
-  final int listenedSec; // 本次会话累计收听秒数(暂停冻结、换曲延续)
+  final int listenedSec; // 本次会话累计秒数，暂停不计时，换曲仍延续。
   final String? error;
 
   const PlaybackState({
@@ -57,15 +57,15 @@ class PlaybackState {
       );
 }
 
-/// 直播流播放控制(media_kit)。
-/// 断线恢复对齐 Web 端:error → 1s 重连;buffering 持续 >5s → 3s 后重连;
-/// 连续失败 5 次退回 idle。用户手动暂停期间不自动恢复。
+/// 使用 media_kit 控制直播播放和断线恢复。
+/// 播放出错后延迟 1 秒重连；播放意外中断或缓冲满 5 秒后，延迟 3 秒重连。
+/// 每次安排重连时计数，第 5 次进入 idle，成功播放后清零。手动暂停期间不自动重连。
 class PlaybackController extends StateNotifier<PlaybackState> {
   PlaybackController({String? Function()? streamUrl, Player? player})
       : _streamUrl = streamUrl,
         _player = player ?? enginePlayer,
         super(const PlaybackState()) {
-    // 全局共享播放引擎(audio_service / SMTC 共用同一实例)
+    // 默认使用共享播放引擎，测试可注入 Player。
     _playingSubscription = _player.stream.playing.listen(_onPlaying);
     _bufferingSubscription = _player.stream.buffering.listen(_onBuffering);
     _errorSubscription = _player.stream.error.listen(_onError);
@@ -77,7 +77,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     );
     // 启动时恢复上次音量(shared_preferences,与设置项同一套方案)
     _loadVolume();
-    // 累计收听计时:仅在「正在播放」时每秒 +1
+    // 在线或缓冲阶段累计收听时长，每秒加 1。
     _listenTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted &&
           (state.phase == PlaybackPhase.online ||
@@ -115,10 +115,11 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       try {
         playbackUrl = (await sharedRadioStream.activate(url)).toString();
       } catch (_) {
-        // Playback remains available even if the optional local relay fails.
+        // 本地中继启动失败时回退到上游原地址，以保留播放能力。
         sharedRadioStream.stop();
       }
     }
+    // 等待中继期间，暂停、换台或停止可能已经使本次连接失效。
     if (_disposed || revision != _openRevision) return;
     await _player.open(Media(playbackUrl), play: play);
   }
@@ -127,7 +128,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     if (_disposed || (playing && (_currentUrl == null || state.userPaused))) {
       return;
     }
-    // Windows SMTC:同步系统媒体面板状态
+    // 将播放状态同步到当前平台的系统媒体控件。
     unawaited(updateSystemMediaPlayback(
         playing: playing, stopped: !playing && _currentUrl == null));
     if (playing) {
@@ -153,7 +154,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     if (state.phase == PlaybackPhase.online ||
         state.phase == PlaybackPhase.connecting) {
       state = state.copyWith(phase: PlaybackPhase.buffering);
-      // waiting 持续 >5s → 重连
+      // 缓冲持续 5 秒后，安排在 3 秒后重连。
       _stallTimer?.cancel();
       _stallTimer = Timer(const Duration(seconds: 5), () {
         if (mounted &&
@@ -207,7 +208,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     await _openRadio(url, play: autoplay);
   }
 
-  /// Stop the previous channel while waiting for the new stream profiles.
+  /// 等待新频道的直播流配置期间，停止播放旧频道。
   Future<void> switchStation() async {
     final hadStream = _currentUrl != null;
     _resumeAfterChannelChange = !state.userPaused &&
@@ -229,7 +230,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     }
   }
 
-  /// Apply the channel's current stream profile without starting idle playback.
+  /// 更新频道的直播流地址，仅在原本有播放意图时重连。
   Future<void> updateStreamUrl(String url) async {
     if (url == _currentUrl) return;
     if (_resumeAfterChannelChange ||
@@ -242,7 +243,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     }
   }
 
-  /// Switching a source preserves the live path, quality, token and pause state.
+  /// 切换播放源时保留直播路径、码率档位、token 和暂停状态。
   Future<void> changeRadioSource(String baseUrl) async {
     final current = _currentUrl;
     if (current == null) return;
@@ -263,7 +264,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     }
   }
 
-  /// 主播放键:未在播 → 连流;连接中/在播 → 暂停。(主面板与迷你窗共用)
+  /// 收听面板和迷你窗共用主播放键。空闲或重连中重新连流，连接、缓冲或播放中则暂停。
   Future<void> toggle(String? streamUrl) async {
     switch (state.phase) {
       case PlaybackPhase.idle:
@@ -283,8 +284,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     _reconnectTimer?.cancel();
     _stallTimer?.cancel();
     if (_useLocalRelay) {
-      // Resume already opens the live edge again. Stop the local relay so a
-      // paused player does not keep downloading radio audio.
+      // 恢复播放会重新连接实时位置。暂停时关闭本地中继，避免继续下载直播音频。
       sharedRadioStream.stop();
       await _player.stop();
     } else {
@@ -294,13 +294,13 @@ class PlaybackController extends StateNotifier<PlaybackState> {
 
   Future<void> resume() async {
     if (_currentUrl == null) return;
-    // 暂停过久的直播流应从头重连,拿到实时位置
+    // 从当前直播位置重新连流，跳过暂停期间积压的内容。
     state = state.copyWith(
         userPaused: false, phase: PlaybackPhase.connecting, clearError: true);
     await _openRadio(_currentUrl!, play: true);
   }
 
-  /// Media keys and lock-screen controls rejoin the current live edge.
+  /// 媒体键和锁屏上的播放操作从当前直播位置开始。
   Future<void> playFromSystem() async {
     if (state.phase == PlaybackPhase.online ||
         state.phase == PlaybackPhase.connecting) {

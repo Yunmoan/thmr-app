@@ -5,7 +5,7 @@
 #include <functional>
 #include <string>
 
-// Owns the session-bus registration; independent of Flutter for integration tests.
+// 管理会话总线注册。与 Flutter 解耦，便于单独做集成测试。
 class MprisService {
  public:
   using Command = std::function<void(const char*, double)>;

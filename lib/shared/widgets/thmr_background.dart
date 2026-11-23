@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../core/theme/thmr_motion.dart';
 
-/// One shared illustration behind the navigator and every transparent page.
+/// Navigator 和各透明页面共用的背景插画。
 class ThmrBackground extends StatelessWidget {
   const ThmrBackground({
     super.key,
@@ -22,10 +22,10 @@ class ThmrBackground extends StatelessWidget {
   final Widget child;
   final Widget? underlay;
 
-  /// Place the motion between the paper wash and the character illustration.
+  /// 将动态效果绘制在纸面底色与角色插画之间。
   final bool underlayAboveWash;
 
-  /// Defaults to the current character theme's illustration.
+  /// 默认使用当前角色主题的插画。
   final String? illustration;
   final Color? illustrationTint;
   final double? illustrationWidthFactor;
@@ -62,7 +62,7 @@ class ThmrBackground extends StatelessWidget {
         children: [
           if (washBehindArt) wash,
           if (underlay != null) underlay!,
-          // The illustration stays still while pages and player controls animate.
+          // 页面及播放器控件播放动画时，背景插画保持静止。
           Offstage(
             key: const ValueKey('background-illustration'),
             offstage: !showIllustration,
@@ -93,7 +93,7 @@ class ThmrBackground extends StatelessWidget {
               ),
             ),
           ),
-          // Semi-transparent wash keeps the artwork visible across pages.
+          // 使用半透明纸面底色，使各页仍能看见背景插画。
           if (!washBehindArt) wash,
           child,
         ],

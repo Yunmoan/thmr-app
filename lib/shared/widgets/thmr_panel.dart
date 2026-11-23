@@ -25,9 +25,8 @@ class ThmrPanel extends StatelessWidget {
   final VoidCallback? onTap;
   final double blur;
 
-  /// List rows should pass false: a translucent container skips the
-  /// BackdropFilter pass (large lists of blurred rows tank the GPU,
-  /// which also makes window dragging stutter).
+  /// 列表行应传入 false，使用半透明容器跳过 BackdropFilter。大量逐行模糊会增加 GPU 负荷，
+  /// 影响拖动窗口时的流畅度。
   final bool frost;
   final bool enabled;
 
@@ -43,8 +42,8 @@ class ThmrPanel extends StatelessWidget {
       borderRadius: BorderRadius.circular(borderRadius),
       border: Border.all(color: tokens.panelBorder),
     );
-    // Keep the foreground in one stable slot when card decoration is toggled.
-    // Background blur never includes the foreground or shares nested panels.
+    // 切换卡片装饰时，前景组件保留原来的位置。背景模糊独立绘制，
+    // 避免模糊前景或与嵌套面板共用滤镜。
     final panel = ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       clipBehavior: enabled ? Clip.antiAlias : Clip.none,

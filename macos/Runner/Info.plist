@@ -2,8 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Keep the Metal-backed Skia renderer while Intel Mac glyph corruption
-	     reported in #18 is verified against Impeller on the affected hardware. -->
+	<!-- 禁用 Impeller 并继续使用 Skia，规避 #18 中 Intel Mac 上的字形异常。 -->
 	<key>FLTEnableImpeller</key>
 	<false/>
 	<key>CFBundleDevelopmentRegion</key>

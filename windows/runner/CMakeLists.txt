@@ -1,11 +1,9 @@
 cmake_minimum_required(VERSION 3.14)
 project(runner LANGUAGES CXX)
 
-# Define the application target. To change its name, change BINARY_NAME in the
-# top-level CMakeLists.txt, not the value here, or `flutter run` will no longer
-# work.
+# 使用顶层 CMakeLists.txt 的 BINARY_NAME 定义应用目标，保证 flutter run 能定位可执行文件。
 #
-# Any new source files that you add to the application should be added here.
+# 应用新增的原生源文件应列入此目标。
 add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "main.cpp"
@@ -17,12 +15,11 @@ add_executable(${BINARY_NAME} WIN32
   "runner.exe.manifest"
 )
 
-# Apply the standard set of build settings. This can be removed for applications
-# that need different build settings.
+# 应用共用编译选项。
 apply_standard_settings(${BINARY_NAME})
 
-# Add preprocessor definitions for the build version.
-# 源码为 UTF-8(含中文窗口标题),强制 MSVC 按 UTF-8 解析
+# 通过预处理宏传入构建版本。
+# 源码包含 UTF-8 编码的中文窗口标题，使 MSVC 按 UTF-8 解析。
  target_compile_options(${BINARY_NAME} PRIVATE "/utf-8")
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_MAJOR=${FLUTTER_VERSION_MAJOR}")
@@ -30,19 +27,18 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_MINOR=${FLUTT
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_PATCH=${FLUTTER_VERSION_PATCH}")
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_BUILD=${FLUTTER_VERSION_BUILD}")
 
-# Disable Windows macros that collide with C++ standard library functions.
+# 禁用与 C++ 标准库函数重名的 Windows 宏。
 target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 
-# Add dependency libraries and include directories. Add any application-specific
-# dependencies here.
+# 链接应用所需的库，并添加其头文件目录。
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib" "ole32.lib" "uuid.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
-# Run the Flutter tool portions of the build. This must not be removed.
+# Flutter 工具生成的步骤，负责生成应用资源和库。
 add_dependencies(${BINARY_NAME} flutter_assemble)
 
-# THMR native audio spectrum (WASAPI loopback + FFT), consumed via dart:ffi.
+# THMR 原生频谱，通过 WASAPI loopback 采样并执行 FFT，由 dart:ffi 调用。
 add_library(thmr_capture SHARED "${CMAKE_CURRENT_SOURCE_DIR}/../../native/thmr_capture.cpp")
 target_compile_definitions(thmr_capture PRIVATE "_CRT_SECURE_NO_WARNINGS" "NOMINMAX" "WIN32_LEAN_AND_MEAN")
 set_target_properties(thmr_capture PROPERTIES

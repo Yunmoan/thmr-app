@@ -1,7 +1,7 @@
-# Flutter-related
+# Flutter 生成文件
 **/Flutter/ephemeral/
 **/Pods/
 
-# Xcode-related
+# Xcode 本地文件
 **/dgph
 **/xcuserdata/

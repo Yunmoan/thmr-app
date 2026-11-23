@@ -30,9 +30,8 @@ import 'feedback_sheet.dart';
 
 /// 正在放送面板:封面 + 曲名 + 直播进度 + 控制排(收藏 / 播放 / 反馈)。
 ///
-/// 重建范围刻意收窄:本面板只订阅低频状态(电台 10s 轮询、收藏状态);
-/// 秒级变化由 [_PlayBar] / [_VolumeControl] 各自窄订阅,
-/// 整面板不再每秒重建。
+/// 播放面板主要订阅电台及收藏状态。播放器按钮、收听计时和音量各自订阅所需字段，
+/// 计时变化不会重建整块面板。
 class NowPlayingPanel extends ConsumerStatefulWidget {
   const NowPlayingPanel(
       {super.key,
@@ -43,8 +42,7 @@ class NowPlayingPanel extends ConsumerStatefulWidget {
   final StationStatus status;
   final bool switching;
 
-  /// Mobile: quality chips live inside the panel; desktop keeps a separate
-  /// panel (its own row) instead.
+  /// 移动布局可在播放器面板内显示码率选项，桌面布局将其放在独立一行。
   final bool inlineBitrate;
 
   @override
@@ -189,7 +187,7 @@ class _Cover96 extends StatelessWidget {
   }
 }
 
-/// track copy block: eyebrow + title + artist row + actions (web layout).
+/// 曲目信息区包含曲名、艺术家和收藏、反馈、复制等操作。
 class NowPlayingTrackInfo extends ConsumerWidget {
   const NowPlayingTrackInfo({
     super.key,
@@ -220,7 +218,7 @@ class NowPlayingTrackInfo extends ConsumerWidget {
     final stationId = ref.read(activeStationIdProvider);
     final fs = ref.read(favoritesStatusProvider).asData?.value;
     final cols = fs?.collections ?? const <FavCollectionRef>[];
-    // Single collection (or unknown): keep the direct toggle path.
+    // 只有一个收藏夹或尚未查到收藏夹信息时，直接切换默认收藏夹的收藏状态。
     if (cols.length <= 1) {
       onFavorite!();
       return;
@@ -382,9 +380,7 @@ class NowPlayingTrackInfo extends ConsumerWidget {
   }
 }
 
-// Only incoming text determines layout; fading text keeps its original width
-// and top-left origin, without pushing the new title or artist to the centre.
-/// small bordered text button, mirrors web .track-feedback-button.
+/// 带细边框的文字按钮，样式参考 Web 端 .track-feedback-button。
 class _TextAction extends StatelessWidget {
   const _TextAction({
     required this.label,
@@ -440,7 +436,7 @@ class _PlayBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).thmr;
     final scheme = Theme.of(context).colorScheme;
-    // Only phase changes rebuild the controls; the clock owns its second tick.
+    // 播放相位变化时重建控制区，收听计时由独立组件订阅。
     final phase = ref.watch(playbackProvider.select((s) => s.phase));
     final busy = phase == PlaybackPhase.connecting ||
         phase == PlaybackPhase.reconnecting;
@@ -515,11 +511,10 @@ class _ListeningClock extends ConsumerWidget {
   }
 }
 
-/// Live audio spectrum. When decoding is unavailable the strip settles to rest
-/// instead of showing motion unrelated to the playing audio.
+/// 音频频谱反映实际采样。无法取得频谱时，条形衰减至静止。
 ///
-/// 性能:单一 Ticker 节流到 ~20fps(被 TickerMode 静音时零开销,切页即停),
-/// 并以 CustomPaint 一次绘制全部频谱条,替代逐帧构建上百个 widget。
+/// 单个 Ticker 驱动频谱，节流间隔为 48 毫秒。通过 CustomPaint 批量绘制频谱条，
+/// 页面被 TickerMode 静音时暂停帧回调。
 class AudioStrip extends StatefulWidget {
   const AudioStrip({
     super.key,
@@ -550,8 +545,7 @@ class _AudioStripState extends State<AudioStrip>
     if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) return false;
     final state = WidgetsBinding.instance.lifecycleState;
     if (state == null || state == AppLifecycleState.resumed) return true;
-    // Desktop windows remain visible when another window takes input focus.
-    // Keep sampling until the window is actually hidden/minimized.
+    // 桌面窗口失焦后仍可能可见。真正隐藏或最小化时才停止采样。
     return state == AppLifecycleState.inactive &&
         switch (defaultTargetPlatform) {
           TargetPlatform.windows ||
@@ -633,7 +627,7 @@ class _AudioStripState extends State<AudioStrip>
   }
 
   void _onTick(Duration elapsed) {
-    // ~20fps is plenty; skip the in-between frames.
+    // 跳过距上次更新不足 48 毫秒的帧，使更新频率上限约为 21 Hz。
     if (elapsed - _last < const Duration(milliseconds: 48)) return;
     _last = elapsed;
     var settled = false;
@@ -646,7 +640,7 @@ class _AudioStripState extends State<AudioStrip>
       settled = _values.every((v) => v <= 0.065);
     }
     if (settled) {
-      // 衰减到静止 → 停表,暂停时零开销
+      // 振幅衰减到静止后停止 Ticker。
       _ticker.stop();
       _last = Duration.zero;
     }
@@ -656,8 +650,7 @@ class _AudioStripState extends State<AudioStrip>
     if (unavailable != _unavailable) {
       setState(() => _unavailable = unavailable);
     }
-    // The envelope updates pixels only. Keep layout, buttons and semantics out
-    // of the ~20 Hz path, including on high refresh rate displays.
+    // 振幅包络只触发重绘，布局、按钮和无障碍语义无需按频谱频率更新。
     _frames.value++;
   }
 
@@ -667,7 +660,7 @@ class _AudioStripState extends State<AudioStrip>
     final real = _cap?.poll(n);
     if (real != null) {
       for (var i = 0; i < n; i++) {
-        // asymmetric envelope: moderate attack, graceful release
+        // 振幅上升和衰减使用不同的平滑系数。
         final nv = real[i];
         final k = nv > _values[i] ? 0.42 : 0.09;
         _values[i] += (nv - _values[i]) * k;
@@ -692,7 +685,7 @@ class _AudioStripState extends State<AudioStrip>
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
     return LayoutBuilder(builder: (context, box) {
-      // one bar per ~8px, clamped
+      // 大致每 8 个逻辑像素分配一条频谱，并限制总条数。
       final count = (box.maxWidth / 8).round().clamp(28, 110);
       if (_values.length != count) {
         final old = _values;
@@ -743,8 +736,7 @@ class _AudioStripState extends State<AudioStrip>
   }
 }
 
-/// Draws one rounded bar per value, growing symmetrically around the
-/// vertical midline — visually identical to the old Row-of-Containers.
+/// 每个频带绘制一条圆角竖线，从横向中轴向上下两侧对称增长。
 class _SpectrumPainter extends CustomPainter {
   _SpectrumPainter({
     required this.values,
@@ -784,7 +776,7 @@ class _SpectrumPainter extends CustomPainter {
     }
   }
 
-  // In-place envelope changes arrive through the repaint Listenable.
+  // 包络数组就地更新，通过 repaint Listenable 通知画笔重绘。
   @override
   bool shouldRepaint(_SpectrumPainter oldDelegate) =>
       values != oldDelegate.values ||
@@ -792,7 +784,7 @@ class _SpectrumPainter extends CustomPainter {
       playing != oldDelegate.playing;
 }
 
-/// 播放错误条:窄订阅,仅在错误出现/消失时重建。
+/// 仅订阅错误字段，在错误文本变化、出现或清除时更新。
 class _PlaybackError extends ConsumerWidget {
   const _PlaybackError();
 
@@ -830,7 +822,7 @@ class _VolumeControlState extends ConsumerState<_VolumeControl> {
   Widget build(BuildContext context) {
     final volume = ref.watch(playbackProvider.select((s) => s.volume));
     if (!widget.desktopInline) {
-      // Mobile: compact icon that opens a popup slider (原行为)
+      // 移动端用紧凑的音量图标打开滑杆弹层。
       final muted = volume <= 0;
       return Align(
         alignment: Alignment.centerLeft,
@@ -875,7 +867,7 @@ class _VolumeControlState extends ConsumerState<_VolumeControl> {
       );
     }
 
-    // Desktop: inline slider, always visible.
+    // 桌面端始终显示内联音量滑杆。
     final tokens = Theme.of(context).thmr;
     final shown = volume;
     final muted = shown <= 0;

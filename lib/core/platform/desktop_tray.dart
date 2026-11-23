@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:tray_manager/tray_manager.dart';
 
-/// Owns the process-wide tray icon, including startup/exit races.
+/// 管理进程共用的托盘图标，并处理启动与退出交叠的情况。
 class DesktopTrayController with TrayListener {
   DesktopTrayController({
     required this.showWindow,
@@ -40,7 +40,7 @@ class DesktopTrayController with TrayListener {
     _listening = true;
     try {
       if (platform == TargetPlatform.macOS) {
-        // tray_manager loads macOS icons through rootBundle, not file paths.
+        // tray_manager 在 macOS 上通过 rootBundle 加载图标资源。
         _iconRequested = true;
         await trayManager.setIcon('assets/icons/icon-512.png', iconSize: 18);
       } else {
@@ -115,7 +115,7 @@ class DesktopTrayController with TrayListener {
     _disposed = true;
     _ready = false;
     _removeListener();
-    // A late setIcon reply must not recreate an icon after destroy().
+    // 如果 setIcon 在 destroy() 之后才完成，立即销毁迟到创建的图标。
     await _starting;
     await _removeIconAndFiles();
     if (identical(_active, this)) _active = null;

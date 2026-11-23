@@ -1,4 +1,4 @@
-// Windows spectrum: WASAPI lifecycle and native FFT stay off the UI isolate.
+// Windows 频谱的 WASAPI 启停和原生 FFT 在后台 isolate 运行。
 import 'dart:async';
 import 'dart:ffi';
 import 'dart:isolate';
@@ -21,7 +21,7 @@ class SpectrumCapture implements SpectrumSource {
   static SpectrumCapture? tryCreate() {
     if (_instance != null) return _instance;
     try {
-      // Resolve the ABI only. Starting WASAPI can block for up to 2 seconds.
+      // 此处只检查 FFI 符号。WASAPI 启动可能阻塞调用线程，将其交给后台 isolate。
       final lib = DynamicLibrary.open('thmr_capture.dll');
       for (final name in ['thmr_start', 'thmr_stop', 'thmr_poll_fft']) {
         lib.lookup<Void>(name);

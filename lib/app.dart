@@ -16,8 +16,7 @@ import 'features/shell/home_shell.dart';
 import 'features/account/update_panel.dart';
 import 'shared/widgets/thmr_background.dart';
 
-// Theme construction includes font resolution and the full Material theme.
-// Keep it independent of playback, bitrate and other unrelated preferences.
+// 构建 Material 主题时也会解析字体。仅订阅影响主题的偏好，避免播放状态或码率变化触发重建。
 final appThemesProvider = Provider((ref) {
   final accent = ref.watch(settingsProvider.select((s) => s.accentTheme));
   return (ThmrTheme.light(accent), ThmrTheme.dark(accent));
@@ -42,11 +41,9 @@ class ThmrApp extends ConsumerWidget {
       darkTheme: dark,
       themeAnimationDuration: ThmrMotion.duration,
       themeAnimationCurve: ThmrMotion.enterCurve,
-      // Single shared background under every route: pages stay transparent
-      // and the illustration never jumps between tabs.
+      // 所有路由共用一个背景。页面保持透明，切换标签页时背景插画的位置不变。
       //
-      // Windows mini mode keeps the shell mounted at its previous size so
-      // tab and scroll state survive the swap.
+      // Windows 迷你模式保留主界面的挂载状态和原尺寸，切回时可恢复标签页与滚动位置。
       builder: (context, child) {
         if (kIsWeb || !Platform.isWindows) {
           return AppInput(

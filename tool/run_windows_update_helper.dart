@@ -1,5 +1,4 @@
-// Integration-test harness: launch the production installer and exit only once
-// it is ready, exactly like the GUI process. Uses isolated fixture plans only.
+// 集成测试使用隔离的安装计划，调用正式安装器并等待其就绪后退出，复现 GUI 进程的交接。
 import 'dart:convert';
 import 'dart:io';
 

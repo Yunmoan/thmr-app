@@ -12,8 +12,7 @@ import '../../core/platform/window_presentation.dart';
 import 'large_screen_controller.dart';
 import 'large_screen_player.dart';
 
-/// Retain navigation, scroll offsets and focus without reflowing hidden pages
-/// to the projector's dimensions. Only the presentation gets the new size.
+/// 保留导航、滚动位置和焦点，隐藏的普通页面沿用原尺寸，只有大屏界面使用投影尺寸。
 class LargeScreenSurface extends ConsumerStatefulWidget {
   const LargeScreenSurface({super.key, required this.child});
 
@@ -144,13 +143,12 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
       await (visible ? _standard.forward() : _standard.reverse())
           .orCancel
           .timeout(duration + const Duration(milliseconds: 200), onTimeout: () {
-        // Never strand the retained shell at opacity zero if its ticker is
-        // muted (for example while an opaque route covers this surface).
+        // Ticker 被静音时直接将普通界面切到目标状态，避免它在不透明路由下方始终保持透明。
         _standard.stop();
         _standard.value = visible ? 1 : 0;
       });
     } on TickerCanceled {
-      // Disposal or enabling reduced motion completes the visible transition.
+      // 移除界面或启用减少动态效果时，直接结束可见过渡。
     }
   }
 
@@ -201,8 +199,7 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
           _previousFocus?.context == null) {
         _previousFocus = FocusManager.instance.primaryFocus;
       }
-      // A native collapse can publish a complete ordinary page while the
-      // window is concealed. Paint it at full opacity before the raster fence.
+      // 原生窗口在隐藏中恢复普通模式时，先让普通页面以不透明状态绘制，再等待光栅化确认。
       if (!next.active &&
           next.contentVisible &&
           (!next.busy || previous?.active == true)) {

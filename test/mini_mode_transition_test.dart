@@ -100,7 +100,7 @@ void main() {
     final entering = harness.transition.change(true, TextScaler.noScaling);
     expect(
         harness.transition.change(true, TextScaler.noScaling), same(entering));
-    // Do not resize, hide or transform the main content before DWM's reply.
+    // 等 DWM 回复后，才允许修改主界面尺寸、可见性或变换。
     await tester.pump(const Duration(milliseconds: 40));
     expect(tester.getSize(find.byKey(harness.mainKey)), oldSize);
     expect(tester.getTopLeft(find.byKey(harness.mainKey)), oldOrigin);

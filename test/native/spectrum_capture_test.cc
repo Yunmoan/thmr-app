@@ -1,5 +1,5 @@
-// Standalone Windows check: exercises the production capture FFT without an
-// audio device. Compile with NOMINMAX and link ole32 (and uuid on MinGW).
+﻿// Windows 独立测试可在无音频设备时验证实际使用的 FFT。编译时定义 NOMINMAX，链接 ole32，
+// MinGW 还需链接 uuid。
 #include <iostream>
 #include <stdexcept>
 

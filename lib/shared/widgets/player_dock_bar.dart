@@ -1,5 +1,3 @@
-// In-window bottom dock player bar, shown when not on the Listen tab.
-// Mirrors the web dock bar: cover / title / bitrate / play / volume / open.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -151,7 +149,7 @@ class _DockPlayButton extends ConsumerWidget {
   }
 }
 
-/// 音量:静音图标 + 紧凑滑杆(拖动中用临时值防抖)。
+/// 底部播放器的音量控件，支持静音、滚轮和滑杆调整。
 class _DockVolume extends ConsumerStatefulWidget {
   const _DockVolume();
 

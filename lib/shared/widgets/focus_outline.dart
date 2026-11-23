@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/thmr_focus_ring.dart';
 
-/// A foreground outline stays visible even when an InkWell's child paints an
-/// opaque panel over its ink. This adds no extra traversal stop or layout size.
+/// 焦点描边绘制在前景，即使 InkWell 的子组件绘制不透明面板也可见。
+/// 它不占额外的焦点顺序或布局空间。
 class FocusOutline extends StatefulWidget {
   const FocusOutline({
     super.key,
@@ -14,7 +14,7 @@ class FocusOutline extends StatefulWidget {
   final Widget child;
   final double radius;
 
-  /// Use the control's painted box instead of padded pointer hit targets.
+  /// 使用控件实际绘制的范围作为描边边界，避开为了指针命中增加的内边距。
   final bool focusBounds;
 
   @override
@@ -40,8 +40,7 @@ class _FocusOutlineState extends State<FocusOutline> {
       );
 }
 
-/// For content supplied to a control that owns its focus node (menu entries
-/// and navigation destinations). Observe that node without adding a tab stop.
+/// 为菜单项和导航项等自行管理焦点的控件绘制描边。监听其现有焦点节点，不增加 Tab 停靠点。
 class AncestorFocusOutline extends StatelessWidget {
   const AncestorFocusOutline({
     super.key,
@@ -53,7 +52,7 @@ class AncestorFocusOutline extends StatelessWidget {
   final Widget child;
   final double radius;
 
-  /// Observe the owning control's focus while outlining just this content slot.
+  /// 监听所属控件的焦点，仅描边当前的内容区域。
   final bool outlineChild;
 
   @override
@@ -65,7 +64,7 @@ class AncestorFocusOutline extends StatelessWidget {
       );
 }
 
-/// Match Material 3's 56 × 32 rail indicator without enclosing its label.
+/// 采用 Material 3 导航栏选中指示器的 56 × 32 逻辑像素尺寸，描边范围不包括标签。
 class NavigationRailFocusIcon extends StatelessWidget {
   const NavigationRailFocusIcon({super.key, required this.icon});
 

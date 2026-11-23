@@ -14,7 +14,7 @@ Future<void> showInputHelp(BuildContext context) => showThmrDialog<void>(
       builder: (_) => const InputHelpDialog(),
     );
 
-/// Settings entry, in its own section near the bottom of the page.
+/// 位于设置页靠下位置的独立板块。
 class InputHelpCard extends StatelessWidget {
   const InputHelpCard({super.key});
 
@@ -296,8 +296,7 @@ class _InputHelpRow extends StatelessWidget {
       );
 }
 
-/// Center the complete chord in its column, including wrapped modifiers.
-/// SVGs expose one spoken key sequence instead of individual image nodes.
+/// 在列内居中显示完整组合键，包括换行的修饰键。各 SVG 图标合并成一段按键序列播报。
 class InputPromptGroup extends StatelessWidget {
   const InputPromptGroup(
       {super.key,

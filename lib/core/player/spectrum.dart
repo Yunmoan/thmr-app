@@ -1,11 +1,10 @@
-// Spectrum source abstraction and per-platform picker.
-//  - Windows: thmr_capture.dll (WASAPI loopback + FFT, dart:ffi)
-//  - Android: decoded PCM from this app's radio stream via method channel
-//  - Linux: bundled minimp3 + FFT in a worker isolate
-//  - iOS / macOS: the same stream decoder bundled as a native framework
-//  - others  : null -> UI stays still rather than simulating audio
-// All supported platforms share adaptive bandwidth detection and logarithmic
-// band mapping in Dart, before the UI's attack/release envelope.
+// 频谱数据源接口及各平台的实现选择。
+// - Windows：通过 dart:ffi 调用 thmr_capture.dll，使用 WASAPI loopback 采集并执行 FFT。
+// - Android：通过 MethodChannel 获取应用直播流解码后的频谱。
+// - Linux：在 worker isolate 中用内置 minimp3 解码并执行 FFT。
+// - iOS / macOS：同样使用 minimp3 和 worker isolate，原生解码器打包为 framework。
+// - 其他平台：返回 null，界面保持静止。
+// 各平台在 Dart 端共用自适应带宽估计和对数频带映射，随后由 UI 对振幅上升和衰减做平滑。
 
 import 'dart:io' show Platform;
 import 'dart:typed_data';
@@ -18,8 +17,7 @@ abstract class SpectrumSource {
   void start();
   void stop();
 
-  /// Synchronous poll returning normalized 0..1 band values,
-  /// or null when no fresh data this frame.
+  /// 同步读取最近一帧已归一化到 0–1 的频带值。未接收到可用数据或最近一帧已过期时返回 null。
   Float32List? poll(int bands);
 }
 

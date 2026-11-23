@@ -145,8 +145,7 @@ void main() {
     for (final value in [true, false, true]) {
       selected.value = value;
       await tester.pumpAndSettle();
-      // Supersample the one-pixel stadium stroke so its tangent is not dominated
-      // by a platform-dependent antialiased edge at a single logical pixel.
+      // 对一像素宽的胶囊形描边做超采样，避免单个逻辑像素的抗锯齿差异主导切线处的结果。
       await _expectRingPixels(tester, capture, theme,
           colorTolerance: 12, pixelRatio: 3);
     }

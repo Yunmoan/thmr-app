@@ -6,7 +6,7 @@ import '../../core/state/large_screen_settings.dart';
 import '../../core/state/station_provider.dart';
 import '../../core/theme/thmr_theme.dart';
 
-/// Each strip reserves its own space; widgets never cover the track or controls.
+/// 各小组件条带独立预留空间，避免挡住曲目信息和播放控件。
 class LargeScreenWidgetStrip extends StatefulWidget {
   const LargeScreenWidgetStrip(
       {super.key,

@@ -2,7 +2,7 @@ platform :ios, '15.0'
 
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-# THMR uses file_picker for exporting a text document.
+# THMR 的 file_picker 用于导出文本文件。
 Pod::PICKER_MEDIA = false
 Pod::PICKER_AUDIO = false
 

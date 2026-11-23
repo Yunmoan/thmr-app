@@ -29,11 +29,11 @@ xcrun stapler staple "$app"
 python3 tool/macos_app.py verify "$app"
 else
   echo 'Developer ID not configured: macOS artifacts use local signing and are not notarized.'
-  # Replace Xcode-injected entitlements and stale signatures on BOTH slices.
+  # 替换两个架构切片上由 Xcode 注入的 entitlement 和原有签名。
   python3 tool/macos_app.py sign "$app"
 fi
 
-# Both distributions come from the same app, after signing and stapling.
+# 两种分发包从同一个应用生成，打包前已完成签名和公证票据装订。
 ditto -c -k --sequesterRsrc --keepParent "$app" thmr-app-macos-universal.zip
 python3 tool/verify_macos_zip.py thmr-app-macos-universal.zip
 bash tool/package_macos_dmg.sh "$app"

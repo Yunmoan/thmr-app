@@ -4,8 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:thmr_app/core/api/radio_api.dart';
 
-/// Shapes copied from the real `/api/stations/:id/status` payload: nested
-/// JSON objects and a relative cover path.
+/// 模拟 /api/stations/:id/status 的实际结构，包括嵌套 JSON 对象和相对封面路径。
 const _statusJson = {
   'station': {
     'id': 'touhou',
@@ -140,7 +139,7 @@ void main() {
     expect(status.listeners, 3);
     expect(status.current?.trackId, '12345');
     expect(status.current?.title, '当前曲目');
-    // Covers resolve against the selected source, not appConfig.
+    // 封面相对路径以当前选择的播放源为基准解析。
     expect(status.current?.coverUrl,
         'http://127.0.0.1:${server.port}/covers/current.jpg');
     expect(status.previous?.coverUrl,

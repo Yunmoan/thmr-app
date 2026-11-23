@@ -13,7 +13,7 @@ import org.flame_engine.gamepads_android.GamepadsCompatibleActivity;
 import io.flutter.embedding.engine.FlutterEngine;
 import io.flutter.plugin.common.MethodChannel;
 
-/** Flutter bridge for a spectrum of the app's own radio stream. */
+/** Flutter MethodChannel 接入应用自身直播流的频谱。 */
 public class MainActivity extends AudioServiceActivity implements GamepadsCompatibleActivity {
     private final StreamSpectrumDecoder spectrum = new StreamSpectrumDecoder();
     private Function1<? super KeyEvent, Boolean> gamepadKeyHandler;
@@ -85,8 +85,7 @@ public class MainActivity extends AudioServiceActivity implements GamepadsCompat
             return false;
         }
         if (device.getKeyboardType() != InputDevice.KEYBOARD_TYPE_ALPHABETIC) return true;
-        // Composite typing keyboards can advertise joystick sources. Only
-        // claim devices with a supported stick/trigger axis or gamepad button.
+        // 复合键盘也可能声明操纵杆输入源。仅处理具备支持的摇杆轴、扳机轴或手柄按钮的设备。
         int[] axes = {MotionEvent.AXIS_X, MotionEvent.AXIS_Y, MotionEvent.AXIS_Z,
             MotionEvent.AXIS_RX, MotionEvent.AXIS_RY, MotionEvent.AXIS_RZ,
             MotionEvent.AXIS_HAT_X, MotionEvent.AXIS_HAT_Y,

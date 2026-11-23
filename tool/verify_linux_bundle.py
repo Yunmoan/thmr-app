@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a complete portable Linux bundle and optionally its glibc baseline."""
+"""验证完整的 Linux 便携包，可选校验 glibc 兼容基线。"""
 import argparse
 import ctypes
 import hashlib

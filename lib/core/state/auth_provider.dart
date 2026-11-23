@@ -9,12 +9,7 @@ import '../api/thmr_api.dart';
 import '../models/models.dart';
 import 'collection_cache.dart';
 
-/// 管理认证状态，将持久化的会话用于 Bearer 请求。
-/// 注:必须与 SettingsController 用同一套 SharedPreferences(legacy 实例)。
-/// Windows 端 legacy 与 SharedPreferencesAsync 是两个独立缓存实例却读写
-/// 同一个文件,混用会互相整份覆盖(登录 token 曾因此丢失)。
-/// M2 若接入 flutter_secure_storage(Windows 需 VS 组件 "C++ ATL"),
-/// 需把此处整体迁走,不要与 legacy 混写同一键。
+/// 登录状态、当前用户和初始化进度。
 class AuthState {
   final bool initialized;
   final ThmrUser? user;
@@ -47,6 +42,8 @@ class AuthController extends StateNotifier<AuthState> {
     _bootstrap();
   }
 
+  // Windows 上 SharedPreferences 与 SharedPreferencesAsync 共用存储文件。
+  // 会话和设置统一使用 SharedPreferences，避免独立实例以旧快照覆盖新值。
   static const _storageKey = 'thmr_session_token';
   static const _cachedUserKey = 'thmr_cached_user_v1';
   final ThmrApi api;
@@ -122,14 +119,14 @@ class AuthController extends StateNotifier<AuthState> {
         return;
       }
     }
-    // 401 / 无 token → 清除引导重登(会话 TTL 168h)
+    // 会话无效或本地无 token 时，清除本地会话和用户快照。
     await _writeToken(null);
     await _saveCachedUser(null);
     api.token = null;
     state = state.copyWith(initialized: true, clearUser: true);
   }
 
-  /// WebView 登录流程提取到的会话 token(M2 完整接入)。
+  /// 验证 WebView 取得的会话 token，成功后再持久化。
   Future<void> signInWithToken(String token) async {
     final previousToken = await _readToken();
     api.token = token;

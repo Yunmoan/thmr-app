@@ -21,7 +21,7 @@ class LargeScreenState {
   final bool fullScreen;
   final bool busy;
 
-  /// Survives a widget remount while a native change or entrance is in flight.
+  /// 原生切换或入场动画进行时，组件重挂载也会保留该状态。
   final bool contentVisible;
   final String? error;
 }
@@ -33,8 +33,7 @@ final largeScreenProvider =
 final largeScreenRevealRequests = ValueNotifier<int>(0);
 typedef _PresentationTarget = ({bool active, bool? fullScreen});
 
-/// Serialize native changes and keep the latest requested presentation.
-/// Controls stay busy until the incoming surface has finished its entrance.
+/// 串行处理原生窗口切换，并保留最新请求。新界面完成入场前，控件保持忙碌状态。
 class LargeScreenController extends StateNotifier<LargeScreenState> {
   LargeScreenController(this._ref) : super(const LargeScreenState());
 
@@ -132,8 +131,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
   }
 
   Future<void> _setFullScreen(bool fullScreen) async {
-    // AppKit replies when starting its Space transition. GTK is asynchronous
-    // too. Wait for the completion event before restoring normal-page metrics.
+    // AppKit 发起 Space 切换时就会回复，GTK 也异步切换。等待完成事件后再恢复普通页面的布局尺寸。
     final completed = _windows ? null : Completer<void>();
     _nativeFullScreenWaiter = completed;
     _nativeFullScreenTarget = fullScreen;
@@ -151,8 +149,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
   Future<void> _change(_PresentationTarget target) async {
     if (hasMobilePresentation) return _changeMobile(target.active);
     final previous = state;
-    // On Windows, keep the full stage visible until the native window is
-    // concealed. Its content-only fade would expose the backdrop on its own.
+    // Windows 原生窗口隐藏前保留完整的大屏界面，避免仅淡出内容时露出单独的背景。
     final animateSwitch =
         previous.active != target.active && (!_windows || target.active);
     var previousFullScreen = previous.fullScreen;
@@ -182,7 +179,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
         concealed = true;
       }
       if (target.active && !previous.active) {
-        // Freeze the normal shell before any native metrics arrive.
+        // 在收到新的原生窗口尺寸前，先固定普通界面的布局。
         state = LargeScreenState(
             active: true,
             fullScreen: targetFullScreen,
@@ -192,8 +189,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
       }
       if (previousFullScreen != targetFullScreen) {
         await _setFullScreen(targetFullScreen);
-        // Consume restored native metrics while the normal shell is still
-        // retained at its old extent. Reflow it only after this raster fence.
+        // 先接收恢复后的原生窗口尺寸，普通界面暂留原尺寸。等待光栅化确认后再重新布局。
         await _paint(concealed: concealed);
       }
       if (!mounted) return;
@@ -229,9 +225,8 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
         }
       }
     } finally {
-      // The first animation frame establishes its timestamp at opacity zero.
-      // Fence the following frame as well so reveal exposes incoming content,
-      // including on the first entry after native metrics have changed.
+      // 入场动画第一帧以零透明度记录起始时间。再等待下一帧光栅化后显示窗口，
+      // 确保尺寸变化后的首次入场也能直接看到新界面。
       final entrance = mounted && animateSwitch ? _animate(true) : null;
       if (concealed) {
         try {
@@ -243,7 +238,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
         try {
           await _presentation.reveal();
         } catch (error) {
-          // A transient reveal failure must not leave a permanently hidden HWND.
+          // 原生显示短暂失败时继续尝试，避免 HWND 一直隐藏。
           debugPrint('Presentation reveal failed: $error');
           try {
             await _presentation.reveal();

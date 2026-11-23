@@ -1,4 +1,4 @@
-"""Exercise retry decisions against real failing subprocesses."""
+"""用实际失败的子进程验证构建重试条件。"""
 
 from pathlib import Path
 import sys

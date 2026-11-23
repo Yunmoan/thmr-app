@@ -1,4 +1,4 @@
-"""Protect the targeted, idempotent patch for file_picker's Kotlin opt-out."""
+"""验证 file_picker 禁用内置 Kotlin 时的兼容性修补及其幂等性。"""
 import unittest
 
 from patch_android_plugin import fix_file_picker

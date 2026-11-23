@@ -101,7 +101,7 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
   bool get _visible {
     final state = WidgetsBinding.instance.lifecycleState;
     if (state == null || state == AppLifecycleState.resumed) return true;
-    // A desktop window can still be visible while another window has focus.
+    // 桌面窗口失去焦点后仍可能可见。
     return state == AppLifecycleState.inactive &&
         switch (defaultTargetPlatform) {
           TargetPlatform.windows ||
@@ -255,7 +255,7 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
     );
   }
 
-  // A short pattern for settings previews, with no capture or audio playback.
+  // 设置预览使用一段短图样，无需采样或播放音频。
   _Energy _demoEnergy(Duration elapsed) {
     final t = elapsed.inMicroseconds / 1e6;
     return (
@@ -279,8 +279,8 @@ class _LargeScreenMusicVisualState extends State<LargeScreenMusicVisual>
     return _sampleBands;
   }
 
-  // The source returns logarithmic bands. RMS lets a strong kick or cymbal
-  // register without giving a single isolated FFT bin the whole visual range.
+  // 数据源返回对数频带。使用 RMS 反映有明显能量的底鼓或镲片，
+  // 避免仅凭某个孤立的 FFT 频点占满视觉范围。
   double _level(Float32List bands, int first, int end) {
     var squares = 0.0;
     for (var i = first; i < end; i++) {
@@ -399,8 +399,7 @@ class _MusicMotion extends ChangeNotifier {
       mids: _ease(energy.mids, target.mids, seconds, .10, .26),
       treble: _ease(energy.treble, target.treble, seconds, .045, .18),
     );
-    // Smooth against a slower moving bass floor so accents punch through
-    // without making a sustained bass note look like a constant beat.
+    // 用变化较慢的低频基线平滑响应，保留突发的低音重拍，减少持续低音造成的重复触发。
     final transient = ((target.bass - _bassFloor - .035) * 3.4).clamp(0.0, 1.0);
     _bassFloor = _ease(_bassFloor, target.bass, seconds, .84, .46);
     pulse = _ease(pulse, transient, seconds, .045, .22);
@@ -482,7 +481,7 @@ class _MusicVisualPainter extends CustomPainter {
 
   void _paintShader(Canvas canvas, Size size, double style) {
     final shader = this.shader!;
-    // Uniform order matches shaders/large_screen_music.frag.
+    // uniform 的顺序与 shaders/large_screen_music.frag 一致。
     shader
       ..setFloat(0, size.width)
       ..setFloat(1, size.height)
@@ -550,8 +549,7 @@ class _MusicVisualPainter extends CustomPainter {
       themeTint != oldDelegate.themeTint;
 }
 
-/// Symmetric bars use the individual FFT bands, in rising frequency order.
-/// Interpolating the rows of thin strokes keeps the spacing on large displays.
+/// 对称频谱条按频率升序使用各频带的值。在细线行之间插值，使大屏上的间距平滑变化。
 class _MirroredSpectrum {
   _MirroredSpectrum(this.palette, this.intensity);
 
@@ -603,8 +601,7 @@ class _MirroredSpectrum {
   }
 }
 
-/// Draw the glass rims as one mesh with soft, colored edges. The topology stays
-/// fixed, so the raster thread can skip path tessellation and draw only the rims.
+/// 将玻璃边缘绘制为一个带柔和彩边的网格。固定拓扑使光栅线程可直接绘制边缘，省去路径曲面细分。
 class _PrismMesh {
   _PrismMesh(this.palette);
 
@@ -640,7 +637,7 @@ class _PrismMesh {
         final left = start + segment * _bevel.length;
         final right = start + (segment + 1) % _segments * _bevel.length;
         for (var lane = 0; lane < strips; lane++) {
-          // Two triangles connect adjacent radial strips.
+          // 用两个三角形连接相邻的径向条带。
           indices[index++] = left + lane;
           indices[index++] = right + lane;
           indices[index++] = left + lane + 1;

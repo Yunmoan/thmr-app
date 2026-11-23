@@ -8,7 +8,7 @@ import 'spectrum_fft.dart';
 import 'spectrum.dart';
 import 'spectrum_linux_worker.dart';
 
-/// Bundled minimp3 decodes only the app's tokenized loopback radio stream.
+/// 内置 minimp3 仅解码应用生成的、带 token 的 loopback 直播流。
 class LinuxSpectrum implements RetryableSpectrumSource {
   LinuxSpectrum._(this._streamUri, this._library);
   LinuxSpectrum.forTesting(Uri? Function() streamUri, {required String library})
@@ -133,8 +133,7 @@ class LinuxSpectrum implements RetryableSpectrumSource {
   }
 }
 
-/// Keep the command handshake alive when stop races isolate startup. Closing
-/// the event port immediately could otherwise leave a decoder isolate running.
+/// 如果停止请求先于 isolate 启动完成，保留事件端口直到命令端口就绪，确保停止命令能送达解码器。
 class _SpectrumWorker {
   _SpectrumWorker(
       Uri uri,

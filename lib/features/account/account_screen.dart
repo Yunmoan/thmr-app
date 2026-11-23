@@ -24,7 +24,7 @@ import 'radio_source_panel.dart';
 import '../diagnostics/diagnostics_screen.dart';
 import '../large_screen/large_screen_settings_panel.dart';
 
-/// 「我的」:账号(WebView 登录 M2 接入)+ 偏好设置 + 关于。
+/// 「我的」页面集中展示账号、偏好设置和关于信息。
 class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
 
@@ -49,8 +49,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       ThemeMode.system => MediaQuery.platformBrightnessOf(context),
     };
     final asset = ThmrTokens.resolve(targetAccent, brightness).illustration;
-    // Decode before changing ThemeData so image loading does not eat the
-    // first frames of the existing colour/illustration transition.
+    // 先解码背景插画，再切换 ThemeData，避免首次加载打断颜色和插画过渡的开头几帧。
     await precacheImage(AssetImage(asset), context);
     if (!mounted || request != _appearanceRevision) return;
     _pendingMode = null;
@@ -60,8 +59,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         .setAppearance(targetMode, targetAccent);
   }
 
-  /// Keep the login flow on this screen: the signed-out card is replaced as
-  /// soon as authentication succeeds, while this context remains mounted.
+  /// 登录成功时，此页面仍处于挂载状态，其未登录卡片会直接被账号内容替换。
   Future<void> _login(BuildContext context, WidgetRef ref) async {
     final token = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -698,7 +696,7 @@ String _accentLabel(AccentTheme t) => switch (t) {
       AccentTheme.yuka => '幽香 · 苔绿',
     };
 
-/// Nickname editor dialog shared by settings & first-login gate.
+/// 设置和首次登录流程共用的昵称编辑弹窗。
 Future<void> _editNickname(
     BuildContext context, WidgetRef ref, String current) async {
   final controller = TextEditingController(text: current);

@@ -1,9 +1,8 @@
-// Shared audio engine: one media_kit player for the whole app, plus the
-// platform glue that keeps playback alive in the background:
-//   - Android / iOS : audio_service foreground service + notification
-//   - Windows       : SMTC (system media transport controls)
-//   - macOS         : Now Playing info center + remote commands (media keys)
-//   - Linux         : MPRIS over D-Bus
+// 全应用共用一个 media_kit 播放器，各平台接入相应的后台播放和系统媒体控制。
+// - Android / iOS：audio_service。Android 使用前台服务和媒体通知，iOS 接入系统媒体控制。
+// - Windows：SMTC（系统媒体传输控件）。
+// - macOS：Now Playing 信息与系统媒体键。
+// - Linux：通过 D-Bus 接入 MPRIS。
 
 import 'dart:async';
 import 'dart:io' show Directory, File, Platform;
@@ -18,8 +17,7 @@ import '../platform/desktop_window.dart';
 import 'linux_media_controls.dart';
 import 'macos_media_controls.dart';
 
-/// The single player instance shared by the UI controller and the
-/// background handler.
+/// UI 控制器与后台媒体处理器共用的播放器实例。
 final Player enginePlayer = Player(
   configuration: const PlayerConfiguration(
     bufferSize: 8 * 1024 * 1024,
@@ -88,8 +86,7 @@ Future<void> _handleMediaButton(Future<void> Function() action) async {
   }
 }
 
-/// audio_service handler (mobile): exposes play/pause to the notification
-/// and keeps the foreground service alive while playback runs.
+/// 移动端的 audio_service 处理器向系统提供播放和暂停操作，并在 Android 播放期间维持前台服务。
 class ThmrAudioHandler extends BaseAudioHandler {
   ThmrAudioHandler() {
     enginePlayer.stream.playing.listen((playing) {
@@ -140,7 +137,7 @@ class ThmrAudioHandler extends BaseAudioHandler {
     ));
   }
 
-  /// Push the current station track to the notification / lock screen.
+  /// 将当前频道的曲目信息同步到媒体通知或锁屏。
   void updateNowPlaying({
     required String trackId,
     required int startedAtMs,
@@ -234,7 +231,7 @@ Future<void> _initializeSmtc() async {
         rewindEnabled: false,
       ),
     );
-    // System flyout buttons use the same live-stream state machine as the UI.
+    // 系统媒体面板的按钮与界面按钮共用直播流状态机。
     _smtc!.buttonPressStream.listen((button) {
       switch (button) {
         case PressedButton.play:
@@ -254,8 +251,7 @@ Future<void> _initializeSmtc() async {
   }
 }
 
-/// Update the Windows media flyout (title / artist / cover).
-/// Extract a bundled asset to a temp file (SMTC needs a real file path).
+/// 将应用内置资源写入临时文件，供需要实际文件路径的 Windows SMTC 使用。
 Future<String?> extractAssetToFile(String asset, String name) async {
   try {
     final data = await rootBundle.load(asset);
@@ -267,9 +263,11 @@ Future<String?> extractAssetToFile(String asset, String name) async {
   }
 }
 
+// 曲目变化或清空媒体信息会使在途的封面加载结果失效。
 int _metadataSerial = 0;
 Future<String?>? _fallbackArtwork;
 
+/// 将曲名、艺术家和封面同步到 Windows SMTC、macOS Now Playing 或 Linux MPRIS。
 Future<void> updateSystemMediaMetadata({
   required String title,
   required String artist,
@@ -309,7 +307,7 @@ Future<void> updateSystemMediaMetadata({
         'assets/icons/icon-maskable-512.png', 'thmr_media.png'));
     if (serial != _metadataSerial) return;
     final uri = artUri == null ? null : Uri.tryParse(artUri);
-    // The plugin documents HTTPS artwork support. Keep a local fallback.
+    // 插件支持 HTTPS 封面，同时保留本地缺省图，以便远程图源不可用时使用。
     final thumb = uri != null && (uri.scheme == 'https' || uri.scheme == 'http')
         ? artUri
         : fallback;
@@ -449,8 +447,7 @@ Future<void> updateSystemMediaPlayback({
   }
 }
 
-/// Call once before runApp. Wires up whichever background layer the
-/// platform needs; keeps the process alive while audio plays.
+/// 按平台初始化后台播放和系统媒体控制。启动流程在首帧后调用一次，避免等待注册服务影响界面显示。
 Future<void> initBackgroundAudio() async {
   if (kIsWeb) return;
   if (Platform.isAndroid || Platform.isIOS) {

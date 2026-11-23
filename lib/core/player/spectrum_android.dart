@@ -1,5 +1,4 @@
-// Android spectrum from a second decoder of the app's shared radio bytes.
-// This never captures the microphone or other apps' output.
+// Android 频谱通过独立解码器读取应用共用的直播流，采样范围仅限此流。
 
 import 'dart:typed_data';
 

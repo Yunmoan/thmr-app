@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:thmr_app/core/player/spectrum_ffi.dart';
 
-// Model a slow synchronous native API on the production isolate transport.
+// 在正式 isolate 通道上模拟耗时的同步原生 API。
 void _slowCapture(List<Object> args) {
   final output = args[0] as SendPort;
   final input = ReceivePort();

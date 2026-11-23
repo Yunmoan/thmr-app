@@ -1,5 +1,4 @@
-// Listen screen (home). Wide layout mirrors web home:
-// hero banner on top, player column left, history/queue column right.
+// 收听页宽屏布局参考 Web 首页，顶部显示横幅，下方左侧是播放器，右侧是播放状态和队列。
 
 import 'package:flutter/material.dart';
 import '../../core/theme/thmr_motion.dart';
@@ -42,8 +41,7 @@ class _ListenScreenState extends ConsumerState<ListenScreen> {
     final switching =
         info == null && station.initialLoading && _lastLoaded != null;
     if (info != null) _lastLoaded = station;
-    // A channel switch keeps the existing surface and its scroll positions.
-    // The real provider stays unchanged, so playback still waits for new data.
+    // 换台期间保留原界面及滚动位置。播放仍监听实际频道状态，等新数据到达后再更新。
     final display = switching
         ? StationUiState(
             status: _lastLoaded!.status, updatedAt: _lastLoaded!.updatedAt)
@@ -95,7 +93,7 @@ class _ListenScreenState extends ConsumerState<ListenScreen> {
   }
 }
 
-// ---------------- wide (>= 980px): hero + two columns ----------------
+// ---------------- 宽屏（≥980 逻辑像素），横幅及两列内容 ----------------
 
 class _WideLayout extends ConsumerWidget {
   const _WideLayout({
@@ -222,7 +220,7 @@ class _DesktopControls extends ConsumerWidget {
   }
 }
 
-/// Hero banner, mirrors web home hero section.
+/// 顶部横幅，布局参考 Web 首页。
 class _Hero extends StatelessWidget {
   const _Hero({
     required this.status,
@@ -300,7 +298,7 @@ class _Hero extends StatelessWidget {
   }
 }
 
-// ---------------- narrow (< 980px): single column ----------------
+// ---------------- 窄屏（<980 逻辑像素），单列内容 ----------------
 
 class _NarrowLayout extends ConsumerWidget {
   const _NarrowLayout({
@@ -450,8 +448,7 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-/// Keep pending channel data out of focus, hit testing and announcements while
-/// retaining the same rendered subtree until the new status is ready.
+/// 新频道状态就绪前暂留原渲染子树，并屏蔽这部分内容的焦点、指针命中及无障碍播报。
 class _ChannelSurface extends StatelessWidget {
   const _ChannelSurface({required this.switching, required this.child});
 

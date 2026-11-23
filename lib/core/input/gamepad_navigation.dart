@@ -4,8 +4,8 @@ import 'package:gamepads/gamepads.dart';
 
 import 'app_commands.dart';
 
-/// Converts normalized hardware state into discrete UI commands. Only
-/// navigation/scrolling repeat; reconnects and window deactivation clear holds.
+/// 将归一化的手柄状态转换为离散 UI 命令。仅导航和滚动支持长按重复，
+/// 设备重连或窗口失焦会清除长按状态。
 class GamepadNavigation {
   GamepadNavigation(this.onCommand);
   final void Function(AppCommand) onCommand;

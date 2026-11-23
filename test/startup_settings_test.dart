@@ -13,8 +13,7 @@ import 'package:thmr_app/core/theme/thmr_theme.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
-    // These assertions cover theme identity, not glyph rendering. Use bundled
-    // font bytes so deferred font loading never relies on network or disk cache.
+    // 测试检查主题身份。使用内置字体字节，确保延迟加载无需网络或磁盘缓存。
     final font = await rootBundle.load('fonts/MaterialIcons-Regular.otf');
     final assets = <String, Object>{
       for (final weight in [

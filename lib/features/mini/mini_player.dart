@@ -1,7 +1,6 @@
-// Desktop mini player (Windows): compact always-on-top window.
+// Windows 桌面迷你播放器，占用较小的置顶窗口。
 //
-// The main shell stays mounted while mini mode is active (see ThmrApp
-// builder) — only the visible layer swaps, so tab/scroll state survives.
+// 迷你模式下主界面保持挂载（见 ThmrApp.builder）。只切换可见层，保留标签页和滚动状态。
 
 import 'dart:async';
 import 'dart:io' show Platform;
@@ -24,7 +23,7 @@ import '../../shared/widgets/volume_slider.dart';
 import '../../shared/widgets/volume_wheel_control.dart';
 import '../../shared/widgets/focus_outline.dart';
 
-/// Three selectable mini window sizes in logical pixels.
+/// 三个可选迷你窗口尺寸，以逻辑像素为单位。
 const Size kMiniSmallWindowSize = Size(320, 96);
 const Size kMiniWindowSize = Size(344, 112);
 const Size kMiniLargeWindowSize = Size(384, 132);
@@ -55,16 +54,16 @@ MiniPlayerSizePreset _miniPresetForWidth(double width) => width < 332
 double miniSummaryHeight(TextScaler textScaler) =>
     (textScaler.scale(34) + 12).clamp(46.0, double.infinity);
 
-/// 主窗口最小尺寸(与 main.dart 的 WindowOptions 保持一致)。
+/// 退出迷你模式时恢复的最小窗口尺寸，与 desktop_window.dart 的 WindowOptions 对应。
 const Size kMainMinWindowSize = Size(430, 660);
 
 /// 是否处于迷你模式。
 final miniPlayerProvider = StateProvider<bool>((ref) => false);
 
-/// Navigation input can reveal an edge-tucked player before moving focus.
+/// 迷你播放器缩到屏幕边缘时，导航输入先将其展开，再移动焦点。
 final miniRevealRequests = ValueNotifier<int>(0);
 
-/// Prevent overlapping mode changes and edge motion during a presentation.
+/// 窗口切换期间阻止重复切换及贴边移动。
 final miniTransitionBusyProvider = StateProvider<bool>((ref) => false);
 
 /// 进入迷你模式前记录的主窗口边界(逻辑像素)。
@@ -80,9 +79,7 @@ Future<void> enterMiniMode(WidgetRef ref, TextScaler textScaler) =>
 Future<void> exitMiniMode(WidgetRef ref) =>
     ref.read(miniModeTransitionProvider).change(false, TextScaler.noScaling);
 
-/// Owns the whole transition, rather than racing a Flutter animation against
-/// independent native window_manager calls. The provider Ref outlives the mini
-/// widget that is removed when returning to the main UI.
+/// 统一协调 Flutter 动画和原生窗口调用。Provider 的 Ref 在迷你组件被移除后仍可继续完成切换。
 class MiniModeTransition {
   MiniModeTransition(this._ref);
 
@@ -119,8 +116,8 @@ class MiniModeTransition {
     await windowManager.setResizable(true);
     await windowManager.setMinimumSize(kMainMinWindowSize);
     await windowManager.setBounds(bounds);
-    // window_manager.maximize/unmaximize post a WM_SYSCOMMAND and return
-    // before it runs. Use the synchronous native operation under the cloak.
+    // window_manager 的最大化和还原只投递 WM_SYSCOMMAND。DWM 隐藏窗口期间使用同步原生调用，
+    // 确认窗口状态已更新。
     if (maximized) await _presentation.setMaximized(true);
   }
 
@@ -130,7 +127,7 @@ class MiniModeTransition {
     var wasMaximized = false;
     try {
       if (!mini) await animateMini?.call(false);
-      // No UI, geometry or style change is allowed before this completes.
+      // 等待 DWM 确认窗口已隐藏后，再修改界面、尺寸或样式。
       await _presentation.conceal();
       concealed = true;
       wasMaximized = await windowManager.isMaximized();
@@ -140,7 +137,7 @@ class MiniModeTransition {
         _ref.read(miniSavedBoundsProvider.notifier).state = previousBounds;
         _ref.read(_miniWasMaximizedProvider.notifier).state = wasMaximized;
         _ref.read(miniPlayerProvider.notifier).state = true;
-        // Keep the main tree offstage before native resize delivers new metrics.
+        // 原生调整窗口尺寸前先隐藏主界面，避免新尺寸触发可见重排。
         await WidgetsBinding.instance.endOfFrame;
         await _configureMini(miniWindowSize(textScaler,
             preset: _ref.read(miniPlayerSizeProvider)));
@@ -158,8 +155,7 @@ class MiniModeTransition {
       if (mini) await animateMini?.call(true);
       await windowManager.focus();
     } catch (error, stack) {
-      // Restore the previous mode before revealing after a plugin/fence error;
-      // in particular a failed raster fence must not strand a cloaked HWND.
+      // 插件调用或光栅化等待失败时，先恢复上一模式再显示窗口，避免 HWND 一直被 DWM 隐藏。
       if (concealed && previousBounds != null) {
         try {
           if (mini) {
@@ -185,8 +181,7 @@ class MiniModeTransition {
   }
 }
 
-/// A single animation supplies both opacity and scale; transition code awaits
-/// its actual completion, including reduced motion, instead of sleeping 180ms.
+/// 透明度和缩放共用一个动画。切换等待实际动画完成，并兼容减少动态效果时直接就位。
 class MiniPlayerTransition extends ConsumerStatefulWidget {
   const MiniPlayerTransition(
       {super.key, this.child = const MiniPlayerWindow()});
@@ -227,7 +222,7 @@ class _MiniPlayerTransitionState extends ConsumerState<MiniPlayerTransition>
     try {
       await (visible ? _animation.forward() : _animation.reverse()).orCancel;
     } on TickerCanceled {
-      // Disposal removes the mini surface, which also completes its exit.
+      // 迷你界面移除时，也解除退出动画的等待。
     }
   }
 
@@ -260,7 +255,7 @@ class _MiniPlayerTransitionState extends ConsumerState<MiniPlayerTransition>
   }
 }
 
-/// 迷你播放窗:全区域可拖动,双击还原,置顶显示。
+/// 置顶的迷你播放器。拖动播放器背景可移动窗口，双击背景返回普通模式。
 enum MiniEdge { top, left, right }
 
 const _miniHiddenExtent = 3.0;
@@ -315,8 +310,7 @@ MiniEdgePlacement? miniEdgePlacement(MiniWindowGeometry geometry) {
   ]) {
     if (gap > threshold) continue;
     final placement = MiniEdgePlacement(edge, expanded, window.size, scale);
-    // The hidden mode travels furthest. Include the drag endpoint and the
-    // reveal position as well, so all hide modes share a safe path.
+    // 完全隐藏模式移动最远。安全范围还需包含拖动终点和展开位置，供三种隐藏方式共用。
     final swept = window
         .expandToInclude(expanded & window.size)
         .expandToInclude(placement.tuckedAt(_miniHiddenExtent) & window.size);
@@ -327,7 +321,7 @@ MiniEdgePlacement? miniEdgePlacement(MiniWindowGeometry geometry) {
   return null;
 }
 
-/// Select the display containing the largest part of the mini window.
+/// 选择与迷你窗口重叠面积最大的显示器。
 WindowDisplay? _miniDisplayForWindow(
     Rect window, List<WindowDisplay> displays) {
   WindowDisplay? best;
@@ -354,7 +348,7 @@ WindowDisplay? _miniDisplayForWindow(
 class MiniPlayerWindow extends ConsumerStatefulWidget {
   const MiniPlayerWindow({super.key, this.stationState, this.playbackState});
 
-  /// Optional snapshots allow the fixed-size layout to be rendered in tests.
+  /// 测试可传入可选数据快照来渲染固定尺寸的布局。
   final StationUiState? stationState;
   final PlaybackState? playbackState;
 
@@ -475,8 +469,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     final done = _positionDone = Completer<void>();
     _settingPosition = true;
     try {
-      // A reversed animation starts from the last applied native position.
-      // Finish the one outstanding write before sampling that position.
+      // 反向动画从最近实际应用的位置开始。读取位置前先等在途的原生位置更新完成。
       await _positionWrite;
       if (!mounted || _transitioning || serial != _positionSerial) return;
       final start = (await _presentation.windowBoundsInPixels()).topLeft;
@@ -517,8 +510,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     final serial = _positionSerial;
     final position = _pendingPosition!;
     _pendingPosition = null;
-    // Only one platform call may be in flight. If it takes longer than a
-    // frame, replace intermediate samples with the latest frame's position.
+    // 同一时间最多发出一个平台调用。调用跨越多帧时，仅保留最新一帧的位置。
     _positionWrite =
         _presentation.setWindowPositionInPixels(position).then((_) {
       if (!mounted || serial != _positionSerial || _transitioning) return;
@@ -527,8 +519,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
       if (placement == null || target == null) return;
       final travel = target - placement.expanded;
       final moved = position - placement.expanded;
-      // Tie the surface to applied window positions, not just elapsed time:
-      // a slow native move must not leave an already-hidden Flutter body.
+      // 迷你界面随实际生效的窗口位置调整。原生移动较慢时，保留仍露在屏幕内的部分。
       _edgeProgress.value = travel.distanceSquared == 0
           ? 0
           : ((moved.dx * travel.dx + moved.dy * travel.dy) /
@@ -554,8 +545,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
     if (mode == MiniEdgeHideMode.compact &&
         placement != null &&
         placement.edge == MiniEdge.top) {
-      // Match the physical height exposed by the HWND when the summary is
-      // bottom-aligned in the Flutter view.
+      // 摘要贴在 Flutter 视图底边时，使用 HWND 实际露出的物理高度。
       return placement._pixelAlignedExtent(
         miniSummaryHeight(MediaQuery.textScalerOf(context)),
       );
@@ -643,7 +633,7 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
       );
 
   Widget _edgeTab(Widget child) => TweenAnimationBuilder<double>(
-        // Keep the fade's state when removing the preceding player body.
+        // 移除前面的播放器主体时，保留淡入淡出动画的状态。
         key: const ValueKey('mini-edge-tab'),
         tween: Tween(begin: 0, end: _tucked ? 1 : 0),
         duration: ThmrMotion.quickOf(context),
@@ -728,9 +718,8 @@ class _MiniPlayerWindowState extends ConsumerState<MiniPlayerWindow>
                   playbackState: widget.playbackState,
                 ),
                 builder: (context, progress, child) {
-                  // The native window retains room for the summary/hover strip.
-                  // Slide the body through that last extent too, so removing it
-                  // at rest cannot erase a still-visible slice of the player.
+                  // 原生窗口为摘要或悬停触发条预留空间。主体也要滑过这段距离，
+                  // 避免动画结束时仍可见的部分突然消失。
                   final remaining = visibleExtent * progress;
                   final offset = switch (edge) {
                     MiniEdge.top => Offset(0, -remaining),
@@ -1091,7 +1080,7 @@ class _MiniPlayerBody extends ConsumerWidget {
   }
 }
 
-/// Shows artist and listener count in one line with the shared short fade.
+/// 用一行显示艺术家和收听人数，并使用共用的短淡入淡出动画。
 class _MiniRotatingSubtitle extends StatefulWidget {
   const _MiniRotatingSubtitle({
     required this.artist,
@@ -1215,7 +1204,7 @@ class _MiniCaptionButton extends StatelessWidget {
   }
 }
 
-/// 播放/暂停 + 静音 + 音量滑杆。全部窄订阅,整窗不随秒级 tick 重建。
+/// 播放、静音和音量控件分别订阅需要的字段，避免秒级计时重建整个迷你窗口。
 class _MiniControls extends ConsumerWidget {
   const _MiniControls({this.playbackState});
 

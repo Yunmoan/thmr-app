@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  # file_picker's CocoaPods configuration limits this app to document export.
+  # iOS 上的 file_picker 仅用于文档导出，由 Podfile 关闭媒体和音频选择器。
   FLUTTER_SWIFT_PACKAGE_MANAGER: 'false'
 
 jobs:

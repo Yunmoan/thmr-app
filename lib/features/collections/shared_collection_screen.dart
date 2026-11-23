@@ -1,5 +1,4 @@
-// Public shared collection viewer (web /share/:slug equivalent).
-// 404 = unknown slug, 410 = share expired.
+// 公开收藏夹浏览页，对应 Web 端 /share/:slug。HTTP 404 表示找不到分享，410 表示分享已过期。
 
 import 'dart:io' show Platform;
 
@@ -22,7 +21,7 @@ import '../../shared/widgets/thmr_panel.dart';
 import '../../shared/widgets/track_cover.dart';
 import '../../shared/widgets/network_notice.dart';
 
-/// Accept an official share URL or a bare share code, never an arbitrary URL.
+/// 接受本站的分享 URL 或单独的分享码。
 String? parseShareSlug(String input) {
   final raw = input.trim();
   if (raw.isEmpty) return null;
@@ -50,7 +49,7 @@ String? parseShareSlug(String input) {
 class SharedCollectionScreen extends ConsumerStatefulWidget {
   const SharedCollectionScreen({super.key, required this.input});
 
-  /// Raw share link or bare slug.
+  /// 用户输入的原始分享链接或分享码。
   final String input;
 
   @override

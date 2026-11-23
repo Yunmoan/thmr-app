@@ -162,7 +162,8 @@ jobs:
         if: hashFiles('CHANGELOG.md') == ''
         uses: actions/checkout@v7
         with:
-          # The first changelog includes notes for the preceding release tag.
+          # 当源提交尚无 CHANGELOG.md 时，取仓库最早的一份更新日志，
+          # 其中也记录了前一个发布标签的变更。
           ref: 304e6349056a1886c1169b36530853b2211d62e5
           path: .release-notes
           sparse-checkout: CHANGELOG.md

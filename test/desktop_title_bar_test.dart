@@ -35,7 +35,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    // Match the app's builder: the title bar is outside Navigator/Overlay.
+    // 复现应用的构建层级，标题栏位于 Navigator 和 Overlay 之外。
     await tester.pumpWidget(MaterialApp(
       builder: (context, child) => Align(
         alignment: Alignment.topCenter,

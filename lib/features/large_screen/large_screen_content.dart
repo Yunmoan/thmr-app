@@ -107,7 +107,7 @@ class LargeScreenContent extends StatelessWidget {
       );
     }
 
-    // Keep the header, focus nodes and queue alive when framing changes.
+    // 切换画面布局时，保留页眉、焦点节点和播放队列的状态。
     return BackdropGroup(
       child: Center(
         child: ConstrainedBox(
@@ -579,7 +579,8 @@ class _TrackInfo extends StatelessWidget {
                         const SizedBox(height: 26),
                         progress,
                       ],
-                      // @Aoralsfout: 始终加载message框，无信息使用空字符串，确保更新message不更新布局，维持视觉稳定
+                      // @Aoralsfout：始终保留消息框，无消息时使用空字符串，
+                      // 避免消息变化引发布局跳动。
                       const SizedBox(height: 12),
                       Text(message ?? '', style: messageStyle),
                     ],

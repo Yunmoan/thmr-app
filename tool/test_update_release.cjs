@@ -61,7 +61,7 @@ test('signed payload carries the version and build; macOS updates keep ZIP compa
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   for (const name of ['thmr-app-windows-x64.zip', 'thmr-app-macos-universal.zip',
     'thmr-app-linux-x64.tar.gz', 'thmr-app-android.apk']) fs.writeFileSync(path.join(directory, name), name);
-  // The human installer must never replace the updater ZIP in the signed manifest.
+  // 面向用户的安装器与自动更新 ZIP 分别分发。签名清单应引用自动更新 ZIP。
   fs.writeFileSync(path.join(directory, 'thmr-app-macos-universal.dmg'), 'installer');
   const { privateKey } = crypto.generateKeyPairSync('ed25519');
   const notesFile = path.join(directory, 'notes.txt');

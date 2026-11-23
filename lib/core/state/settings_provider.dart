@@ -17,13 +17,12 @@ enum CloseAction {
   tray,
 }
 
-/// Behavior after the mini player reaches a display edge.
+/// 迷你播放器靠近屏幕边缘后的隐藏方式。
 enum MiniEdgeHideMode { compact, tab, hidden }
 
 enum MiniPlayerSizePreset { small, medium, large }
 
-/// Kept separate from AppSettings so adding a size choice does not alter its
-/// const object layout during development hot reload.
+/// 单独管理和持久化迷你播放器的尺寸预设。
 class MiniPlayerSizeController extends StateNotifier<MiniPlayerSizePreset> {
   MiniPlayerSizeController() : super(MiniPlayerSizePreset.medium) {
     _load();
@@ -52,7 +51,7 @@ final miniPlayerSizeProvider =
     StateNotifierProvider<MiniPlayerSizeController, MiniPlayerSizePreset>(
         (ref) => MiniPlayerSizeController());
 
-/// 用户偏好:主题模式 + 按 station 隔离的码率选择(Web 端对齐行为)。
+/// 应用偏好，包括外观、播放源、每个频道的码率、启动行为和桌面窗口设置。
 class AppSettings {
   final ThemeMode themeMode;
   final Map<String, String> bitrateByStation;
@@ -109,7 +108,7 @@ class SettingsController extends StateNotifier<AppSettings> {
     ready = _load();
   }
 
-  /// Startup waits for persisted preferences before building the first UI.
+  /// 关闭窗口按钮的行为，仅桌面端使用。
   late final Future<void> ready;
 
   int _revision = 0;
@@ -189,7 +188,7 @@ class SettingsController extends StateNotifier<AppSettings> {
     await prefs.setString('radioSource', source.name);
   }
 
-  /// 记住关闭按钮行为(「不再提醒」时写入)。
+  /// 记住用户在关闭确认框或设置页中选择的关闭行为。
   Future<void> setCloseAction(CloseAction action) async {
     _revision++;
     state = state.copyWith(closeAction: action);

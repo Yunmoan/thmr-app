@@ -1,4 +1,4 @@
-"""Retry a build only for transient dependency/network failures."""
+"""仅在识别到暂时性的依赖下载或网络错误时重试构建。"""
 
 import argparse
 import re

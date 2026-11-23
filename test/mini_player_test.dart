@@ -73,8 +73,7 @@ void main() {
     expect(hides, 0);
     expect(find.text('暂无播放'), findsNothing);
 
-    // A second launch must also expose a mini player tucked off screen, even
-    // when its HWND was already visible and receives no new "show" event.
+    // 再次启动时，即使 HWND 已可见且未收到新显示事件，也应展开缩在屏幕外的迷你播放器。
     await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
       miniPresentationChannel.name,
       miniPresentationChannel.codec
@@ -369,7 +368,7 @@ void main() {
         await tester.pumpWidget(ProviderScope(
           child: MaterialApp(
             theme: ThmrTheme.light(),
-            // The production mini player is built outside Navigator/Overlay.
+            // 正式应用的迷你播放器构建在 Navigator 和 Overlay 之外。
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(context).copyWith(
                 textScaler: TextScaler.linear(textScale),

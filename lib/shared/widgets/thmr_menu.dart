@@ -85,7 +85,7 @@ class ThmrMenuButton<T> extends ConsumerWidget {
   }
 }
 
-/// Opens the same menu from an existing custom control.
+/// 从现有自定义控件打开同一套菜单。
 Future<T?> showThmrMenu<T>({
   required BuildContext context,
   required WidgetRef ref,

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'thmr_panel.dart';
 
-/// Shared geometry for the loaded player and its skeleton.
+/// 已加载播放器与其骨架屏共用的布局尺寸。
 class PlayerPanelLayout extends StatelessWidget {
   const PlayerPanelLayout(
       {super.key,

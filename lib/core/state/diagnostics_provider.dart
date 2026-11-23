@@ -30,7 +30,7 @@ class DiagnosticsController extends StateNotifier<DiagnosticsSnapshot> {
         try {
           installed = await version().timeout(const Duration(seconds: 3));
         } catch (_) {
-          /* Environment information remains useful without a version. */
+          /* 版本读取失败时，仍可报告环境信息。 */
         }
         final values = await service
             .environment(installed)

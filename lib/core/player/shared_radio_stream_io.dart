@@ -5,9 +5,8 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
-/// Relays one upstream radio connection to the player and a local spectrum
-/// decoder. Both consumers connect only to loopback; the radio server receives
-/// a single request. The short tail helps the decoder recognize MP3 frames.
+/// 播放器和本地频谱解码器共用一条上游直播连接，两者从 loopback 读取数据。
+/// 中继保留最近一小段字节供新订阅者识别 MP3 帧。
 class SharedRadioStream {
   static const _maxTailBytes = 256 * 1024;
 
@@ -138,8 +137,7 @@ class SharedRadioStream {
         }
       }
     } catch (_) {
-      // Closing the local responses makes the player's existing reconnect
-      // logic start a fresh relay session.
+      // 上游中断后关闭本地响应，由播放器原有的重连逻辑开启新的中继会话。
     } finally {
       if (generation == _generation) {
         for (final response in _consumers) {

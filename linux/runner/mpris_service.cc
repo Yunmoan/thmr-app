@@ -146,7 +146,7 @@ void MprisService::Method(const char* interface, const char* name,
                                           "This player only plays live radio");
     return;
   }
-  // Seeking, track navigation and Quit have no effect, as advertised.
+  // 声明不支持的定位、切歌和退出命令不执行任何操作。
   g_dbus_method_invocation_return_value(invocation, nullptr);
 }
 

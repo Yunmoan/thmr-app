@@ -10,7 +10,7 @@ build/
 .idea/
 *.iml
 *.log
-# Widget Preview related
+# Widget Preview 生成文件
 .widget_preview/
 __pycache__/
 node_modules/

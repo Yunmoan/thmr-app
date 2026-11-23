@@ -3,8 +3,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
-/// A failed request is not always a lost connection: HTTP errors are handled
-/// separately so stale cache cannot hide authentication or server errors.
+/// 判断是否为连接或超时错误。HTTP 响应错误由调用方单独处理，避免把服务端响应误判为离线。
 bool isNetworkFailure(Object error) {
   if (error is SocketException || error is TimeoutException) return true;
   if (error is DioException) {

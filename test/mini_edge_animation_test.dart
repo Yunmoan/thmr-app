@@ -30,7 +30,7 @@ void main() {
     expect(harness.movePositions, isEmpty);
     expect(body, findsOneWidget);
 
-    // 24 physical pixels from the right edge is within 18 logical pixels.
+    // 距右边缘 24 个物理像素，在 18 个逻辑像素的阈值内。
     harness.position = const Offset(3940, 180);
     harness.listener.onWindowMoved();
     await harness.advance(420);
@@ -204,8 +204,7 @@ void main() {
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: const Offset(340, 55));
     await harness.advance(48);
-    // Leave, allow a tuck to start, then reverse it while a slow native
-    // position write is still in flight.
+    // 移开指针使窗口开始收起，在较慢的原生位置写入尚未返回时反转动画。
     await mouse.moveTo(const Offset(500, 200));
     await harness.advance(488);
     expect(harness.pendingMoves, 1);

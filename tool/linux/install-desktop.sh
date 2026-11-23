@@ -7,7 +7,7 @@ case "$app_dir" in *$'\n'*|*$'\r'*|*$'\t'*) printf '%s\n' '安装路径不能包
 [ -x "$app_dir/thmr" ] && [ -f "$app_dir/data/flutter_assets/assets/icons/icon-512.png" ] || {
   printf '%s\n' '请从完整的 THMR bundle 目录运行此脚本。' >&2; exit 1;
 }
-# Escape both the Exec argument syntax and the desktop-entry string layer.
+# 分别转义 Exec 参数和 Desktop Entry 字符串这两层语法。
 quoted=${app_dir//\\/\\\\}
 quoted=${quoted//\"/\\\"}
 quoted=${quoted//\$/\\\$}

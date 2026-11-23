@@ -1,5 +1,5 @@
-// Real HWND, fullscreen, raster-fence and retained-page checks.
-// Run instructions are in docs/development/verification.md.
+// 检查真实 HWND、全屏、光栅化同步与页面状态保留。
+// 运行步骤见 docs/development/verification.md。
 import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -492,8 +492,8 @@ Future<void> _checkVisibleStage(WidgetsBinding binding) async {
 }
 
 Never _exitProbe(int code) {
-  // Match the existing Windows native probe: avoid registered media DLL hooks
-  // blocking ExitProcess after the successful checks, even without audio.
+  // 沿用 Windows 进程退出逻辑。即使未播放音频，已注册的媒体 DLL 回调也可能在检查成功后阻塞
+  // ExitProcess。
   final kernel = ffi.DynamicLibrary.open('kernel32.dll');
   final current = kernel.lookupFunction<ffi.Pointer<ffi.Void> Function(),
       ffi.Pointer<ffi.Void> Function()>('GetCurrentProcess');

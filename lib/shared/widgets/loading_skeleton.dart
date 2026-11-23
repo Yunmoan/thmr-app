@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/thmr_theme.dart';
 import 'thmr_panel.dart';
 
-/// Static placeholders: no perpetual animation, including reduced motion.
+/// 使用静态占位内容，无需持续播放动画。
 class SkeletonBlock extends StatelessWidget {
   const SkeletonBlock({super.key, this.width, required this.height});
   final double? width;
@@ -50,7 +50,7 @@ class SkeletonText extends StatelessWidget {
   }
 }
 
-/// Match the cover, typography, padding and separation of list rows.
+/// 沿用列表条目的封面尺寸、排版、内边距和分隔间距。
 class TrackListSkeleton extends StatelessWidget {
   const TrackListSkeleton(
       {super.key,

@@ -24,7 +24,7 @@ void main() {
       final spectrum = AdaptiveSpectrum();
       final frame = bandwidth(cutoff);
       feed(spectrum, frame, 0, 50);
-      expect(spectrum.upperHz, 24000); // no contraction for a short passage
+      expect(spectrum.upperHz, 24000); // 短暂的段落不足以触发带宽收缩
       feed(spectrum, frame, 51, 180);
       expect(spectrum.upperHz, closeTo(cutoff * 1.15, 150));
       for (final count in [28, 64, 110]) {
@@ -90,7 +90,7 @@ void main() {
       () {
     final spectrum = AdaptiveSpectrum();
     final frame = bandwidth(8000);
-    frame[950] = 0.1; // isolated spike above the useful bandwidth
+    frame[950] = 0.1; // 有效带宽之外的孤立峰值
     feed(spectrum, frame, 0, 180);
     expect(spectrum.upperHz, lessThan(9500));
     final bass = AdaptiveSpectrum();

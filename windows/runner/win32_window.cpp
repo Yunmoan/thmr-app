@@ -8,38 +8,34 @@
 
 namespace {
 
-/// Window attribute that enables dark mode window decorations.
+/// 控制窗口装饰是否使用深色样式的 DWM 属性。
 ///
-/// Redefined in case the developer's machine has a Windows SDK older than
-/// version 10.0.22000.0.
-/// See: https://docs.microsoft.com/windows/win32/api/dwmapi/ne-dwmapi-dwmwindowattribute
+/// 为早于 10.0.22000.0 的 Windows SDK 提供兼容定义。参见
+/// https://docs.microsoft.com/windows/win32/api/dwmapi/ne-dwmapi-dwmwindowattribute
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
 
 constexpr const wchar_t* kWindowClassName = kThmrWindowClass;
 
-/// Registry key for app theme preference.
+/// 应用主题偏好的注册表位置。
 ///
-/// A value of 0 indicates apps should use dark mode. A non-zero or missing
-/// value indicates apps should use light mode.
+/// 值为 0 时使用深色窗口装饰，非零时使用浅色。读取失败时保留窗口的当前设置。
 constexpr const wchar_t kGetPreferredBrightnessRegKey[] =
   L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
 constexpr const wchar_t kGetPreferredBrightnessRegValue[] = L"AppsUseLightTheme";
 
-// The number of Win32Window objects that currently exist.
+// 当前存活的 Win32Window 实例数。
 static int g_active_window_count = 0;
 
 using EnableNonClientDpiScaling = BOOL __stdcall(HWND hwnd);
 
-// Scale helper to convert logical scaler values to physical using passed in
-// scale factor
+// 用传入的 DPI 缩放系数将逻辑数值转换为物理像素。
 int Scale(int source, double scale_factor) {
   return static_cast<int>(source * scale_factor);
 }
 
-// Dynamically loads the |EnableNonClientDpiScaling| from the User32 module.
-// This API is only needed for PerMonitor V1 awareness mode.
+// 从 User32 动态加载 EnableNonClientDpiScaling，供 PerMonitor V1 感知模式使用。
 void EnableFullDpiSupportIfAvailable(HWND hwnd) {
   HMODULE user32_module = LoadLibraryA("User32.dll");
   if (!user32_module) {
@@ -56,12 +52,12 @@ void EnableFullDpiSupportIfAvailable(HWND hwnd) {
 
 }  // namespace
 
-// Manages the Win32Window's window class registration.
+// 管理 Win32Window 的窗口类注册。
 class WindowClassRegistrar {
  public:
   ~WindowClassRegistrar() = default;
 
-  // Returns the singleton registrar instance.
+  // 返回注册器的单例。
   static WindowClassRegistrar* GetInstance() {
     if (!instance_) {
       instance_ = new WindowClassRegistrar();
@@ -69,12 +65,10 @@ class WindowClassRegistrar {
     return instance_;
   }
 
-  // Returns the name of the window class, registering the class if it hasn't
-  // previously been registered.
+  // 返回窗口类名称，首次调用时先注册窗口类。
   const wchar_t* GetWindowClass();
 
-  // Unregisters the window class. Should only be called if there are no
-  // instances of the window.
+  // 注销窗口类，仅在不存在窗口实例时调用。
   void UnregisterWindowClass();
 
  private:
@@ -154,7 +148,6 @@ bool Win32Window::Show() {
   return ShowWindow(window_handle_, SW_SHOWNORMAL);
 }
 
-// static
 LRESULT CALLBACK Win32Window::WndProc(HWND const window,
                                       UINT const message,
                                       WPARAM const wparam,
@@ -181,7 +174,7 @@ Win32Window::MessageHandler(HWND hwnd,
                             LPARAM const lparam) noexcept {
   switch (message) {
     case WM_GETMINMAXINFO: {
-      // Keep the window from being resized below a usable minimum.
+      // 限制窗口可调整到的最小尺寸。
       auto* mmi = reinterpret_cast<MINMAXINFO*>(lparam);
       mmi->ptMinTrackSize.x = 430;
       mmi->ptMinTrackSize.y = 660;
@@ -209,7 +202,7 @@ Win32Window::MessageHandler(HWND hwnd,
     case WM_SIZE: {
       RECT rect = GetClientArea();
       if (child_content_ != nullptr) {
-        // Size and position the child window.
+        // 使子窗口填满客户区。
         MoveWindow(child_content_, rect.left, rect.top, rect.right - rect.left,
                    rect.bottom - rect.top, TRUE);
       }
@@ -273,12 +266,12 @@ void Win32Window::SetQuitOnClose(bool quit_on_close) {
 }
 
 bool Win32Window::OnCreate() {
-  // No-op; provided for subclasses.
+  // 默认初始化成功，子类可覆盖以完成额外初始化。
   return true;
 }
 
 void Win32Window::OnDestroy() {
-  // No-op; provided for subclasses.
+  // 默认无需清理，子类可覆盖以释放自身资源。
 }
 
 void Win32Window::UpdateTheme(HWND const window) {

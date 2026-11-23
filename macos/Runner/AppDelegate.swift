@@ -7,14 +7,13 @@ class AppDelegate: FlutterAppDelegate {
   private static var instanceLock: Int32 = -1
   private static var activationObserver: NSObjectProtocol?
 
-  // Called before creating the Flutter engine, including launches that bypass
-  // Launch Services (for example running the executable directly).
+  // 在创建 Flutter 引擎前处理单实例，包括直接运行可执行文件等绕过 Launch Services 的情况。
   static func acquireSingleInstance() {
     guard instanceLock == -1 else { return }
     guard let identifier = Bundle.main.bundleIdentifier else { exit(EXIT_FAILURE) }
     let notification = Notification.Name(identifier + ".activate")
     let center = DistributedNotificationCenter.default()
-    // Subscribe before locking so simultaneous launches cannot lose a wakeup.
+    // 先订阅激活通知再尝试加锁，避免并发启动时漏掉唤醒。
     activationObserver = center.addObserver(
       forName: notification, object: nil, queue: .main
     ) { _ in
@@ -33,7 +32,7 @@ class AppDelegate: FlutterAppDelegate {
         .activate(options: [.activateIgnoringOtherApps])
       exit(EXIT_SUCCESS)
     }
-    // Keep the descriptor open. The OS releases flock on exit, including crashes.
+    // 保持文件描述符打开以持有 flock。进程退出或崩溃时由系统释放。
   }
 
   private static func showMainWindow() {
@@ -50,8 +49,7 @@ class AppDelegate: FlutterAppDelegate {
   }
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-    // The menu-bar item owns a recovery path while the radio keeps playing.
-    // Explicit Quit still goes through Flutter's asynchronous exit handler.
+    // 隐藏窗口后，通过菜单栏图标恢复，电台继续播放。显式退出走 Flutter 的异步退出处理。
     return false
   }
 

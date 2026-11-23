@@ -31,9 +31,8 @@ class WindowsUpdateStartException implements Exception {
   final int code;
 }
 
-/// ShellExecute supplies a proper Windows console host while SW_HIDE keeps the
-/// helper hidden. Dart's detached process mode cannot start Windows PowerShell
-/// reliably. Only the installer requests UAC; the player stays unelevated.
+/// 通过 ShellExecute 启动 Windows PowerShell，避免 Dart 分离进程模式下的启动问题。
+/// SW_HIDE 隐藏辅助进程窗口，只有安装程序会请求 UAC 提权。
 Future<WindowsUpdateProcess> startWindowsUpdateProcess({
   required String helper,
   required String plan,
@@ -47,7 +46,7 @@ Future<WindowsUpdateProcess> startWindowsUpdateProcess({
 
 int _launch(String helper, String plan, String directory, bool elevated) {
   if (!Platform.isWindows) throw UnsupportedError('Windows installer');
-  // Windows paths cannot contain quotes, so each path is one quoted argument.
+  // Windows 路径不能包含双引号，因此每个路径用一对双引号包成独立参数。
   if ([helper, plan, directory]
       .any((value) => value.contains('"') || value.contains('\u0000'))) {
     throw const WindowsUpdateStartException(87);

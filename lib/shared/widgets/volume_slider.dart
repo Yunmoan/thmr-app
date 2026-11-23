@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'thmr_slider.dart';
 
-/// Volume control without Slider's OverlayPortal, which can produce orphaned
-/// accessibility nodes on Windows when shown in a pushed route.
+/// 音量滑杆沿用 ThmrSlider 的绘制和语义逻辑，避免 Windows 页面中 OverlayPortal 遗留无障碍节点的
+/// 问题。
 class VolumeSlider extends StatelessWidget {
   const VolumeSlider({
     super.key,

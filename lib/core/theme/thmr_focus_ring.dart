@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
-/// A window-level paint layer keeps outward focus rings above Material, menu,
-/// rounded-panel and viewport clips. It never receives input or semantics.
+/// 在窗口级绘制焦点外环，避开 Material、菜单、圆角面板和视口的裁剪。此绘制层不接收输入，
+/// 也不生成无障碍语义节点。
 class ThmrFocusLayer extends StatefulWidget {
   const ThmrFocusLayer({
     super.key,
@@ -40,7 +40,7 @@ class _ThmrFocusLayerState extends State<ThmrFocusLayer> {
           children: [
             if (widget.reserveEdgeSpace)
               ColoredBox(color: Theme.of(context).scaffoldBackgroundColor),
-            // Keep room for a full outward ring even at the window edge.
+            // 在窗口边缘为完整的外侧焦点环预留空间。
             Padding(
               key: const ValueKey('app-content'),
               padding: widget.reserveEdgeSpace
@@ -64,8 +64,7 @@ class _FocusLayerScope extends InheritedWidget {
       layer != oldWidget.layer;
 }
 
-/// One logical pixel, separated from the control by a two-pixel gap. The
-/// composited follower tracks scrolling and transforms without changing layout.
+/// 焦点环宽 1 个逻辑像素，与控件间隔 2 个逻辑像素。合成跟随层随控件滚动和变换，不占布局空间。
 class ThmrFocusRing extends StatefulWidget {
   const ThmrFocusRing({
     super.key,
@@ -143,8 +142,7 @@ class _ThmrFocusRingState extends State<ThmrFocusRing> {
   TextDirection _direction = TextDirection.ltr;
 
   Rect? _bounds() {
-    // The window overlay may still paint this frame after the target subtree
-    // is removed. Its element is inactive before this State is disposed.
+    // 目标子树移除后，窗口覆盖层仍可能绘制本帧。元素会先进入停用状态，再执行 State.dispose。
     if (!_active) return null;
     final box = _targetKey.currentContext?.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) return null;
@@ -234,7 +232,7 @@ class _ThmrFocusRingState extends State<ThmrFocusRing> {
       child: _FocusGeometry(
         onLayout: _geometry.changed,
         child: _layer == null
-            // Standalone controls can also be embedded without the app layer.
+            // 独立控件也可放在应用级焦点层之外使用。
             ? CustomPaint(
                 foregroundPainter: widget.focused
                     ? _FocusRingPainter(widget.radius, _color,
@@ -251,9 +249,8 @@ class _ThmrFocusRingState extends State<ThmrFocusRing> {
   }
 }
 
-/// A control can resize inside a retained repaint boundary without rebuilding
-/// its focus widget. Invalidate the external painter during layout, before the
-/// paint phase, so the ring uses this frame's bounds (including animations).
+/// 保留的 RepaintBoundary 内控件尺寸可能在焦点组件未重建时变化。布局阶段使外部画笔失效，
+/// 确保本帧绘制使用新尺寸。
 class _FocusGeometrySignal extends ChangeNotifier {
   void changed() => notifyListeners();
 }

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Real GTK integration under a private Xvfb display, D-Bus and XDG profile.
+"""在隔离的 Xvfb、D-Bus 和 XDG 环境中运行 GTK 集成测试。
 
-Exercises the production tray probe, close policy, shell-host loss/recovery,
-single-instance activation, MPRIS registration and tray-menu graceful exit.
-Requires PyGObject, Xvfb, dbus-run-session and libX11; never uses the user's bus.
+覆盖托盘探测、关窗策略、面板离线与恢复、单实例激活、MPRIS 注册及托盘菜单退出。
+运行依赖为 PyGObject、Xvfb、dbus-run-session 和 libX11。
 """
 import argparse
 import ctypes
@@ -84,8 +83,7 @@ class Windows:
                 attrs = XWindowAttributes()
                 self.x.XGetWindowAttributes(self.display, window, ctypes.byref(attrs))
                 self.last_windows.append((window, attrs.width, attrs.height, attrs.map_state))
-                # UTF-8 titles need not have a legacy WM_NAME representation.
-                # This private display has a single application-sized window.
+                # UTF-8 窗口标题可能没有旧式 WM_NAME。此测试的独立显示环境只有一个应用大小的窗口。
                 if attrs.map_state == 2 and attrs.width >= 430 and attrs.height >= 660:
                     return window
         finally:
@@ -125,7 +123,7 @@ def wait_for(predicate, description, timeout=15):
 
 
 def exported_indicator(bus, destination):
-    """Waitable evidence that Ayatana's async session-bus setup has finished."""
+    """等待可观察的 D-Bus 导出记录，确认 Ayatana 的异步初始化已完成。"""
     from gi.repository import Gio
     root = '/org/ayatana/NotificationItem'
 
@@ -242,11 +240,9 @@ def exercise(bundle):
                     if player_property('CanSeek'):
                         raise AssertionError('Live radio advertises seeking')
                     window = wait_for(windows.find, 'GTK window')
-                    # A watcher already present during app_indicator_new() can
-                    # race Ayatana's bus_creation callback (null connection in
-                    # name_appeared_handler). Start with a genuinely absent
-                    # shell and publish the fake watcher only after the item
-                    # is exported, rather than relying on callback timing.
+                    # 如果先启动 watcher，app_indicator_new() 可能与 Ayatana 的 bus_creation 回
+                    # 调发生竞态，导致 name_appeared_handler 拿到空连接。
+                    # 让测试在图标导出后再启动模拟 watcher，以固定事件顺序。
                     wait_for(lambda: exported_indicator(bus, MPRIS),
                              'AppIndicator D-Bus export')
                     windows.close(window)
@@ -263,7 +259,7 @@ def exercise(bundle):
                     if app.poll() is not None or not windows.visible(window):
                         raise AssertionError('Watcher without a host did not retain the window')
                     set_host(True)
-                    time.sleep(2.5)  # Production monitor polls every two seconds.
+                    time.sleep(2.5)  # 正式应用每两秒轮询一次托盘状态。
                     windows.close(window)
                     wait_for(lambda: not windows.visible(window), 'hide to usable tray')
                     duplicate = subprocess.run([str(bundle / 'thmr')], env=env,

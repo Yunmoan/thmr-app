@@ -59,7 +59,7 @@ class LargeScreenSettings {
   final bool cardLayout;
   final LargeScreenIllustrationPosition illustrationPosition;
 
-  /// system means inherit the app theme, including its explicit light/dark mode.
+  /// system 跟随应用主题，也会继承应用中明确选择的浅色或深色模式。
   final ThemeMode themeMode;
   final int queueCount;
   final double textScale;
@@ -260,7 +260,7 @@ class LargeScreenSettingsController extends StateNotifier<LargeScreenSettings> {
         state = LargeScreenSettings.fromJson(json);
       }
     } on FormatException {
-      // An invalid saved document falls back to the normal app presentation.
+      // 保存的配置无法解析时，保留应用的默认呈现设置。
     }
   }
 
@@ -269,7 +269,7 @@ class LargeScreenSettingsController extends StateNotifier<LargeScreenSettings> {
     return persist();
   }
 
-  /// Apply editing feedback immediately; persistence is batched by the editor.
+  /// 编辑结果立即生效，由编辑器合并保存请求。
   void preview(LargeScreenSettings next) {
     if (!mounted) return;
     _revision++;
@@ -279,8 +279,7 @@ class LargeScreenSettingsController extends StateNotifier<LargeScreenSettings> {
   Future<void> persist() {
     if (!mounted) return Future.value();
     final saved = jsonEncode(state.toJson());
-    // Preserve the last selection even when the user changes several choices
-    // before the platform preference store has finished writing the first one.
+    // 串行写入快照，避免较早发起的写入晚于后续写入完成。
     return _pendingSave = _pendingSave.then((_) async {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('largeScreen', saved);

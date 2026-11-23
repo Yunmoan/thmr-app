@@ -15,8 +15,7 @@ class StationUiState {
   final Object? error;
   final bool initialLoading;
 
-  /// 换曲计数:`current.trackId` 或 `startedAtMs` 变化时 +1,
-  /// 驱动投票轮次跟随刷新。
+  /// current.trackId 或 startedAtMs 变化时递增，促使投票和收藏状态同步刷新。
   final int trackGeneration;
 
   /// 最近一次成功轮询时间(展示「更新于 …」)。
@@ -46,7 +45,7 @@ class StationUiState {
         updatedAt: updatedAt ?? this.updatedAt,
       );
 
-  /// 当前码率档(用户偏好或默认第一个)。
+  /// 优先选用仍可用的偏好档位，其次用首个启用的档位。无可用档位时生成 128 kbps 的默认档位。
   StreamProfile selectedProfile(String preferredId) {
     final list = status?.station.enabledBitrates ?? const [];
     if (list.isEmpty) {
@@ -64,8 +63,7 @@ class StationUiState {
   }
 }
 
-/// 使用两个定时器定期刷新并对齐电台换曲。
-/// 常规 10s 一次;拿到 expectedEndMs 后在换曲时刻 +800ms 精准再刷。
+/// 每 10 秒轮询一次。若预计结束时间合理，则额外在 expectedEndMs 后 800 毫秒刷新。
 class StationPoller extends StateNotifier<StationUiState> {
   StationPoller(this._api, this._stationId) : super(const StationUiState()) {
     _poll();
@@ -86,6 +84,7 @@ class StationPoller extends StateNotifier<StationUiState> {
     final requestId = ++_requestId;
     try {
       final s = await _api.status(_stationId);
+      // 定时轮询与手动刷新可以并发。迟到的旧响应不能覆盖已应用的新快照。
       if (!mounted || requestId < _lastAppliedRequestId) return;
       _lastAppliedRequestId = requestId;
       var generation = state.trackGeneration;
@@ -106,7 +105,7 @@ class StationPoller extends StateNotifier<StationUiState> {
         audioHandler.clearNowPlaying();
       } else if (cur != null && mediaChanged) {
         final artwork = absolutizeCover(cur.coverUrl, _api.baseUrl);
-        // Windows SMTC and mobile lock-screen metadata share the same track.
+        // 桌面媒体面板和移动端锁屏使用同一条曲目信息。
         unawaited(updateSystemMediaMetadata(
             trackId: '${cur.trackId}-${cur.startedAtMs}',
             title: cur.title,
@@ -169,9 +168,8 @@ final stationProvider = StateNotifierProvider<StationPoller, StationUiState>(
   ),
 );
 
-/// 直播流地址:状态接口可用 + 用户码率偏好 → 完整 URL。
-/// 自动测速未完成时也返回当前(暂定)来源的地址,手动播放无需等待测速;
-/// 自动连播在 home_shell 另行等待测速完成,避免连上后再重连。
+/// 收到当前频道的状态后，按码率偏好生成完整的直播流 URL。手动播放可先用暂定来源，
+/// 自动连播会等测速完成。
 final streamUrlProvider = Provider<String?>((ref) {
   final stationId = ref.watch(activeStationIdProvider);
   final st = ref.watch(stationProvider);
@@ -179,6 +177,6 @@ final streamUrlProvider = Provider<String?>((ref) {
   final preferred =
       ref.watch(settingsProvider.select((s) => s.bitrateFor(stationId)));
   final profile = st.selectedProfile(preferred);
-  // radioApiProvider follows the selected source, so this rebuilds on switch.
+  // radioApiProvider 跟随所选播放源，切换来源时会重新生成直播流地址。
   return ref.watch(radioApiProvider).streamUrl(stationId, profile.id);
 });

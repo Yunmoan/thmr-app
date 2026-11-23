@@ -1,19 +1,16 @@
-// thmr_capture.cpp — real-time audio spectrum for the THMR Flutter client.
+﻿// THMR Flutter 客户端的 Windows 实时频谱。
 //
-// Captures the system output mix via WASAPI loopback (default render device),
-// keeps a mono ring buffer, and on poll() runs a 1024-point radix-2 FFT over
-// the newest window. Dart maps the PCM-normalized magnitudes to adaptive bands.
+// WASAPI loopback 从默认输出设备采集系统混音，混成单声道后存入环形缓冲区。
+// thmr_poll_fft 对最近的 1024 个样本执行基 2 FFT，Dart 再将归一化振幅映射为自适应频带。
 //
-// Threading: ALL COM / WASAPI objects are created, used and released on the
-// dedicated capture thread (MTA). thmr_start only signals and waits for the
-// init result; thmr_stop flips a flag and joins. Cross-apartment interface
-// pointers would crash — do not touch WASAPI from other threads.
+// COM / WASAPI 对象在专用 MTA 采集线程上创建、使用和释放。thmr_start 启动线程并等待初始化结果，
+// thmr_stop 清除运行标志后等待线程退出。
 //
-// Exported ABI (x64, cdecl):
-//   int  thmr_start(void)                  0 ok / -1 fail
+// 导出的 C ABI
+//   int thmr_start(void)                     返回 0 表示成功，-1 表示失败。
 //   void thmr_stop(void)
-//   int  thmr_poll_fft(float* out, int bins)
-//        sample rate on fresh FFT / 0 no fresh samples / -1 not running
+//   int thmr_poll_fft(float* out, int bins)
+// 新 FFT 可用时返回采样率，0 表示尚无新数据，-1 表示未就绪或参数无效。
 
 #include <windows.h>
 #include <mmdeviceapi.h>
@@ -30,19 +27,19 @@
 
 namespace {
 
-constexpr size_t kRing = 16384;  // mono samples (~0.34 s @ 48 kHz)
+constexpr size_t kRing = 16384;  // 单声道样本数，48 kHz 时约 0.34 秒
 constexpr size_t kFft = 1024;
 constexpr float kPi = 3.14159265358979f;
 
 std::atomic<bool> g_run{false};
-std::atomic<int> g_init{-2};  // -2 initializing, 0 ok, -1 failed
+std::atomic<int> g_init{-2};  // -2 初始化中，0 成功，-1 失败
 std::atomic<UINT32> g_sr{48000};
 std::thread g_thread;
 
 std::mutex g_mu;
 std::vector<float> g_ring(kRing, 0.0f);
-size_t g_wpos = 0;  // next write slot
-uint64_t g_written = 0, g_polled = 0;  // protected by g_mu
+size_t g_wpos = 0;  // 下一写入位置
+uint64_t g_written = 0, g_polled = 0;  // 由 g_mu 保护
 
 void push_samples(const float* src, size_t n) {
   std::lock_guard<std::mutex> lk(g_mu);
@@ -53,7 +50,7 @@ void push_samples(const float* src, size_t n) {
   g_written += n;
 }
 
-// Full capture session lives on this thread.
+// 完整的采集会话始终在此线程运行。
 void capture_main() {
   HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
   if (FAILED(hr)) {
@@ -83,7 +80,7 @@ void capture_main() {
     hr = client->GetMixFormat(&wf);
     if (FAILED(hr)) break;
 
-    // Shared-mode mix format is IEEE float 32; refuse anything else.
+    // 仅处理标记为 IEEE float 的混音格式，下游按 32 位浮点读取。
     const bool isFloat =
         wf->wFormatTag == WAVE_FORMAT_IEEE_FLOAT ||
         (wf->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
@@ -107,7 +104,7 @@ void capture_main() {
   } while (false);
 
   if (g_init.load() != 0) {
-    // init failed — release what we hold and bail out
+    // 初始化失败，释放已取得的资源。
     if (wf) CoTaskMemFree(wf);
     if (cap) cap->Release();
     if (client) client->Release();
@@ -118,7 +115,7 @@ void capture_main() {
     return;
   }
 
-  // ---- capture loop ----
+  // 采集循环
   std::vector<float> mono;
   while (g_run.load(std::memory_order_relaxed)) {
     Sleep(6);
@@ -145,7 +142,7 @@ void capture_main() {
     }
   }
 
-  // ---- cleanup on the same thread ----
+  // 在采集线程上释放资源。
   client->Stop();
   if (cap) cap->Release();
   if (client) client->Release();
@@ -190,7 +187,7 @@ extern "C" {
 
 __declspec(dllexport) int thmr_start(void) {
   bool expected = false;
-  if (!g_run.compare_exchange_strong(expected, true)) return 0;  // already on
+  if (!g_run.compare_exchange_strong(expected, true)) return 0;  // 采集已启动
   g_init.store(-2);
   {
     std::lock_guard<std::mutex> lk(g_mu);
@@ -202,7 +199,7 @@ __declspec(dllexport) int thmr_start(void) {
   std::thread t(capture_main);
   g_thread = std::move(t);
 
-  // Wait up to 2 s for thread-side init.
+  // 最多轮询 2 秒等待初始化结果。失败清理仍需等待线程退出。
   for (int i = 0; i < 200 && g_init.load() == -2; ++i) Sleep(10);
   if (g_init.load() != 0) {
     g_run.store(false);
@@ -223,6 +220,7 @@ __declspec(dllexport) int thmr_poll_fft(float* out, int bins) {
   if (!g_run.load() || g_init.load() != 0 || !out ||
       bins != static_cast<int>(kFft / 2 + 1)) return -1;
 
+  // FFT 工作区由频谱 isolate 串行调用复用。g_mu 只保护采集缓冲区。
   static float re[kFft];
   static float im[kFft];
   {
@@ -236,7 +234,7 @@ __declspec(dllexport) int thmr_poll_fft(float* out, int bins) {
     }
   }
 
-  // Hann window, matching the Linux and Android PCM normalization.
+  // 各平台均使用 Hann 窗，并对 FFT 振幅按 PCM 幅值归一化。
   for (size_t i = 0; i < kFft; ++i) {
     re[i] *=
         0.5f - 0.5f * std::cos(2.0f * kPi * static_cast<float>(i) / (kFft - 1));

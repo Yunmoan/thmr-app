@@ -1,5 +1,4 @@
-// Right column for wide layouts: previous track / stream state / queue list.
-// Mirrors web "过去与未来" (StatusPanel) + queue.
+// 宽屏右侧列，显示上一首曲目、直播状态和播放队列，布局参考 Web 端「过去与未来」。
 
 import 'dart:async';
 
@@ -208,12 +207,12 @@ class _QueueListState extends State<_QueueList> {
 
   Future<void> _preloadCovers(
       List<String> urls, int cacheWidth, int generation) async {
-    // Start at most two thumbnails between frames. Waiting for scheduler idle
-    // would starve this work while the playback spectrum ticker is running.
+    // 每帧之间最多启动两个缩略图加载任务。播放频谱持续请求帧时，
+    // 等待调度器空闲可能让预加载迟迟得不到执行。
     for (var start = 0; start < urls.length; start += 2) {
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted || generation != _preloadGeneration) return;
-      // Give an active scroll priority over additional background decodes.
+      // 用户正在滚动时，优先处理滚动，推迟后台解码。
       while (_scrollController.hasClients &&
           _scrollController.position.isScrollingNotifier.value) {
         await WidgetsBinding.instance.endOfFrame;
@@ -224,7 +223,7 @@ class _QueueListState extends State<_QueueList> {
         final currentExtent = _cacheExtent ?? 250;
         final targetExtent = viewport * 2;
         if (currentExtent < targetExtent) {
-          // Grow the layout cache a few rows at a time after the first paint.
+          // 首次绘制后分批扩展布局缓存，每次增加几行。
           setState(() {
             _cacheExtent = (currentExtent + viewport / 2)
                 .clamp(0, targetExtent)
@@ -304,8 +303,7 @@ class _QueueListState extends State<_QueueList> {
     _metricContext = metricContext;
     _indexMetricStyle = indexMetricStyle;
     _timeMetricStyle = timeMetricStyle;
-    // Reserve columns from the whole queue, so newly visible rows cannot shift
-    // the title when index digits or schedule availability change.
+    // 根据整个队列预留各列宽度，避免新进入视区的条目因序号位数或播出时间有无而挤动曲名。
     final indexWidth = _textColumnWidth(
       context,
       Iterable.generate(queue.length, (i) => '#${i + 1}'),
@@ -431,9 +429,8 @@ class _QueueListState extends State<_QueueList> {
                                   style: timeStyle,
                                 ),
                                 if (planned != null)
-                                  // This font has proportional digits even
-                                  // with tabularFigures. Anchor the prefix
-                                  // separately so time widths cannot move it.
+                                  // 此字体启用 tabularFigures 后仍使用比例数字。
+                                  // 单独固定前缀的位置，避免时间文本的宽度变化带动前缀。
                                   Row(
                                     children: [
                                       Text('预计', style: timeStyle),
@@ -503,7 +500,7 @@ double _textColumnWidth(
   return width.ceilToDouble();
 }
 
-/// Half-screen queue drawer (expand action from the side column / mobile).
+/// 从侧栏或移动端队列入口打开的半屏抽屉。
 Future<void> showQueueSheet(BuildContext context,
     {required StationStatus status}) {
   final size = MediaQuery.of(context).size;
@@ -610,7 +607,7 @@ class QueueSheet extends StatelessWidget {
                     child: ThmrPanel(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 9),
-                      // 列表行不用毛玻璃:每行一个 BackdropFilter 会拖垮 GPU
+                      // 队列行使用半透明底色，避免每行单独应用 BackdropFilter 增大 GPU 负荷。
                       frost: false,
                       onTap: () => showQueueEntryDetail(context, queue[i], i),
                       child: Row(

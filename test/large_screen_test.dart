@@ -146,8 +146,7 @@ class _Harness {
       bool isIPad = false,
       FakeViewPadding padding = const FakeViewPadding(),
       bool startFullScreen = true}) async {
-    // The stage tests exercise native fullscreen paths; opt in explicitly now
-    // that the product default is windowed.
+    // 大屏默认使用窗口模式。这组测试显式启用原生全屏以覆盖对应路径。
     SharedPreferences.setMockInitialValues({
       'largeScreen': '{"startFullScreen":$startFullScreen}',
     });
@@ -1019,7 +1018,7 @@ void main() {
             illustrationOpacity: .65));
     h.station.update(
         StationUiState(status: _status(coverUrl: url), initialLoading: false));
-    // A playing fluid stage animates continuously, so pause for a settled frame.
+    // 播放中的流动背景会持续刷新，暂停后再采集稳定帧。
     await h.playback.toggle(null);
     await h.change(true);
     await tester.pumpAndSettle();
@@ -1129,8 +1128,7 @@ void main() {
     final h = _Harness(tester);
     await h.mount();
     await h.change(true);
-    // A replaced native surface may finish the request without driving the
-    // widget's original animation callback.
+    // 原生界面被替换时，切换可能已经完成，即使原组件的动画回调没有触发。
     h.controller.animatePresentation = (_) async {};
     await tester.tap(find.byTooltip('退出全屏'));
     await tester.pumpAndSettle();
@@ -1588,8 +1586,7 @@ void main() {
         builder: (_) => const Scaffold(body: Text('settings page'))));
     await tester.pumpAndSettle();
     final entering = h.controller.change(true);
-    // Tickers under an opaque route are muted; drive frames instead of
-    // waiting for the entrance to settle.
+    // 不透明路由下方的 Ticker 会静音，通过手动推进帧来测试入场处理。
     for (var i = 0; i < 40; i++) {
       await tester.pump(const Duration(milliseconds: 20));
     }
@@ -1631,8 +1628,7 @@ void main() {
         builder: (_) => const Scaffold(body: Text('settings page'))));
     await tester.pumpAndSettle();
     final entering = h.controller.change(true);
-    // The opaque route mutes the stage ticker. The entrance watchdog must land
-    // the stage at full opacity and release busy anyway.
+    // 不透明路由会使大屏 Ticker 静音。验证入场超时后，大屏达到完全不透明并解除忙碌状态。
     for (var i = 0; i < 30; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }

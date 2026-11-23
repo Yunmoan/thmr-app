@@ -1,7 +1,7 @@
-"""Regenerate the committed Finder background (requires Pillow and a CJK font).
+"""重新生成仓库中的 Finder 安装背景，需要 Pillow 和 CJK 字体。
 
-Usage: python tool/dmg/render_background.py --font C:/Windows/Fonts/msyh.ttc
-CI uses the committed PNG and does not need Pillow or extra fonts.
+用法：python tool/dmg/render_background.py --font C:/Windows/Fonts/msyh.ttc
+CI 使用已提交的 PNG，无需另外安装 Pillow 或字体。
 """
 import argparse
 from pathlib import Path
@@ -25,7 +25,7 @@ def render(font_path):
     text(672, 47, "东方音乐电台", 16, anchor="ra")
     text(48, 90, "将 THMR 拖入右侧 Applications 文件夹", 18)
     line([(48, 132), (672, 132)])
-    # Finder draws the real draggable icons at (180, 220) and (540, 220).
+    # Finder 在 (180, 220) 和 (540, 220) 绘制可拖动的图标。
     line([(306, 220), (414, 220)], "#a91f38", 2)
     line([(401, 208), (414, 220), (401, 232)], "#a91f38", 2)
     text(360, 244, "拖拽安装", 12, "#785d65", "ma")

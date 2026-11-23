@@ -31,7 +31,7 @@ class ThmrMotion {
   static Duration quickOf(BuildContext context) =>
       MediaQuery.disableAnimationsOf(context) ? Duration.zero : shortDuration;
 
-  // Popup menus already stagger their size and individual items internally.
+  // 弹出菜单内部已经为尺寸和各项内容设置错开的动画。
   static AnimationStyle menuStyle(BuildContext context) =>
       MediaQuery.disableAnimationsOf(context)
           ? AnimationStyle.noAnimation
@@ -127,8 +127,8 @@ extension ThmrMessengerMotion on ScaffoldMessengerState {
   }
 }
 
-/// AnimatedSize with a true, state-preserving reduced-motion path. A zero
-/// duration restarts its render controller during layout on this Flutter SDK.
+/// 在减少动态效果时跳过尺寸动画，同时保留子组件状态。当前 Flutter SDK 的零时长 AnimatedSize 仍
+/// 会在布局时重启控制器。
 class ThmrAnimatedSize extends StatefulWidget {
   const ThmrAnimatedSize(
       {super.key, this.alignment = Alignment.center, required this.child});
@@ -157,7 +157,7 @@ class _ThmrAnimatedSizeState extends State<ThmrAnimatedSize> {
   }
 }
 
-/// A reversible entrance. Keep both the curve and child alive when interrupted.
+/// 可反向播放的入场动画，中断时保留曲线和子组件状态。
 class ThmrFadeSlide extends StatefulWidget {
   const ThmrFadeSlide(
       {super.key,
@@ -251,7 +251,7 @@ class _ThmrFadeSlideState extends State<ThmrFadeSlide> {
   }
 }
 
-/// Outgoing content retains its dimensions and cannot receive input or focus.
+/// 退场内容保留原尺寸，同时禁用输入和焦点。
 class ThmrAnimatedContent extends StatefulWidget {
   const ThmrAnimatedContent(
       {super.key, this.alignment = Alignment.topLeft, required this.child});
@@ -405,8 +405,7 @@ class _ContentLayers extends MultiChildRenderObjectWidget {
   }
 }
 
-/// Size follows the current child without squeezing a departing title or card.
-/// Stable layers also retain outgoing state across the switch.
+/// 外部尺寸跟随当前子组件，退场标题或卡片保留原尺寸。稳定的绘制层也保留退场组件的状态。
 class _RenderContentLayers extends RenderBox
     with
         ContainerRenderObjectMixin<RenderBox, _ContentParentData>,

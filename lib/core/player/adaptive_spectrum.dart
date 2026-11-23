@@ -3,8 +3,8 @@ import 'dart:typed_data';
 
 import 'spectrum_fft.dart';
 
-/// Learns the useful bandwidth from fresh, PCM-normalized FFT magnitudes.
-/// Polling [bands] never advances the estimator. Timestamps must be monotonic.
+/// 根据新到达、按 PCM 幅值归一化的 FFT 振幅估计有效带宽。读取 [bands] 不更新估计值，
+/// 输入时间戳必须单调递增。
 class AdaptiveSpectrum {
   AdaptiveSpectrum({this.autoGain = false});
 
@@ -40,7 +40,7 @@ class AdaptiveSpectrum {
     }
     final gap =
         _lastTime == null ? 0.0 : (time - _lastTime!).inMicroseconds / 1e6;
-    // A gap is missing evidence, rather than proof that high frequencies died.
+    // 采样间隔超过 250 毫秒时重新累计低带宽证据，本帧不平滑带宽。
     final dt = gap > 0 && gap <= 0.25 ? gap : 0.0;
     if (dt == 0) _clearLowEvidence();
     _lastTime = time;
@@ -51,7 +51,7 @@ class AdaptiveSpectrum {
       final value = magnitudes[bin];
       if (value.isFinite) peak = math.max(peak, value);
     }
-    // Freeze on silence / near-silence, including the smoothing animation.
+    // 静音或接近静音时暂停带宽估计和过渡。
     if (peak < 0.0005) {
       _clearLowEvidence();
       return;
@@ -61,7 +61,7 @@ class AdaptiveSpectrum {
     for (var bin = 1; bin < magnitudes.length; bin++) {
       final value = magnitudes[bin];
       run = value.isFinite && value >= threshold ? run + 1 : 0;
-      // Reject isolated FFT specks. A windowed tone spans adjacent bins.
+      // 加 Hann 窗后的单频信号会覆盖相邻频点，因此忽略孤立的 FFT 峰值。
       if (run >= 2) highest = bin;
       final peaks = _peakDb;
       if (peaks != null) {
@@ -93,7 +93,7 @@ class AdaptiveSpectrum {
     } else {
       _clearLowEvidence();
     }
-    // Smooth in log-frequency space, matching the visual frequency scale.
+    // 在对数频率域平滑带宽，与显示的频率刻度一致。
     final tau = _targetHz > _upperHz ? 0.25 : 1.2;
     final blend = 1 - math.exp(-dt / tau);
     _upperHz *= math.exp(math.log(_targetHz / _upperHz) * blend);

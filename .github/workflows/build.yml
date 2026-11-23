@@ -1,4 +1,4 @@
-# Pushes/manual builds upload preview Releases; stable v* tags publish official Releases.
+# main 分支推送和手动构建发布预览 Release，稳定版本标签触发正式发布。PR 构建的产物保留在 Actions。
 name: Build Clients
 
 on:
@@ -35,7 +35,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         id: flutter
         with:
-          # Keep validation and every platform build on the verified SDK.
+          # 验证和各平台构建使用 .fvmrc 指定的同一 Flutter SDK。
           flutter-version-file: .fvmrc
           channel: stable
           cache: true
@@ -111,9 +111,9 @@ jobs:
           cache: true
       - name: Select a reachable Ubuntu mirror
         run: |
-          # Hosted runners map Ubuntu suites to azure.archive.ubuntu.com through a
-          # mirrorlist. When that host does not resolve, every package download
-          # stalls. Pick the first reachable full mirror and relax apt timeouts.
+          # 托管 runner 的 Ubuntu 镜像列表可能指向无法解析的 azure.archive.ubuntu.com。
+          # 安装依赖前选择首个同时提供 noble 和 noble-security 的可达镜像，
+          # 并设置 apt 的重试次数和超时。
           mirrors=(
             https://mirrors.edge.kernel.org/ubuntu
             https://mirror.math.princeton.edu/pub/ubuntu
@@ -198,10 +198,7 @@ jobs:
 
   macos:
     needs: [validate, prepare_release]
-    # Plain macos-* labels are Apple Silicon (macos-26 = arm64); the -intel
-    # suffix is the Intel fallback. The earlier "cannot acquire a runner"
-    # episodes came from the retired macos-14 label, not a capacity shortage.
-    # Universal output is unchanged: ARCHS_STANDARD still builds both slices.
+    # 使用 Apple Silicon 的 macOS runner。面向用户的通用包仍包含 arm64 和 x86_64。
     runs-on: macos-26
     timeout-minutes: 60
     permissions:
@@ -314,7 +311,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with:
-          # Use the runner's cached LTS JDK instead of downloading the newest GA.
+          # Gradle 构建和独立 Java 频谱测试使用固定的 Temurin 21。
           java-version: '21'
           distribution: temurin
           cache: gradle
@@ -328,7 +325,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      # The pinned WebView plugin still uses a ProGuard file rejected by AGP 9.
+      # 锁定的 WebView 插件引用了 AGP 9 拒绝的旧 ProGuard 默认配置，由脚本在构建前修补。
       - name: Patch the WebView plugin for AGP 9
         run: python3 tool/patch_android_plugin.py
       - name: Prepare the stable Android signing key
@@ -412,8 +409,7 @@ jobs:
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}
           RELEASE_BUILD: ${{ needs.validate.outputs.build_number }}
         run: |
-          # Fork previews can build packages without the upstream signing keys.
-          # Partial configuration and every v* tag must still pass key validation.
+          # Fork 的预览包可在未配置上游签名密钥时构建。部分配置或正式版本标签仍需通过密钥校验。
           if [ "$GITHUB_REF_TYPE" != tag ] && [ -z "$THMR_UPDATE_PRIVATE_KEY$THMR_UPDATE_PUBLIC_KEY" ]; then
             echo '::notice::No update signing keys configured; preview packages will omit the updater manifest.'
             exit 0
@@ -446,7 +442,8 @@ jobs:
               'draft': False, 'prerelease': preview, 'make_latest': 'false' if preview else 'true',
               'body': '## 更新内容\n\n' + Path('release/metadata/RELEASE_NOTES.md').read_text(encoding='utf-8').strip()
                   + '\n\n安装包见下方附件，macOS 首次安装使用 DMG。'}
-          # Do not resend target_commitish: GITHUB_TOKEN cannot modify workflows.
+          # 更新已有 Release 时省略 target_commitish，避免 GITHUB_TOKEN 因工作流文件的权限限制而
+          # 失败。
           subprocess.run(['gh', 'api', '--method', 'PATCH', f"repos/{repo}/releases/{release['id']}",
               '--input', '-', '--jq', '.html_url'], input=json.dumps(payload), text=True, check=True)
           PY

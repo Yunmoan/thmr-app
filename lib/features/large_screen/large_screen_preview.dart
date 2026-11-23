@@ -23,8 +23,7 @@ const _frames = <(String, Size, bool)>[
   _phoneLandscape,
 ];
 
-/// The actual stage at a virtual display size. It never owns the real window's
-/// animation callbacks, audio controls, focus or pointer input.
+/// 用虚拟屏幕尺寸渲染实际的大屏布局。预览不接管真实窗口的动画回调、音频控制、焦点或指针输入。
 class LargeScreenPreview extends ConsumerStatefulWidget {
   const LargeScreenPreview({super.key, this.canExpand = true});
   final bool canExpand;

@@ -1,7 +1,7 @@
-# These scripts run on macOS/Linux even when edited on Windows.
+# Shell 脚本即使在 Windows 上编辑，也使用 macOS 和 Linux 兼容的 LF 换行。
 *.sh text eol=lf
 
-# Preserve vendored prompt bytes so provenance hashes survive checkout.
+# 保留第三方按键资源的原始字节，使检出后的来源哈希保持一致。
 assets/input_prompts/*.svg -text
 assets/input_prompts/License.txt -text
 assets/input_prompts/manifest.json text eol=lf

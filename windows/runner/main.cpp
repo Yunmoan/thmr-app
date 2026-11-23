@@ -14,19 +14,16 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (instance_result == SingleInstance::Result::secondary) return EXIT_SUCCESS;
   if (instance_result == SingleInstance::Result::error) return EXIT_FAILURE;
 
-  // Attach to console when present (e.g., 'flutter run') or create a
-  // new console when running with a debugger.
+  // 优先附加现有控制台，例如 flutter run 的控制台。在调试器下没有控制台时再创建一个。
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {
     CreateAndAttachConsole();
   }
 
-  // Initialize COM, so that it is available for use in the library and/or
-  // plugins.
+  // 初始化 COM，供 Flutter 库和插件使用。
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
   flutter::DartProject project(L"data");
-  // Impeller on Windows retains large GPU allocations; this audio app does not
-  // need it, so keep the lighter Skia renderer.
+  // Windows 使用 Skia。此前使用 Impeller 时观察到较大的 GPU 内存占用。
   project.set_impeller_switch(flutter::ImpellerSwitch::Disabled);
 
   std::vector<std::string> command_line_arguments =

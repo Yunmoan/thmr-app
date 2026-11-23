@@ -15,7 +15,7 @@ import '../large_screen/large_screen_controller.dart';
 bool get supportsAppUpdates =>
     !kIsWeb && defaultTargetPlatform != TargetPlatform.iOS;
 
-/// Mounted once under the Navigator so update notices work on every tab.
+/// 在 Navigator 下全局挂载一次，所有标签页都能收到更新提示。
 class AppUpdateMonitor extends ConsumerStatefulWidget {
   const AppUpdateMonitor({super.key, required this.child});
   final Widget child;
@@ -493,7 +493,7 @@ class _UpdateNotes extends StatelessWidget {
 Future<void> _openUpdateLink(BuildContext context, Uri url) async {
   try {
     if (await launchUrl(url, mode: LaunchMode.externalApplication)) return;
-  } catch (_) {/* Report a missing browser handler below. */}
+  } catch (_) {/* 由下方逻辑提示无法打开浏览器。 */}
   if (context.mounted) {
     ScaffoldMessenger.of(context)
         .showThmrSnackBar(context, const SnackBar(content: Text('无法打开系统浏览器')));

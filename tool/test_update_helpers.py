@@ -1,4 +1,4 @@
-"""Exercise the real OS installer helpers against isolated fake app bundles."""
+"""使用隔离的测试应用包验证实际的系统安装辅助程序。"""
 import json
 import os
 from pathlib import Path
@@ -53,14 +53,13 @@ class UpdateHelperTests(unittest.TestCase):
                 plan_path.write_text(json.dumps(plan), encoding="utf-8")
                 helper = ROOT / 'assets/updater/install_windows.ps1'
                 if native_launcher or simulate_uac:
-                    # Mock only the OS elevation boundary; exercise the real
-                    # supervisor/worker protocol without interacting with UAC.
+                    # 仅模拟操作系统提权边界，使用真实的监督进程和安装子进程验证通信协议，
+                    # 无需触发 UAC。
                     helper = tx / 'install.ps1'
                     helper_source = (ROOT / 'assets/updater/install_windows.ps1').read_text()
                     if simulate_uac:
                         helper_source = helper_source.replace(' -Verb RunAs', '')
-                    # Instrument only the PID so cleanup waits for the real
-                    # helper process to exit after its final transaction write.
+                    # 只记录辅助进程的 PID，使清理逻辑能等它完成最后一次事务写入并退出。
                     helper_source = helper_source.replace('$plan = $null', "$plan = $null\nif (-not $ElevatedWorker) { [IO.File]::WriteAllText((Join-Path $transaction 'helper.pid'), [string]$PID) }")
                     helper.write_text(helper_source, encoding='utf-8')
                 command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
@@ -71,9 +70,8 @@ class UpdateHelperTests(unittest.TestCase):
                         self.skipTest('Dart SDK is unavailable')
                     if Path(dart).suffix.lower() in ['.bat', '.cmd']:
                         dart = str(Path(dart).parent / 'cache/dart-sdk/bin/dart.exe')
-                    # Run the VM with the resolved packages directly. `dart run`
-                    # invokes unrelated Flutter native build hooks on a clean
-                    # runner, before the Windows installer harness can start.
+                    # 用已解析的依赖直接运行 Dart VM。dart run 在干净的 runner 上会先触发无关的
+                    # Flutter 原生构建钩子。
                     command = [dart, f'--packages={ROOT / ".dart_tool/package_config.json"}',
                                str(ROOT / 'tool/run_windows_update_helper.dart'), str(helper), str(plan_path)]
             else:
@@ -81,7 +79,7 @@ class UpdateHelperTests(unittest.TestCase):
                     exe = directory / "thmr_app"
                     exe.write_text('#!/bin/sh\n' + ('[ "$#" = 4 ] && printf "%s" "$4" > "$2"\n' if good else 'exit 0\n'))
                     exe.chmod(0o755)
-                # A freshly written executable can take several seconds to start on macOS.
+                # macOS 可能需要几秒才能启动刚写入的可执行文件。
                 startup_timeout = "10" if succeeds else "2"
                 command = ["/bin/sh", str(ROOT / "assets/updater/install_unix.sh"), str(plan["processId"]),
                            str(target), str(stage), str(backup), plan["ack"], token, "thmr_app",

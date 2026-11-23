@@ -9,7 +9,7 @@ import '../../../core/state/settings_provider.dart';
 import '../../../core/state/station_provider.dart';
 import '../../../core/theme/thmr_theme.dart';
 
-/// 码率选择 chips(4.2):换 profileId = 换流地址重连,正在播放则切完继续。
+/// 选择不同 profileId 时更新直播地址。若正在播放，使用新码率重连。
 class BitrateRow extends ConsumerWidget {
   const BitrateRow({super.key, this.status});
 
@@ -58,7 +58,7 @@ class BitrateRow extends ConsumerWidget {
                   }
                 },
               )),
-        // Low-key copy-stream-link action
+        // 码率选项旁提供复制直播链接的入口。
         IconButton(
           tooltip: '复制收听链接(当前码率的流地址)',
           visualDensity: VisualDensity.compact,

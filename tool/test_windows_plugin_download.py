@@ -1,4 +1,4 @@
-"""Run the patched CMake downloader against a local fault-injecting server."""
+"""让修补后的 CMake 下载器连接一个可模拟故障的本地服务。"""
 
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer

@@ -1,4 +1,4 @@
-/// 运行配置:与 Web 端 dist/config.js 同值,`--dart-define` 可覆盖。
+/// 客户端运行配置。appConfig 的默认值可通过 `--dart-define` 在构建时覆盖。
 class AppConfig {
   const AppConfig({
     this.radioBaseUrl = defaultRadioBaseUrl,
@@ -18,10 +18,10 @@ class AppConfig {
   /// THMR 账号后端(登录 / 收藏 / 投票)
   final String thmrBaseUrl;
 
-  /// 默认频道 ID(Web 端 window.RADIO_PUBLIC_CONFIG.stationId)
+  /// 未保存频道偏好时使用的默认频道 ID。
   final String stationId;
 
-  /// streamAuth 启用时的访问密钥(与 Web 端 dist/config.js token 同值)
+  /// Radio 后端启用 streamAuth 时使用的访问 token。
   final String streamToken;
 
   /// 本地投票开关，开启时仍需 Web 端 features.vote 允许。

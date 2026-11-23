@@ -1,24 +1,23 @@
-# This file controls Flutter-level build steps. It should not be edited.
+# Flutter SDK 模板提供的构建接入规则。
 cmake_minimum_required(VERSION 3.14)
 
 set(EPHEMERAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ephemeral")
 
-# Configuration provided via flutter tool.
+# 载入 Flutter 工具生成的配置。
 include(${EPHEMERAL_DIR}/generated_config.cmake)
 
-# TODO: Move the rest of this into files in ephemeral. See
-# https://github.com/flutter/flutter/issues/57146.
+# TODO: 将其余规则迁入 ephemeral 生成文件，见 https://github.com/flutter/flutter/issues/57146。
 set(WRAPPER_ROOT "${EPHEMERAL_DIR}/cpp_client_wrapper")
 
-# Set fallback configurations for older versions of the flutter tool.
+# 为较旧的 Flutter 工具提供默认目标平台。
 if (NOT DEFINED FLUTTER_TARGET_PLATFORM)
   set(FLUTTER_TARGET_PLATFORM "windows-x64")
 endif()
 
-# === Flutter Library ===
+# === Flutter 库 ===
 set(FLUTTER_LIBRARY "${EPHEMERAL_DIR}/flutter_windows.dll")
 
-# Published to parent scope for install step.
+# 向上级 CMake 作用域提供安装步骤所需路径。
 set(FLUTTER_LIBRARY ${FLUTTER_LIBRARY} PARENT_SCOPE)
 set(FLUTTER_ICU_DATA_FILE "${EPHEMERAL_DIR}/icudtl.dat" PARENT_SCOPE)
 set(PROJECT_BUILD_DIR "${PROJECT_DIR}/build/" PARENT_SCOPE)
@@ -39,7 +38,7 @@ target_include_directories(flutter INTERFACE
 target_link_libraries(flutter INTERFACE "${FLUTTER_LIBRARY}.lib")
 add_dependencies(flutter flutter_assemble)
 
-# === Wrapper ===
+# === C++ 封装库 ===
 list(APPEND CPP_WRAPPER_SOURCES_CORE
   "core_implementations.cc"
   "standard_codec.cc"
@@ -55,7 +54,7 @@ list(APPEND CPP_WRAPPER_SOURCES_APP
 )
 list(TRANSFORM CPP_WRAPPER_SOURCES_APP PREPEND "${WRAPPER_ROOT}/")
 
-# Wrapper sources needed for a plugin.
+# 插件使用的 C++ 封装源文件。
 add_library(flutter_wrapper_plugin STATIC
   ${CPP_WRAPPER_SOURCES_CORE}
   ${CPP_WRAPPER_SOURCES_PLUGIN}
@@ -71,7 +70,7 @@ target_include_directories(flutter_wrapper_plugin PUBLIC
 )
 add_dependencies(flutter_wrapper_plugin flutter_assemble)
 
-# Wrapper sources needed for the runner.
+# Runner 使用的 C++ 封装源文件。
 add_library(flutter_wrapper_app STATIC
   ${CPP_WRAPPER_SOURCES_CORE}
   ${CPP_WRAPPER_SOURCES_APP}
@@ -83,10 +82,9 @@ target_include_directories(flutter_wrapper_app PUBLIC
 )
 add_dependencies(flutter_wrapper_app flutter_assemble)
 
-# === Flutter tool backend ===
-# _phony_ is a non-existent file to force this command to run every time,
-# since currently there's no way to get a full input/output list from the
-# flutter tool.
+# === Flutter 构建命令 ===
+# _phony_ 是一个不会生成的文件，使 Flutter 工具在每次构建时都运行。
+# 目前工具未提供完整的输入和输出列表。
 set(PHONY_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/_phony_")
 set_source_files_properties("${PHONY_OUTPUT}" PROPERTIES SYMBOLIC TRUE)
 add_custom_command(

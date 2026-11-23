@@ -12,7 +12,7 @@ import androidx.core.content.FileProvider;
 import java.io.File;
 import java.util.Arrays;
 
-/** Opens Android's installer only for a newer APK signed by our current signer. */
+/** 仅当 APK 的版本更新且签名匹配当前应用时，才打开 Android 安装器。 */
 final class UpdateInstaller {
     private static Signature[] signers(PackageInfo info) {
         if (Build.VERSION.SDK_INT >= 28 && info.signingInfo != null) {
@@ -45,7 +45,7 @@ final class UpdateInstaller {
         Signature[] after = signers(next);
         boolean matching = false;
         if (before != null && after != null) {
-            // Android validates the complete signer/rotation policy again during installation.
+            // Android 安装时会进一步校验完整的签名及密钥轮换策略。
             if (Build.VERSION.SDK_INT >= 28 && current.signingInfo != null &&
                     current.signingInfo.hasMultipleSigners()) {
                 matching = Arrays.equals(before, after);

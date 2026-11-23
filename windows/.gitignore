@@ -1,17 +1,16 @@
 flutter/ephemeral/
 
-# Visual Studio user-specific files.
+# Visual Studio 用户专用文件
 *.suo
 *.user
 *.userosscache
 *.sln.docstates
 
-# Visual Studio build-related files.
+# Visual Studio 构建生成文件
 x64/
 x86/
 
-# Visual Studio cache files
-# files ending in .cache can be ignored
+# 忽略 Visual Studio 的 .cache 文件。
 *.[Cc]ache
-# but keep track of directories ending in .cache
+# 保留名称以 .cache 结尾的目录。
 !*.[Cc]ache/

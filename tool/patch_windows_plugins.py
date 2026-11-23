@@ -1,4 +1,4 @@
-"""Fix legacy plugin build scripts without pinning their package versions."""
+"""修补已解析的 Windows 插件构建脚本，沿用当前依赖版本。"""
 
 import json
 import re
@@ -9,15 +9,14 @@ from urllib.request import url2pathname
 
 def fix_webview(source):
     if "TARGET ${PROJECT_NAME}_DEPENDENCIES_DOWNLOAD PRE_BUILD" in source:
-        # DEPENDS is only valid with the OUTPUT form of add_custom_command.
+        # add_custom_command 只有 OUTPUT 形式支持 DEPENDS。
         return source.replace("\n  DEPENDS ${NUGET}", "")
     return source
 
 
 def fix_media_kit(source):
-    # The upstream downloader accepts HTTP error bodies, then reports only a
-    # checksum mismatch. Retry failed/partial downloads without weakening the
-    # plugin's pinned checksum or ever keeping a corrupt archive in the cache.
+    # 上游下载器可能把 HTTP 错误响应当作归档，最后才报告哈希不匹配。下载失败或不完整时重试，
+    # 仍校验插件固定的哈希值，并清除损坏的归档。
     downloader = r'''function(download_and_verify url md5 locationForArchive)
   if(EXISTS "${locationForArchive}")
     file(MD5 "${locationForArchive}" ARCHIVE_MD5)

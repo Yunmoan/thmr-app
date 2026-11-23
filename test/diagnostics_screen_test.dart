@@ -182,7 +182,7 @@ void main() {
         await tester.drag(find.byType(ListView), const Offset(0, -900));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        // Save reviewable layout previews without making network calls.
+        // 保存可供检查的布局预览，测试无需网络请求。
         if (width == 1280 && dark) {
           await tester.runAsync(() async {
             final render = boundary.currentContext!.findRenderObject()

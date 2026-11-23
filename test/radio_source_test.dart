@@ -78,7 +78,7 @@ void main() {
             Future.value([measurement(0, 1200), measurement(1, 1150)])));
     addTearDown(controller.dispose);
     await controller.ensureSelected();
-    // 源 2 measured ~4% faster; not enough to justify reconnecting everything.
+    // 播放源 2 的探测用时仅少约 4%，达不到切换并重连的阈值。
     expect(controller.state.selected.id, RadioSourcePreference.source1);
     expect(controller.state.tested, isTrue);
   });

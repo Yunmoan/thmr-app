@@ -1,4 +1,4 @@
-"""Exercise shipped Linux scripts in temporary app/XDG directories."""
+"""在临时应用目录和 XDG 目录中测试随 Linux 包分发的脚本。"""
 import os
 from pathlib import Path
 import shutil
@@ -51,7 +51,7 @@ class LinuxDistributionTests(unittest.TestCase):
             from gi.repository import Gio
         except ImportError:
             self.skipTest('PyGObject is required to validate desktop Exec parsing')
-        # Avoid ldd on the shell fixture; the real bundle is checked separately.
+        # 这个用例使用 Shell 脚本夹具，无需执行 ldd，真实 bundle 另有依赖检查。
         self.fake_executable('thmr',
             'printf "%s\\n" "$0" "$@" > "$THMR_LAUNCH_PROBE"\n')
         result = self.run_script('install-desktop.sh')

@@ -1,4 +1,4 @@
-// Small C ABI around the vendored decoder. No FFmpeg or audio-device dependency.
+// 为内置 minimp3 提供精简的 C ABI，无需 FFmpeg 或音频设备。
 #define MINIMP3_IMPLEMENTATION
 #define MINIMP3_ONLY_MP3
 #define MINIMP3_FLOAT_OUTPUT
@@ -12,8 +12,8 @@ __attribute__((visibility("default"), used)) void* thmr_mp3_create() {
   return decoder;
 }
 
-// pcm has room for MINIMP3_MAX_SAMPLES (2304) floats; info has 3 ints:
-// bytes consumed, sample rate, channel count. Return samples per channel.
+// pcm 至少容纳 MINIMP3_MAX_SAMPLES（2304）个 float。info 的三个整数依次是消耗字节数、采样率和声
+// 道数。返回每声道样本数。
 __attribute__((visibility("default"), used)) int thmr_mp3_decode(
     void* decoder, const unsigned char* input, int length, float* pcm, int* info) {
   mp3dec_frame_info_t frame = {};

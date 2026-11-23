@@ -1,11 +1,10 @@
-/// 后端 JSON 模型 — 字段名与后端 camelCase 完全一致。
-/// 约定:所有 ID 一律 String;`*Ms` 为毫秒 epoch;时间字符串为 ISO 8601。
+/// 后端 JSON 模型。接口键保留 camelCase，曲目和频道等标识在客户端使用 String，
+/// 绝对时间的 *Ms 字段使用 Unix 毫秒时间戳。
 library;
 
 import '../config.dart';
 
-/// coverUrl 统一处理:Radio 后端返回相对路径(或空串),账号后端返回绝对 URL。
-/// 相对路径用 Radio 服务地址解析。
+/// 保留空串和 HTTP(S) 封面 URL，为相对路径拼接传入的 Radio 服务地址。
 String absolutizeCover(String coverUrl, String radioBaseUrl) {
   if (coverUrl.isEmpty) return '';
   if (coverUrl.startsWith('http://') || coverUrl.startsWith('https://')) {
@@ -44,7 +43,7 @@ class TrackRef {
   final String trackId;
   final String title;
   final String artist;
-  final String coverUrl; // 原始值(可能为相对路径)
+  final String coverUrl; // RadioApi 会先解析相对封面路径。
 
   const TrackRef({
     required this.trackId,
@@ -516,7 +515,7 @@ class VoteStatus {
       current?.startedAtMs == track.startedAtMs;
 }
 
-/// `GET /api/meta` — 启动时拉取,投票阈值 / 上限以它为准。
+/// GET /api/meta 提供投票阈值和收藏上限等服务端配置。
 class ThmrMeta {
   final String version;
   final bool natayarkConfigured;

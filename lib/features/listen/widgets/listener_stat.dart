@@ -119,7 +119,7 @@ class _ListenerStatState extends ConsumerState<ListenerStat> {
   }
 }
 
-/// Both values share the same width and a single clipped text line.
+/// 两个数值共用相同宽度，并限制在一行内显示。
 class _ListenerLine extends StatelessWidget {
   const _ListenerLine({
     required this.channel,

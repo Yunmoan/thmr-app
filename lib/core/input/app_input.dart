@@ -18,8 +18,8 @@ import 'gamepad_navigation.dart';
 final gamepadEventsProvider = Provider((ref) => Gamepads.normalizedEvents);
 final gamepadConnectionsProvider = Provider((ref) => Gamepads.connectionEvents);
 
-/// Shared command entry point. Hardware input is scoped to this foreground
-/// window and uses the focused route's actions, including modal focus traps.
+/// 键盘和手柄共用的命令入口。硬件输入仅作用于前台窗口，由当前焦点所在的路由处理，
+/// 模态弹窗也遵循其焦点范围。
 class AppInput extends ConsumerStatefulWidget {
   const AppInput({super.key, required this.navigatorKey, required this.child});
   final GlobalKey<NavigatorState> navigatorKey;
@@ -146,7 +146,7 @@ class _AppInputState extends ConsumerState<AppInput>
         Actions.maybeInvoke(context, DirectionalFocusIntent(direction));
       }
     } else if (command == AppCommand.activate) {
-      // Text fields retain their normal editing/IME path.
+      // 文本框中的按键交给原有的编辑和 IME 流程处理。
       Actions.maybeInvoke(context, const ActivateIntent());
     } else if (command == AppCommand.scrollUp ||
         command == AppCommand.scrollDown) {

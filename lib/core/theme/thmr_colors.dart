@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Character themes. Each carries its own accent, paper gradient,
-/// background illustration and dark variants.
+/// 角色主题定义各自的强调色、纸面渐变、背景插画和深色变体。
 enum AccentTheme {
   reimu,
   marisa,
@@ -16,7 +15,7 @@ enum AccentTheme {
   yuka,
 }
 
-/// Static brand constants (default Reimu crimson kept for compatibility).
+/// 静态品牌颜色，默认绯红色沿用灵梦主题以兼容现有调用。
 class ThmrColors {
   const ThmrColors._();
 
@@ -42,7 +41,7 @@ class ThmrColors {
         : Colors.white;
   }
 
-  /// Preserve the character hue while making small accent text legible.
+  /// 保留角色色相，同时提高小字号强调色文字的可读性。
   static Color textAccent(Color accent, Color surface) {
     if (contrast(accent, surface) >= 4.5) return accent;
     final target = readableOn(surface, Colors.black);
@@ -60,8 +59,7 @@ class ThmrColors {
   }
 }
 
-/// Per-theme token bundle. Fields mirror the web tokens.css but are
-/// parameterized per character; all values are hand-tuned.
+/// 每个角色的主题变量以 Web 端 tokens.css 的语义为基础，配色按角色手动调整。
 class ThmrTokens extends ThemeExtension<ThmrTokens> {
   const ThmrTokens({
     required this.accent,
@@ -101,7 +99,7 @@ class ThmrTokens extends ThemeExtension<ThmrTokens> {
   final Color codeInk;
   final String illustration;
 
-  /// Reimu (default) — 博丽红白.
+  /// Reimu（默认），博丽红白。
   static const ThmrTokens reimuLight = ThmrTokens(
     accent: Color(0xFFC65A69),
     onAccent: Color(0xFFFFF8FA),
@@ -152,7 +150,7 @@ class ThmrTokens extends ThemeExtension<ThmrTokens> {
     illustration: 'assets/brand/background_alt.png',
   );
 
-  /// Marisa — 黑金星尘.
+  /// Marisa，黑金星尘。
   static const ThmrTokens marisaLight = ThmrTokens(
     accent: Color(0xFFD9A43C),
     onAccent: Color(0xFF231A06),
@@ -203,7 +201,7 @@ class ThmrTokens extends ThemeExtension<ThmrTokens> {
     illustration: 'assets/brand/marisa_background_alt.png',
   );
 
-  /// Cirno — 冰蓝.
+  /// Cirno，冰蓝。
   static const ThmrTokens cirnoLight = ThmrTokens(
     accent: Color(0xFF4E9FD4),
     onAccent: Color(0xFFF2FAFE),

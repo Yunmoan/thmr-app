@@ -4,8 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/models.dart';
 
-/// A local, account-scoped snapshot of collection metadata. Audio is streamed
-/// and is intentionally not part of this cache.
+/// 按账号保存收藏夹元数据快照，音频仍通过直播流获取。
 class CachedCollections {
   const CachedCollections(this.collections, this.savedAt);
 

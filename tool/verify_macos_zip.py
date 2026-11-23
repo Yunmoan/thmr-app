@@ -1,4 +1,4 @@
-"""Extract the final updater ZIP with macOS metadata, then validate and launch it."""
+"""保留 macOS 文件元数据解压最终更新 ZIP，再校验并启动应用。"""
 from pathlib import Path
 import subprocess
 import sys

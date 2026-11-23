@@ -52,7 +52,7 @@ void main() {
         await request.response.flush();
         await release.future;
         await request.response.close();
-      } catch (_) {/* The sampler deliberately closes an ongoing stream. */}
+      } catch (_) {/* 采样器达到限制后会关闭仍在传输的直播流。 */}
     });
     final result = await probe.get(
         Uri.parse('http://127.0.0.1:${server.port}/live'),

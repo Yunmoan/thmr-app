@@ -22,7 +22,7 @@ class MessageSurface extends StatelessWidget {
       );
 }
 
-/// Shared content for transient messages and ongoing playback status.
+/// 临时消息和持续播放状态共用的内容组件。
 class MessageBody extends StatelessWidget {
   const MessageBody({
     super.key,

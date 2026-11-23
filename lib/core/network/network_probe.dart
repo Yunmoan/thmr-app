@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
-/// Public, credential-free details suitable for a user-exported report.
+/// 用于用户导出报告的公开诊断信息，不包含凭据。
 class NetworkProbeResult {
   const NetworkProbeResult({
     required this.uri,
@@ -60,7 +60,7 @@ String publicUrl(Uri uri) => Uri(
       path: uri.path,
     ).toString();
 
-/// Never exports arbitrary headers, response bodies, cookies or raw exceptions.
+/// 报告只记录预先定义的诊断字段，排除任意响应头、响应体、Cookie 和原始异常。
 const diagnosticHeaderNames = {
   'server',
   'via',
@@ -108,7 +108,7 @@ class NetworkProbe {
                 .toSet()
                 .toList();
           } on SocketException {
-            // Let the actual HTTP request determine reachability as well.
+            // DNS 预检失败后继续发出 HTTP 请求，以实际请求结果判定可达性。
           }
         }
         final request = await client.getUrl(uri);
@@ -154,7 +154,7 @@ class NetworkProbe {
           }
           return result(count, bytes?.takeBytes());
         } finally {
-          // Radio endpoints never end. Bound sampling and release the socket.
+          // Radio 直播响应会持续传输，采样达到限制后释放连接。
           unawaited(iterator.cancel().catchError((Object _) {}));
         }
       }

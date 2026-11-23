@@ -27,8 +27,8 @@ import '../listen/listen_screen.dart';
 import '../mini/mini_player.dart' show miniPlayerProvider;
 import '../large_screen/large_screen_surface.dart';
 
-/// 应用主壳:窄屏底部导航,宽屏(≥980px)左侧导航栏。
-/// Offstage 保留各页状态;切换时对新激活页做轻量滑入过渡。
+/// 窄屏采用底部导航。从 980 逻辑像素起改用左侧导航栏。
+/// Offstage 保留各页状态，切换时仅对新激活的页面执行滑入过渡。
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
@@ -90,7 +90,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
     ref.read(appTabProvider.notifier).state = i;
   }
 
-  /// Keep the transition wrapper mounted so each page retains its state.
+  /// 保持过渡容器挂载，以保留各页状态。
   Widget _page(int i) {
     return PersistentTabPage(
       key: ValueKey('tab-$i'),
@@ -153,7 +153,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
     if (ref.read(desktopTrayAvailableProvider)) {
       _hiddenToTray = true;
       await windowManager.hide();
-      // Cover a panel-host loss while hide() was in flight.
+      // 隐藏窗口期间，承载托盘图标的面板服务可能退出。隐藏后再检查一次。
       if (!ref.read(desktopTrayAvailableProvider)) {
         _hiddenToTray = false;
         await _minimizeToTaskbar();
@@ -176,14 +176,13 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
 
   Future<void> _rememberExitChoiceAndQuit() async {
     try {
-      // Persist the selected preference, but never let a plugin call hold the
-      // window open indefinitely while the user is trying to quit.
+      // 尝试保存所选偏好，并限制等待时长，避免插件调用卡住退出流程。
       await ref
           .read(settingsProvider.notifier)
           .setCloseAction(CloseAction.exit)
           .timeout(const Duration(milliseconds: 500));
     } catch (_) {
-      // Exiting takes priority if preferences cannot be written.
+      // 偏好写入失败时仍继续退出。
     } finally {
       await _quit();
     }
@@ -230,7 +229,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
     }
   }
 
-  /// 关闭询问:返回 (选择, 是否记住);null = 取消。
+  /// 关闭确认框返回（所选操作，是否记住），取消时返回 null。
   Future<(CloseAction, bool)?> _askCloseAction() {
     var remember = false;
     final trayAvailable = ref.read(desktopTrayAvailableProvider);
@@ -289,7 +288,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
                 backgroundColor: Theme.of(context).colorScheme.error,
                 foregroundColor: Theme.of(context).colorScheme.onError,
               ),
-              // Exit directly, without waiting for the dialog route to pop.
+              // 直接发起退出，无需等待弹窗路由出栈。
               onPressed: () => _reallyExit(rememberChoice: remember),
               icon: const Icon(Icons.power_settings_new_rounded, size: 16),
               label: const Text('退出程序'),
@@ -328,8 +327,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
         }
       });
     });
-    // Auto-connect once, when station state is ready and user opted in.
-    // 窄订阅:主壳只关心「是否可自动连播」,不随秒级播放 tick 重建。
+    // 用户启用自动播放后，等频道状态和播放源就绪再尝试一次。这里仅读取自动播放所需状态，
+    // 避免每秒重建主界面。
     final autoPlay = ref.watch(settingsProvider.select((s) => s.autoPlay));
     final stationReady =
         ref.watch(stationProvider.select((s) => s.status != null));
@@ -416,7 +415,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
     ]));
   }
 
-  /// 底部常驻播放条:非收听页时出现(AnimatedSize 平滑展开)。
+  /// 非收听页显示底部播放器，由共用的尺寸过渡处理展开收起。
   Widget _dockBar({required bool compact}) {
     return ThmrAnimatedSize(
       alignment: Alignment.bottomCenter,
@@ -469,10 +468,8 @@ class _ThmrNavBar extends StatelessWidget {
                       button: true,
                       child: InkWell(
                         onTap: () => onChanged(i),
-                        // This pill animation is shared by every platform,
-                        // including Android, so Material's tap splash and
-                        // highlight would be a second feedback layer rather
-                        // than a platform cue.
+                        // 胶囊选中动画在各平台共用，已提供点击反馈，
+                        // 因此关闭 Material 自带的水波纹和高亮。
                         splashFactory: NoSplash.splashFactory,
                         splashColor: Colors.transparent,
                         highlightColor: Colors.transparent,

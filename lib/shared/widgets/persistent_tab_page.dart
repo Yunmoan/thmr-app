@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/thmr_motion.dart';
 
-/// Keeps tabs ready before selection and retains state while hidden and muted.
+/// 在标签页首次选中前准备其内容，隐藏时暂停 Ticker 并保留组件状态。
 class PersistentTabPage extends StatefulWidget {
   const PersistentTabPage({
     super.key,
