@@ -43,6 +43,7 @@ class FlutterWindow : public Win32Window {
   bool presentation_concealed_ = false;
   bool startup_ready_ = false;
   bool activation_pending_ = false;
+  bool was_minimized_ = false;
   BOOL saved_transitions_disabled_ = FALSE;
 };
 

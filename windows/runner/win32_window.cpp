@@ -17,6 +17,7 @@ namespace {
 #endif
 
 constexpr const wchar_t* kWindowClassName = kThmrWindowClass;
+constexpr UINT kResizeChildMessage = WM_APP + 0x54;
 
 /// 应用主题偏好的注册表位置。
 ///
@@ -200,17 +201,17 @@ Win32Window::MessageHandler(HWND hwnd,
       return 0;
     }
     case WM_SIZE: {
-      RECT rect = GetClientArea();
-      if (child_content_ != nullptr) {
-        // 使子窗口填满客户区。
-        MoveWindow(child_content_, rect.left, rect.top, rect.right - rect.left,
-                   rect.bottom - rect.top, TRUE);
-      }
+      if (wparam != SIZE_MINIMIZED) ResizeChildToClient();
       return 0;
     }
 
+    case kResizeChildMessage:
+      ResizeChildToClient();
+      return 0;
+
     case WM_ACTIVATE:
-      if (child_content_ != nullptr) {
+      if (child_content_ != nullptr && LOWORD(wparam) != WA_INACTIVE &&
+          HIWORD(wparam) == 0) {
         SetFocus(child_content_);
       }
       return 0;
@@ -221,6 +222,35 @@ Win32Window::MessageHandler(HWND hwnd,
   }
 
   return DefWindowProc(window_handle_, message, wparam, lparam);
+}
+
+void Win32Window::ResizeChildToClient() {
+  if (!window_handle_ || !child_content_ || IsIconic(window_handle_)) return;
+  if (resizing_child_) {
+    // Skia 等待新尺寸的光栅帧时可能处理更多窗口消息。只保留最终尺寸，避免重入调整绘制表面。
+    child_resize_pending_ = true;
+    return;
+  }
+
+  const RECT client = GetClientArea();
+  const int width = client.right - client.left;
+  const int height = client.bottom - client.top;
+  if (width <= 0 || height <= 0) return;
+  RECT child{};
+  if (GetClientRect(child_content_, &child) && child.right == width &&
+      child.bottom == height) {
+    return;
+  }
+
+  resizing_child_ = true;
+  // 让系统合并重绘请求，避免 MoveWindow 的同步 WM_PAINT。
+  SetWindowPos(child_content_, nullptr, 0, 0, width, height,
+               SWP_NOZORDER | SWP_NOACTIVATE);
+  resizing_child_ = false;
+  if (child_resize_pending_ && window_handle_) {
+    child_resize_pending_ = false;
+    PostMessage(window_handle_, kResizeChildMessage, 0, 0);
+  }
 }
 
 void Win32Window::Destroy() {
@@ -252,7 +282,7 @@ void Win32Window::SetChildContent(HWND content) {
 }
 
 RECT Win32Window::GetClientArea() {
-  RECT frame;
+  RECT frame{};
   GetClientRect(window_handle_, &frame);
   return frame;
 }

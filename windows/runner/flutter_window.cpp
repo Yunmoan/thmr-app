@@ -107,6 +107,11 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     }
     return 0;
   }
+  bool restoring = false;
+  if (message == WM_SIZE) {
+    restoring = was_minimized_ && wparam != SIZE_MINIMIZED;
+    was_minimized_ = wparam == SIZE_MINIMIZED;
+  }
   // 先让 Flutter 及插件处理窗口消息。
   if (flutter_controller_) {
     std::optional<LRESULT> result =
@@ -123,7 +128,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       break;
   }
 
-  return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+  const auto result = Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+  if (restoring && flutter_controller_) {
+    // 从任务栏原尺寸恢复也要补绘一帧，交给消息循环统一处理。
+    InvalidateRect(flutter_controller_->view()->GetNativeWindow(), nullptr, FALSE);
+  }
+  return result;
 }
 
 void FlutterWindow::RegisterWindowPresentation() {

@@ -7,9 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'package:thmr_app/core/platform/window_presentation.dart';
 import 'package:thmr_app/core/state/settings_provider.dart';
 import 'package:thmr_app/features/mini/desktop_player_surface.dart';
 import 'package:thmr_app/features/mini/mini_player.dart';
+import 'package:thmr_app/shared/widgets/thmr_panel.dart';
 
 Future<void> main() async {
   final binding = WidgetsFlutterBinding.ensureInitialized();
@@ -21,7 +23,7 @@ Future<void> main() async {
   };
   final container = ProviderContainer();
   await container.read(settingsProvider.notifier).ready;
-  // 使用正式窗口切换及其动画，内容换成简单色块，避免触发字体下载或轮询。
+  // 使用正式窗口切换和毛玻璃卡片，页面内容使用本地测试数据。
   await windowManager.ensureInitialized();
   await windowManager.waitUntilReadyToShow(const WindowOptions(
     titleBarStyle: TitleBarStyle.hidden,
@@ -41,10 +43,7 @@ Future<void> main() async {
             color: Colors.blue,
             child: Center(child: Text('MINI')),
           ),
-          child: ColoredBox(
-            color: Colors.red,
-            child: Center(child: Text('MAIN')),
-          ),
+          child: _WindowCards(),
         ),
       ),
       home: const SizedBox.shrink(),
@@ -58,6 +57,43 @@ Future<void> main() async {
   final transition = container.read(miniModeTransitionProvider);
   final clock = Stopwatch()..start();
   try {
+    const restoreCycles =
+        int.fromEnvironment('restoreCycles', defaultValue: 40);
+    final presentation = WindowPresentation();
+    var slowestRestore = 0;
+    for (var cycle = 0; cycle < restoreCycles; cycle++) {
+      final maximize = cycle.isEven;
+      if (maximize) {
+        await windowManager.maximize();
+      } else {
+        await windowManager.unmaximize();
+      }
+      await _waitForWindow(
+          () async => await windowManager.isMaximized() == maximize);
+      await binding.endOfFrame.timeout(const Duration(seconds: 4));
+      final view = binding.platformDispatcher.implicitView!;
+      final expectedSize = view.physicalSize;
+      await windowManager.minimize();
+      await _waitForWindow(windowManager.isMinimized);
+      final start = clock.elapsedMilliseconds;
+      await windowManager.restore();
+      await _waitForWindow(() async => !await windowManager.isMinimized());
+      await binding.endOfFrame.timeout(const Duration(seconds: 4));
+      await presentation.flushFrame();
+      if (view.physicalSize.isEmpty || view.physicalSize != expectedSize) {
+        throw StateError('Restore changed the Flutter viewport: '
+            '$expectedSize -> ${view.physicalSize}');
+      }
+      final elapsed = clock.elapsedMilliseconds - start;
+      if (elapsed > slowestRestore) slowestRestore = elapsed;
+    }
+    if (await windowManager.isMaximized()) {
+      await windowManager.unmaximize();
+      await _waitForWindow(() async => !await windowManager.isMaximized());
+    }
+    _report(
+        'WINDOW_SMOKE restored $restoreCycles times, max=${slowestRestore}ms');
+
     const cycles = int.fromEnvironment('cycles', defaultValue: 12);
     for (var cycle = 0; cycle < cycles; cycle++) {
       final maximize = cycle.isOdd;
@@ -99,7 +135,7 @@ Future<void> main() async {
               (restored.height - bounds.height).abs() > 2)) {
         throw StateError('Bounds changed: $bounds -> $restored');
       }
-      debugPrint('WINDOW_SMOKE cycle=$cycle maximized=$maximize '
+      _report('WINDOW_SMOKE cycle=$cycle maximized=$maximize '
           'enter=${enteredAt - enterStart}ms '
           'exit=${clock.elapsedMilliseconds - enteredAt}ms');
       if (maximize) {
@@ -114,13 +150,50 @@ Future<void> main() async {
       }
     }
     if (errors.isNotEmpty) throw StateError('${errors.length} Flutter errors');
-    debugPrint(
+    _report(
         'WINDOW_SMOKE PASS: ${cycles * 2} native transitions, no Flutter errors');
     _exitProbe(0);
   } catch (error, stack) {
-    debugPrint('WINDOW_SMOKE FAIL: $error\n$stack');
+    _report('WINDOW_SMOKE FAIL: $error\n$stack');
     _exitProbe(1);
   }
+}
+
+void _report(String message) {
+  debugPrint(message);
+  const path = String.fromEnvironment('reportPath');
+  if (path.isNotEmpty) {
+    File(path).writeAsStringSync('$message\n', mode: FileMode.append);
+  }
+}
+
+Future<void> _waitForWindow(Future<bool> Function() condition) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 3));
+  while (!await condition()) {
+    if (DateTime.now().isAfter(deadline)) {
+      throw StateError('Window state change timed out');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+}
+
+class _WindowCards extends StatelessWidget {
+  const _WindowCards();
+
+  @override
+  Widget build(BuildContext context) => GridView.builder(
+        padding: const EdgeInsets.all(16),
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 350,
+          mainAxisExtent: 120,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+        ),
+        itemCount: 24,
+        itemBuilder: (context, index) => ThmrPanel(
+          child: Center(child: Text('MAIN ${index + 1}')),
+        ),
+      );
 }
 
 Never _exitProbe(int code) {

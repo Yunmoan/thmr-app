@@ -77,7 +77,11 @@ class Win32Window {
   // 根据系统应用主题偏好更新窗口边框。
   static void UpdateTheme(HWND const window);
 
+  void ResizeChildToClient();
+
   bool quit_on_close_ = false;
+  bool resizing_child_ = false;
+  bool child_resize_pending_ = false;
 
   // 顶层窗口的 HWND。
   HWND window_handle_ = nullptr;
