@@ -58,8 +58,7 @@ class PlaybackState {
 }
 
 /// 使用 media_kit 控制直播播放和断线恢复。
-/// 播放出错后延迟 1 秒重连；播放意外中断或缓冲满 5 秒后，延迟 3 秒重连。
-/// 每次安排重连时计数，第 5 次进入 idle，成功播放后清零。手动暂停期间不自动重连。
+/// 单帧解码出错时先观察播放进度。直播中断后最多自动重连四次，实际播放后清零。
 class PlaybackController extends StateNotifier<PlaybackState> {
   PlaybackController({String? Function()? streamUrl, Player? player})
       : _streamUrl = streamUrl,
@@ -68,6 +67,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     // 默认使用共享播放引擎，测试可注入 Player。
     _playingSubscription = _player.stream.playing.listen(_onPlaying);
     _bufferingSubscription = _player.stream.buffering.listen(_onBuffering);
+    _positionSubscription = _player.stream.position.listen(_onPosition);
     _errorSubscription = _player.stream.error.listen(_onError);
     registerMediaControls(
       play: playFromSystem,
@@ -91,9 +91,11 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   final String? Function()? _streamUrl;
   late final StreamSubscription<bool> _playingSubscription;
   late final StreamSubscription<bool> _bufferingSubscription;
+  late final StreamSubscription<Duration> _positionSubscription;
   late final StreamSubscription<String> _errorSubscription;
   Timer? _stallTimer;
   Timer? _reconnectTimer;
+  Timer? _decodeRecoveryTimer;
   Timer? _listenTimer;
   String? _currentUrl;
   bool _resumeAfterChannelChange = false;
@@ -101,6 +103,12 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   int _consecutiveFailures = 0;
   int _volumeRevision = 0;
   bool _disposed = false;
+  bool get _canReconnect =>
+      !_disposed &&
+      _currentUrl != null &&
+      !state.userPaused &&
+      state.phase != PlaybackPhase.idle;
+
   bool get _useLocalRelay =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
@@ -109,6 +117,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
           defaultTargetPlatform == TargetPlatform.macOS);
 
   Future<void> _openRadio(String url, {required bool play}) async {
+    _cancelRecovery();
     final revision = ++_openRevision;
     var playbackUrl = url;
     if (_useLocalRelay) {
@@ -125,15 +134,13 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   }
 
   void _onPlaying(bool playing) {
-    if (_disposed || (playing && (_currentUrl == null || state.userPaused))) {
-      return;
-    }
+    if (_disposed || (playing && !_canReconnect)) return;
     // 将播放状态同步到当前平台的系统媒体控件。
     unawaited(updateSystemMediaPlayback(
         playing: playing, stopped: !playing && _currentUrl == null));
     if (playing) {
       _stallTimer?.cancel();
-      _consecutiveFailures = 0;
+      if (state.phase == PlaybackPhase.buffering) _reconnectTimer?.cancel();
       state = state.copyWith(phase: PlaybackPhase.online, clearError: true);
     } else if (state.phase == PlaybackPhase.online && !state.userPaused) {
       // 流被中断(未手动暂停)→ 视为断线
@@ -143,10 +150,11 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   }
 
   void _onBuffering(bool buffering) {
-    if (_disposed || _currentUrl == null || state.userPaused) return;
+    if (!_canReconnect) return;
     if (!buffering) {
       _stallTimer?.cancel();
       if (state.phase == PlaybackPhase.buffering && _player.state.playing) {
+        _reconnectTimer?.cancel();
         state = state.copyWith(phase: PlaybackPhase.online);
       }
       return;
@@ -166,9 +174,40 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     }
   }
 
+  void _onPosition(Duration position) {
+    // 引擎在收到第一帧音频前就可能上报正在播放。
+    if (_consecutiveFailures > 0 &&
+        position > Duration.zero &&
+        _canReconnect &&
+        _player.state.playing) {
+      _consecutiveFailures = 0;
+    }
+  }
+
   void _onError(String message) {
-    if (_disposed) return;
-    if (state.userPaused || _currentUrl == null) return;
+    if (!_canReconnect) return;
+    if (message.trim() != 'Error decoding audio.') {
+      _reconnectAfterError(message);
+      return;
+    }
+    // 直播流中途的 ID3 标签或损坏单帧也会触发这条解码日志。
+    if (_decodeRecoveryTimer?.isActive ?? false) return;
+    final position = _player.state.position;
+    _decodeRecoveryTimer = Timer(const Duration(seconds: 2), () {
+      if (!_canReconnect) return;
+      final player = _player.state;
+      if (player.playing &&
+          !player.completed &&
+          player.position > Duration.zero &&
+          player.position != position) {
+        return;
+      }
+      _reconnectAfterError('音频流解码中断，正在重新连接…');
+    });
+  }
+
+  void _reconnectAfterError(String message) {
+    _decodeRecoveryTimer?.cancel();
     state = state.copyWith(
         phase: PlaybackPhase.reconnecting,
         error: message.isEmpty ? null : message);
@@ -176,10 +215,12 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   }
 
   void _scheduleReconnect(Duration delay) {
-    _reconnectTimer?.cancel();
-    if (_currentUrl == null || state.userPaused) return;
-    _consecutiveFailures++;
-    if (_consecutiveFailures >= 5) {
+    if (!_canReconnect || (_reconnectTimer?.isActive ?? false)) return;
+    if (_consecutiveFailures >= 4) {
+      _openRevision++;
+      _cancelRecovery();
+      if (_useLocalRelay) sharedRadioStream.stop();
+      unawaited(_player.stop().catchError((Object _) {}));
       state = state.copyWith(
         phase: PlaybackPhase.idle,
         error: '连续重连失败,请稍后手动重试',
@@ -187,18 +228,32 @@ class PlaybackController extends StateNotifier<PlaybackState> {
       return;
     }
     _reconnectTimer = Timer(delay, () async {
-      if (_disposed || _currentUrl == null || state.userPaused) return;
+      if (!_canReconnect) return;
+      final url = _currentUrl!;
+      final previousRevision = _openRevision;
       state = state.copyWith(phase: PlaybackPhase.reconnecting);
-      await _openRadio(_currentUrl!, play: true);
+      if (previousRevision != _openRevision) return;
+      _consecutiveFailures++;
+      final opening = _openRadio(url, play: true);
+      final revision = _openRevision;
+      try {
+        await opening;
+      } catch (_) {
+        if (revision == _openRevision) _onError('直播流连接失败，正在重新连接…');
+      }
     });
+  }
+
+  void _cancelRecovery() {
+    _reconnectTimer?.cancel();
+    _stallTimer?.cancel();
+    _decodeRecoveryTimer?.cancel();
   }
 
   /// 连接直播流，换码率时使用新流地址重新连接。
   Future<void> tune(String url, {bool autoplay = true}) async {
     _resumeAfterChannelChange = false;
     _currentUrl = url;
-    _reconnectTimer?.cancel();
-    _stallTimer?.cancel();
     _consecutiveFailures = 0;
     state = state.copyWith(
       phase: PlaybackPhase.connecting,
@@ -216,8 +271,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
             (hadStream && state.phase != PlaybackPhase.idle));
     _currentUrl = null;
     _openRevision++;
-    _reconnectTimer?.cancel();
-    _stallTimer?.cancel();
+    _cancelRecovery();
     state = state.copyWith(
       phase: _resumeAfterChannelChange
           ? PlaybackPhase.connecting
@@ -280,9 +334,9 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   Future<void> pause() async {
     _resumeAfterChannelChange = false;
     _openRevision++;
-    state = state.copyWith(userPaused: true, phase: PlaybackPhase.idle);
-    _reconnectTimer?.cancel();
-    _stallTimer?.cancel();
+    state = state.copyWith(
+        userPaused: true, phase: PlaybackPhase.idle, clearError: true);
+    _cancelRecovery();
     if (_useLocalRelay) {
       // 恢复播放会重新连接实时位置。暂停时关闭本地中继，避免继续下载直播音频。
       sharedRadioStream.stop();
@@ -295,6 +349,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   Future<void> resume() async {
     if (_currentUrl == null) return;
     // 从当前直播位置重新连流，跳过暂停期间积压的内容。
+    _consecutiveFailures = 0;
     state = state.copyWith(
         userPaused: false, phase: PlaybackPhase.connecting, clearError: true);
     await _openRadio(_currentUrl!, play: true);
@@ -318,8 +373,7 @@ class PlaybackController extends StateNotifier<PlaybackState> {
     _resumeAfterChannelChange = false;
     _openRevision++;
     _currentUrl = null;
-    _reconnectTimer?.cancel();
-    _stallTimer?.cancel();
+    _cancelRecovery();
     // stop 不重置音量(保持与持久化值、播放器实际音量一致)
     state = PlaybackState(
       volume: state.volume,
@@ -358,11 +412,11 @@ class PlaybackController extends StateNotifier<PlaybackState> {
   @override
   void dispose() {
     _disposed = true;
-    _reconnectTimer?.cancel();
-    _stallTimer?.cancel();
+    _cancelRecovery();
     _listenTimer?.cancel();
     _playingSubscription.cancel();
     _bufferingSubscription.cancel();
+    _positionSubscription.cancel();
     _errorSubscription.cancel();
     unregisterMediaControls();
     // 不 dispose 共享引擎(后台保活依赖它)
