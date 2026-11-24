@@ -7,10 +7,8 @@ class ThmrFocusLayer extends StatefulWidget {
   const ThmrFocusLayer({
     super.key,
     required this.child,
-    this.reserveEdgeSpace = true,
   });
   final Widget child;
-  final bool reserveEdgeSpace;
 
   @override
   State<ThmrFocusLayer> createState() => _ThmrFocusLayerState();
@@ -38,16 +36,7 @@ class _ThmrFocusLayerState extends State<ThmrFocusLayer> {
           fit: StackFit.expand,
           clipBehavior: Clip.none,
           children: [
-            if (widget.reserveEdgeSpace)
-              ColoredBox(color: Theme.of(context).scaffoldBackgroundColor),
-            // 在窗口边缘为完整的外侧焦点环预留空间。
-            Padding(
-              key: const ValueKey('app-content'),
-              padding: widget.reserveEdgeSpace
-                  ? const EdgeInsets.all(ThmrFocusRing.extent)
-                  : EdgeInsets.zero,
-              child: widget.child,
-            ),
+            widget.child,
             for (final entry in _entries.entries)
               if (entry.key.mounted) Positioned.fill(child: entry.value),
           ],
@@ -64,7 +53,7 @@ class _FocusLayerScope extends InheritedWidget {
       layer != oldWidget.layer;
 }
 
-/// 焦点环宽 1 个逻辑像素，与控件间隔 2 个逻辑像素。合成跟随层随控件滚动和变换，不占布局空间。
+/// 焦点环宽 1 个逻辑像素，通常与控件间隔 2 个逻辑像素。合成跟随层随控件滚动和变换，不占布局空间。
 class ThmrFocusRing extends StatefulWidget {
   const ThmrFocusRing({
     super.key,
@@ -153,7 +142,21 @@ class _ThmrFocusRingState extends State<ThmrFocusRing> {
     return Offset.zero & box.size;
   }
 
-  void _syncOverlay() {
+  Rect? _windowBounds() {
+    final target = _targetKey.currentContext?.findRenderObject();
+    final window = _layer?.context.findRenderObject();
+    if (target is! RenderBox ||
+        !target.attached ||
+        window is! RenderBox ||
+        !window.attached ||
+        !window.hasSize) {
+      return null;
+    }
+    return MatrixUtils.transformRect(
+        window.getTransformTo(target), Offset.zero & window.size);
+  }
+
+  void _syncOverlay(Listenable repaint) {
     if (_syncPending) return;
     _syncPending = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -172,7 +175,8 @@ class _ThmrFocusRingState extends State<ThmrFocusRing> {
                         widget.radius,
                         _color,
                         bounds: _bounds,
-                        geometry: _geometry,
+                        windowBounds: _windowBounds,
+                        repaint: repaint,
                         shape: widget.shape,
                         direction: _direction,
                       ),
@@ -224,7 +228,12 @@ class _ThmrFocusRingState extends State<ThmrFocusRing> {
     _direction = Directionality.maybeOf(context) ?? TextDirection.ltr;
     if (_layer != null &&
         (widget.focused || _layer!._entries.containsKey(this))) {
-      _syncOverlay();
+      // 滚动可能仅移动合成层。焦点环需要重新计算距窗口边缘的距离。
+      _syncOverlay(Listenable.merge([
+        _geometry,
+        Scrollable.maybeOf(context, axis: Axis.vertical)?.position,
+        Scrollable.maybeOf(context, axis: Axis.horizontal)?.position,
+      ]));
     }
     return CompositedTransformTarget(
       key: _targetKey,
@@ -237,7 +246,7 @@ class _ThmrFocusRingState extends State<ThmrFocusRing> {
                 foregroundPainter: widget.focused
                     ? _FocusRingPainter(widget.radius, _color,
                         bounds: _bounds,
-                        geometry: _geometry,
+                        repaint: _geometry,
                         shape: widget.shape,
                         direction: _direction)
                     : null,
@@ -284,13 +293,15 @@ class _RenderFocusGeometry extends RenderProxyBox {
 class _FocusRingPainter extends CustomPainter {
   _FocusRingPainter(this.radius, this.accent,
       {required this.bounds,
-      required Listenable geometry,
+      this.windowBounds,
+      required Listenable repaint,
       this.shape,
       this.direction = TextDirection.ltr})
-      : super(repaint: geometry);
+      : super(repaint: repaint);
   final double radius;
   final Color accent;
   final Rect? Function() bounds;
+  final Rect? Function()? windowBounds;
   final OutlinedBorder? shape;
   final TextDirection direction;
 
@@ -299,6 +310,14 @@ class _FocusRingPainter extends CustomPainter {
     final rect = bounds();
     if (rect == null || rect.isEmpty) return;
     const expansion = ThmrFocusRing.gap + ThmrFocusRing.width / 2;
+    final window = windowBounds?.call();
+    if (window != null && !window.overlaps(rect)) return;
+    // 贴边时只收进超出窗口的一侧，给描边本身留半个线宽。
+    var outline = rect.inflate(expansion);
+    if (window != null) {
+      outline = outline.intersect(window.deflate(ThmrFocusRing.width / 2));
+    }
+    if (outline.isEmpty) return;
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = ThmrFocusRing.width
@@ -309,7 +328,7 @@ class _FocusRingPainter extends CustomPainter {
       const extra = Radius.circular(expansion);
       canvas.drawRRect(
           RRect.fromRectAndCorners(
-            rect.inflate(expansion),
+            outline,
             topLeft: corners.topLeft + extra,
             topRight: corners.topRight + extra,
             bottomLeft: corners.bottomLeft + extra,
@@ -318,13 +337,11 @@ class _FocusRingPainter extends CustomPainter {
           paint);
     } else if (border != null) {
       canvas.drawPath(
-          border.getOuterPath(rect.inflate(expansion),
-              textDirection: direction),
-          paint);
+          border.getOuterPath(outline, textDirection: direction), paint);
     } else {
       canvas.drawRRect(
           RRect.fromRectAndRadius(
-            rect.inflate(expansion),
+            outline,
             Radius.circular(radius + expansion),
           ),
           paint);
@@ -337,5 +354,6 @@ class _FocusRingPainter extends CustomPainter {
       accent != oldDelegate.accent ||
       shape != oldDelegate.shape ||
       direction != oldDelegate.direction ||
-      bounds != oldDelegate.bounds;
+      bounds != oldDelegate.bounds ||
+      windowBounds != oldDelegate.windowBounds;
 }

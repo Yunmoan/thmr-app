@@ -279,11 +279,7 @@ class _Harness {
           child: AppInput(
               navigatorKey: navigator,
               child: desktopRoot
-                  ? Consumer(
-                      builder: (context, ref, _) => ThmrFocusLayer(
-                          reserveEdgeSpace: !ref.watch(
-                              largeScreenProvider.select((s) => s.active)),
-                          child: DesktopPlayerSurface(child: child!)))
+                  ? ThmrFocusLayer(child: DesktopPlayerSurface(child: child!))
                   : child!),
         ),
         home: ValueListenableBuilder(

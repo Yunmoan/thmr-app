@@ -18,7 +18,9 @@ Finder get _visibleRings => find
 
 Future<void> _expectRingPixels(
     WidgetTester tester, GlobalKey capture, ThemeData theme,
-    {int colorTolerance = 0, double pixelRatio = 1}) async {
+    {int colorTolerance = 0,
+    double pixelRatio = 1,
+    bool fitWindow = false}) async {
   final target = find.descendant(
     of: _visibleRings,
     matching: find.byType(CompositedTransformTarget),
@@ -32,6 +34,9 @@ Future<void> _expectRingPixels(
   final rect = owner is RenderBox
       ? (owner.localToGlobal(Offset.zero) & owner.size).shift(-origin)
       : tester.getRect(target).shift(-origin);
+  final outer = rect.inflate(2.5);
+  final window = Offset.zero & tester.getSize(find.byKey(capture));
+  final outline = fitWindow ? outer.intersect(window.deflate(0.5)) : outer;
   await tester.runAsync(() async {
     final image = await (capture.currentContext!.findRenderObject()!
             as RenderRepaintBoundary)
@@ -39,10 +44,10 @@ Future<void> _expectRingPixels(
     final pixels =
         (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
     for (final point in [
-      Offset(rect.left - 2.5, rect.center.dy),
-      Offset(rect.right + 2.5, rect.center.dy),
-      Offset(rect.center.dx, rect.top - 2.5),
-      Offset(rect.center.dx, rect.bottom + 2.5),
+      Offset(outline.left, outline.center.dy),
+      Offset(outline.right, outline.center.dy),
+      Offset(outline.center.dx, outline.top),
+      Offset(outline.center.dx, outline.bottom),
     ]) {
       final offset = ((point.dy * pixelRatio).floor() * image.width +
               (point.dx * pixelRatio).floor()) *
@@ -623,12 +628,17 @@ void main() {
         ),
       ),
     ));
+    expect(tester.getRect(find.byType(ListView)),
+        tester.getRect(find.byKey(capture)));
     focus.requestFocus();
     await tester.pumpAndSettle();
-    await _expectRingPixels(tester, capture, theme);
+    await _expectRingPixels(tester, capture, theme, fitWindow: true);
     scroll.jumpTo(40);
     await tester.pumpAndSettle();
-    await _expectRingPixels(tester, capture, theme);
+    await _expectRingPixels(tester, capture, theme, fitWindow: true);
+    scroll.jumpTo(20);
+    await tester.pumpAndSettle();
+    await _expectRingPixels(tester, capture, theme, fitWindow: true);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
