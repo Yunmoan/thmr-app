@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,7 +32,11 @@ class AppInput extends ConsumerStatefulWidget {
 
 class _AppInputState extends ConsumerState<AppInput>
     with WidgetsBindingObserver {
-  late final _gamepad = GamepadNavigation((command) => _run(command));
+  late final _gamepad = GamepadNavigation((command) {
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+    _run(command);
+  });
   StreamSubscription<NormalizedGamepadEvent>? _events;
   StreamSubscription<GamepadConnectionEvent>? _connections;
   final _focus = FocusNode(debugLabel: '应用操作', skipTraversal: true);
@@ -43,15 +48,13 @@ class _AppInputState extends ConsumerState<AppInput>
   void initState() {
     super.initState();
     _previousHighlightStrategy = FocusManager.instance.highlightStrategy;
+    FocusManager.instance.addEarlyKeyEventHandler(_restoreKeyboardHighlight);
     WidgetsBinding.instance.addObserver(this);
     _foreground = WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     try {
       _events = ref.read(gamepadEventsProvider).listen((event) {
-        if (!_foreground) return;
-        FocusManager.instance.highlightStrategy =
-            FocusHighlightStrategy.alwaysTraditional;
-        _gamepad.handle(event);
+        if (_foreground) _gamepad.handle(event);
       }, onError: _inputError);
       _connections = ref.read(gamepadConnectionsProvider).listen((event) {
         if (event.type == GamepadConnectionEventType.disconnected) {
@@ -81,8 +84,21 @@ class _AppInputState extends ConsumerState<AppInput>
     unawaited(_connections?.cancel());
     _gamepad.dispose();
     _focus.dispose();
+    FocusManager.instance.removeEarlyKeyEventHandler(_restoreKeyboardHighlight);
     FocusManager.instance.highlightStrategy = _previousHighlightStrategy;
     super.dispose();
+  }
+
+  KeyEventResult _restoreKeyboardHighlight(KeyEvent event) {
+    if (_foreground &&
+        !event.synthesized &&
+        (event is KeyDownEvent || event is KeyRepeatEvent) &&
+        FocusManager.instance.highlightStrategy ==
+            FocusHighlightStrategy.alwaysTouch) {
+      FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.automatic;
+    }
+    return KeyEventResult.ignored;
   }
 
   bool get _mainRoute => widget.navigatorKey.currentState?.canPop() == false;
@@ -292,8 +308,15 @@ class _AppInputState extends ConsumerState<AppInput>
       });
     }
     return Listener(
-      onPointerDown: (_) => FocusManager.instance.highlightStrategy =
-          FocusHighlightStrategy.automatic,
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (event) {
+        // 指针点击只隐藏外环，保留控件的焦点、光标和输入状态。
+        final mouse = event.kind == PointerDeviceKind.mouse ||
+            event.kind == PointerDeviceKind.trackpad;
+        FocusManager.instance.highlightStrategy = mouse
+            ? FocusHighlightStrategy.alwaysTouch
+            : FocusHighlightStrategy.automatic;
+      },
       child: Shortcuts(
           shortcuts: shortcuts,
           child: Actions(

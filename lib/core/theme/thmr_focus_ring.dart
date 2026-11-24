@@ -130,9 +130,22 @@ class _ThmrFocusRingState extends State<ThmrFocusRing> {
   Color _color = Colors.transparent;
   TextDirection _direction = TextDirection.ltr;
 
+  @override
+  void initState() {
+    super.initState();
+    FocusManager.instance.addHighlightModeListener(_highlightModeChanged);
+  }
+
+  void _highlightModeChanged(FocusHighlightMode _) {
+    if (widget.focused) _geometry.changed();
+  }
+
   Rect? _bounds() {
     // 目标子树移除后，窗口覆盖层仍可能绘制本帧。元素会先进入停用状态，再执行 State.dispose。
-    if (!_active) return null;
+    if (!_active ||
+        FocusManager.instance.highlightMode != FocusHighlightMode.traditional) {
+      return null;
+    }
     final box = _targetKey.currentContext?.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) return null;
     final target = widget.focusNode?.context?.findRenderObject();
@@ -203,6 +216,7 @@ class _ThmrFocusRingState extends State<ThmrFocusRing> {
 
   @override
   void dispose() {
+    FocusManager.instance.removeHighlightModeListener(_highlightModeChanged);
     _geometry.dispose();
     final layer = _layer;
     if (layer != null) {
@@ -228,12 +242,14 @@ class _ThmrFocusRingState extends State<ThmrFocusRing> {
     _direction = Directionality.maybeOf(context) ?? TextDirection.ltr;
     if (_layer != null &&
         (widget.focused || _layer!._entries.containsKey(this))) {
-      // 滚动可能仅移动合成层。焦点环需要重新计算距窗口边缘的距离。
-      _syncOverlay(Listenable.merge([
-        _geometry,
-        Scrollable.maybeOf(context, axis: Axis.vertical)?.position,
-        Scrollable.maybeOf(context, axis: Axis.horizontal)?.position,
-      ]));
+      // 任一层滚动容器都可能只移动合成层。描边需要按窗口边界重绘。
+      final repaint = <Listenable>[_geometry];
+      for (var scrollable = Scrollable.maybeOf(context);
+          scrollable != null;
+          scrollable = Scrollable.maybeOf(scrollable.context)) {
+        repaint.add(scrollable.position);
+      }
+      _syncOverlay(Listenable.merge(repaint));
     }
     return CompositedTransformTarget(
       key: _targetKey,

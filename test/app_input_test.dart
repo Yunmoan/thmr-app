@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +11,8 @@ import 'package:thmr_app/core/input/app_commands.dart';
 import 'package:thmr_app/core/input/app_input.dart';
 import 'package:thmr_app/core/player/playback_controller.dart';
 import 'package:thmr_app/core/state/station_provider.dart';
+import 'package:thmr_app/core/theme/thmr_focus_ring.dart';
+import 'package:thmr_app/shared/widgets/focus_outline.dart';
 import 'package:thmr_app/shared/widgets/volume_slider.dart';
 import 'gamepad_navigation_test.dart' show event;
 
@@ -33,6 +37,7 @@ class _Playback extends StateNotifier<PlaybackState>
 
 class _Harness {
   final navigator = GlobalKey<NavigatorState>();
+  final capture = GlobalKey();
   final events = StreamController<NormalizedGamepadEvent>.broadcast(sync: true);
   final connections =
       StreamController<GamepadConnectionEvent>.broadcast(sync: true);
@@ -53,19 +58,32 @@ class _Harness {
         container: container,
         child: MaterialApp(
             navigatorKey: navigator,
-            builder: (_, child) =>
-                AppInput(navigatorKey: navigator, child: child!),
+            builder: (_, child) => RepaintBoundary(
+                key: capture,
+                child: AppInput(
+                    navigatorKey: navigator,
+                    child: ThmrFocusLayer(child: child!))),
             home: Scaffold(
                 body: StatefulBuilder(
                     builder: (_, setState) => Column(children: [
-                          TextButton(
-                              focusNode: first,
-                              onPressed: () => activations++,
-                              child: const Text('first')),
-                          TextButton(
-                              focusNode: second,
-                              onPressed: () => activations++,
-                              child: const Text('second')),
+                          SizedBox(
+                            width: 100,
+                            child: FocusOutline(
+                              child: TextButton(
+                                  focusNode: first,
+                                  onPressed: () => activations++,
+                                  child: const Text('first')),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 100,
+                            child: FocusOutline(
+                              child: TextButton(
+                                  focusNode: second,
+                                  onPressed: () => activations++,
+                                  child: const Text('second')),
+                            ),
+                          ),
                           SizedBox(
                               width: 200,
                               child: VolumeSlider(
@@ -257,6 +275,71 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.text('键盘与手柄操作'), findsNothing);
+    await h.close(tester);
+  });
+
+  testWidgets(
+      'mouse click hides the ring while keyboard and gamepad restore it',
+      (tester) async {
+    final h = _Harness();
+    await h.mount(tester);
+    final first = find.widgetWithText(TextButton, 'first');
+    final second = find.widgetWithText(TextButton, 'second');
+    final theme = Theme.of(tester.element(first));
+    final activeColor = theme.colorScheme.primary;
+    final hiddenColor = theme.scaffoldBackgroundColor;
+
+    Future<Color> ringColor(Finder button) async {
+      final rect = tester
+          .getRect(button)
+          .shift(-tester.getTopLeft(find.byKey(h.capture)));
+      final color = await tester.runAsync(() async {
+        final render = h.capture.currentContext!.findRenderObject()
+            as RenderRepaintBoundary;
+        final image = await render.toImage();
+        final pixels =
+            (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+        final offset = (rect.center.dy.floor() * image.width +
+                (rect.right + 2.5).floor()) *
+            4;
+        final rgba = pixels.getUint32(offset);
+        image.dispose();
+        return Color((rgba & 0xff) << 24 | rgba >> 8);
+      });
+      return color!;
+    }
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    expect(h.first.hasPrimaryFocus, isTrue);
+    expect(await ringColor(first), activeColor);
+
+    await tester.tap(first, kind: ui.PointerDeviceKind.mouse);
+    h.events.add(event(axis: GamepadAxis.leftStickX, value: .1));
+    await tester.pumpAndSettle();
+    expect(h.first.hasPrimaryFocus, isTrue);
+    expect(await ringColor(first), hiddenColor);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    expect(h.second.hasPrimaryFocus, isTrue);
+    expect(await ringColor(second), activeColor);
+
+    await tester.tap(second, kind: ui.PointerDeviceKind.mouse);
+    await tester.pumpAndSettle();
+    expect(await ringColor(second), hiddenColor);
+    h.press(GamepadButton.dpadUp);
+    await tester.pumpAndSettle();
+    expect(h.first.hasPrimaryFocus, isTrue);
+    expect(await ringColor(first), activeColor);
+
+    await tester.tap(find.byType(TextField), kind: ui.PointerDeviceKind.mouse);
+    await tester.pump();
+    expect(
+        h.container.read(librarySearchFocusProvider).hasPrimaryFocus, isTrue);
+    tester.testTextInput.enterText('THMR');
+    await tester.pump();
+    expect(find.text('THMR'), findsOneWidget);
     await h.close(tester);
   });
 

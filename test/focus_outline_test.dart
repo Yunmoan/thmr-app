@@ -70,6 +70,13 @@ Future<void> _expectRingPixels(
 }
 
 void main() {
+  setUp(() {
+    final manager = FocusManager.instance;
+    final strategy = manager.highlightStrategy;
+    manager.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(() => manager.highlightStrategy = strategy);
+  });
+
   testWidgets('a focused control can be removed in the resize frame',
       (tester) async {
     final visible = ValueNotifier(true);
@@ -587,13 +594,15 @@ void main() {
     expect(taps, 1);
   });
 
-  testWidgets('ring follows scrolling and remains whole at the window edge',
+  testWidgets('ring follows both vertical scroll positions at the window edge',
       (tester) async {
     final focus = FocusNode();
+    final outer = ScrollController();
     final scroll = ScrollController();
     final capture = GlobalKey();
     final theme = ThmrTheme.dark();
     addTearDown(focus.dispose);
+    addTearDown(outer.dispose);
     addTearDown(scroll.dispose);
     await tester.pumpWidget(MaterialApp(
       theme: theme,
@@ -605,22 +614,36 @@ void main() {
             child: RepaintBoundary(
               key: capture,
               child: ThmrFocusLayer(
-                child: ListView(
-                  controller: scroll,
-                  padding: EdgeInsets.zero,
-                  children: [
-                    const SizedBox(height: 40),
-                    FocusOutline(
-                      child: Material(
-                        child: InkWell(
-                          focusNode: focus,
-                          onTap: () {},
-                          child: const SizedBox(height: 40),
+                child: RepaintBoundary(
+                  child: SingleChildScrollView(
+                    controller: outer,
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          height: 100,
+                          child: ListView(
+                            controller: scroll,
+                            padding: EdgeInsets.zero,
+                            children: [
+                              const SizedBox(height: 40),
+                              FocusOutline(
+                                child: Material(
+                                  child: InkWell(
+                                    focusNode: focus,
+                                    onTap: () {},
+                                    child: const SizedBox(height: 40),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 400),
+                            ],
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 180),
+                      ],
                     ),
-                    const SizedBox(height: 400),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -628,7 +651,7 @@ void main() {
         ),
       ),
     ));
-    expect(tester.getRect(find.byType(ListView)),
+    expect(tester.getRect(find.byType(SingleChildScrollView)),
         tester.getRect(find.byKey(capture)));
     focus.requestFocus();
     await tester.pumpAndSettle();
@@ -636,7 +659,10 @@ void main() {
     scroll.jumpTo(40);
     await tester.pumpAndSettle();
     await _expectRingPixels(tester, capture, theme, fitWindow: true);
-    scroll.jumpTo(20);
+    outer.jumpTo(20);
+    await tester.pumpAndSettle();
+    await _expectRingPixels(tester, capture, theme, fitWindow: true);
+    outer.jumpTo(0);
     await tester.pumpAndSettle();
     await _expectRingPixels(tester, capture, theme, fitWindow: true);
     await tester.pumpWidget(const SizedBox.shrink());
