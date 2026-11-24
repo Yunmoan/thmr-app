@@ -69,21 +69,25 @@ class LargeScreenContent extends StatelessWidget {
           const SizedBox(height: 18),
           if (hasTopWidgets) ...[widgets(true), const SizedBox(height: 12)],
           Expanded(
-              key: const ValueKey('large-screen-body'),
-              child: sideQueue
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                          Expanded(child: hero),
-                          const SizedBox(width: 16),
-                          SizedBox(
-                              width: (outer.maxWidth * .24).clamp(230, 360),
-                              child: _QueuePanel(
-                                  status: station.status,
-                                  settings: settings,
-                                  vertical: true)),
-                        ])
-                  : hero),
+            key: const ValueKey('large-screen-body'),
+            // 队列换到下方时保留曲目信息区及它正在显示的封面。
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: hero),
+                if (sideQueue) ...[
+                  const SizedBox(width: 16),
+                  SizedBox(
+                    width: (outer.maxWidth * .24).clamp(230, 360),
+                    child: _QueuePanel(
+                        status: station.status,
+                        settings: settings,
+                        vertical: true),
+                  ),
+                ],
+              ],
+            ),
+          ),
           if (settings.queue != LargeScreenQueue.hidden && !sideQueue) ...[
             const SizedBox(height: 14),
             SizedBox(
@@ -345,26 +349,20 @@ class _Hero extends StatelessWidget {
             centered: stacked,
             showProgress: settings.showProgress,
           );
-          if (stacked) {
-            return Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  cover,
-                  SizedBox(height: gap),
-                  Flexible(child: info)
-                ]);
-          }
-          return Row(children: [
-            if (settings.layout != LargeScreenLayout.coverRight) ...[
-              cover,
-              SizedBox(width: gap)
+          final coverRight = settings.layout == LargeScreenLayout.coverRight;
+          // 自适应布局改变排列方向时沿用封面组件。
+          return Flex(
+            direction: stacked ? Axis.vertical : Axis.horizontal,
+            mainAxisAlignment:
+                stacked ? MainAxisAlignment.center : MainAxisAlignment.start,
+            spacing: gap,
+            children: [
+              if (!coverRight) cover,
+              Flexible(
+                  fit: stacked ? FlexFit.loose : FlexFit.tight, child: info),
+              if (coverRight) cover,
             ],
-            Expanded(child: info),
-            if (settings.layout == LargeScreenLayout.coverRight) ...[
-              SizedBox(width: gap),
-              cover
-            ],
-          ]);
+          );
         })),
       );
 }
