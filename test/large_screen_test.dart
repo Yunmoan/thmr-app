@@ -979,6 +979,36 @@ void main() {
     expect(scroll.offset, 150);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
+  testWidgets('horizontal stage queue accepts both mouse wheel axes',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount(startFullScreen: false);
+    h.station.update(
+        StationUiState(status: _status(queueCount: 8), initialLoading: false));
+    await h.container.read(largeScreenSettingsProvider.notifier).update(
+        const LargeScreenSettings(
+            queue: LargeScreenQueue.strip, queueCount: 8));
+    await h.change(true);
+
+    final queue = find.byKey(const ValueKey('large-screen-queue'));
+    final scroll = tester.widget<ListView>(queue).controller!;
+    final position = tester.getCenter(queue);
+    Future<void> wheel(Offset delta) async {
+      await tester.sendEventToBinding(PointerScrollEvent(
+          kind: PointerDeviceKind.mouse,
+          position: position,
+          scrollDelta: delta));
+      await tester.pumpAndSettle();
+    }
+
+    await wheel(const Offset(0, 100));
+    expect(scroll.offset, 100);
+    await wheel(const Offset(0, -40));
+    expect(scroll.offset, 60);
+    await wheel(const Offset(80, 0));
+    expect(scroll.offset, 140);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
   testWidgets('window drag is confined to the brand and title region',
       (tester) async {
     final h = _Harness(tester);

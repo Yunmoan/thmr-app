@@ -8,6 +8,7 @@ import '../../core/state/large_screen_settings.dart';
 import '../../core/state/station_provider.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../core/theme/thmr_motion.dart';
+import '../../shared/widgets/horizontal_wheel_scroll.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import '../../shared/widgets/track_cover.dart';
 import 'large_screen_progress.dart';
@@ -645,20 +646,23 @@ class _QueuePanelState extends State<_QueuePanel> {
                 math.min(entries.length, constraints.maxWidth < 600 ? 1 : 3);
             final extent =
                 (constraints.maxWidth - (visible - 1) * 16) / visible;
-            return Scrollbar(
+            return HorizontalWheelScroll(
               controller: _scroll,
-              thumbVisibility: vertical,
-              child: ListView.separated(
-                key: const ValueKey('large-screen-queue'),
+              child: Scrollbar(
                 controller: _scroll,
-                primary: false,
-                scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
-                itemCount: entries.length,
-                separatorBuilder: (_, __) =>
-                    vertical ? divider() : const SizedBox(width: 16),
-                itemBuilder: (context, index) => vertical
-                    ? tile(index)
-                    : SizedBox(width: extent, child: tile(index)),
+                thumbVisibility: vertical,
+                child: ListView.separated(
+                  key: const ValueKey('large-screen-queue'),
+                  controller: _scroll,
+                  primary: false,
+                  scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
+                  itemCount: entries.length,
+                  separatorBuilder: (_, __) =>
+                      vertical ? divider() : const SizedBox(width: 16),
+                  itemBuilder: (context, index) => vertical
+                      ? tile(index)
+                      : SizedBox(width: extent, child: tile(index)),
+                ),
               ),
             );
           });
