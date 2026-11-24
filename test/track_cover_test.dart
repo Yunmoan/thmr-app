@@ -9,8 +9,8 @@ import 'package:thmr_app/shared/widgets/track_cover.dart';
 const _first = 'https://cover.test/first.png';
 const _second = 'https://cover.test/second.png';
 
-Future<Completer<ImageInfo>> _pending(String url) async {
-  final key = await TrackCover.providerFor(url, cacheWidth: 56)
+Future<Completer<ImageInfo>> _pending(String url, {int width = 56}) async {
+  final key = await TrackCover.providerFor(url, cacheWidth: width)
       .obtainKey(ImageConfiguration.empty);
   final result = Completer<ImageInfo>();
   PaintingBinding.instance.imageCache
@@ -27,10 +27,11 @@ Future<ui.Image> _image(WidgetTester tester, Color color) async {
   return image!;
 }
 
-Widget _host(String url, {bool reduced = false}) => MaterialApp(
+Widget _host(String url, {bool reduced = false, double size = 56}) =>
+    MaterialApp(
       home: MediaQuery(
         data: MediaQueryData(disableAnimations: reduced),
-        child: Center(child: TrackCover(url: url)),
+        child: Center(child: TrackCover(url: url, size: size)),
       ),
     );
 
@@ -129,6 +130,32 @@ void main() {
     pending.completeError(StateError('cover unavailable'));
     await tester.pumpAndSettle();
     expect(_opacity(tester, fallback), 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a failed resize retains the current cover until another decodes',
+      (tester) async {
+    final original = await _image(tester, Colors.red);
+    final resized = await _image(tester, Colors.blue);
+    (await _pending(_first)).complete(ImageInfo(image: original));
+    final failed = await _pending(_first, width: 112);
+    final next = await _pending(_first, width: 128);
+
+    await tester.pumpWidget(_host(_first));
+    await tester.pumpAndSettle();
+    expect(_opacity(tester, original), 1);
+
+    await tester.pumpWidget(_host(_first, size: 112));
+    failed.completeError(StateError('cover resize failed'));
+    await tester.pumpAndSettle();
+    expect(_opacity(tester, original), 1);
+
+    await tester.pumpWidget(_host(_first, size: 128));
+    expect(_opacity(tester, original), 1);
+    next.complete(ImageInfo(image: resized));
+    await tester.pumpAndSettle();
+    expect(_opacity(tester, resized), 1);
+    expect(_pixels(original), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

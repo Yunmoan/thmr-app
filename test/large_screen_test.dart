@@ -13,6 +13,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:thmr_app/core/input/app_input.dart';
 import 'package:thmr_app/core/input/app_commands.dart';
 import 'package:thmr_app/core/models/models.dart';
+import 'package:thmr_app/core/network/track_cover_provider.dart';
 import 'package:thmr_app/core/platform/window_presentation.dart';
 import 'package:thmr_app/core/theme/thmr_motion.dart';
 import 'package:thmr_app/core/player/playback_controller.dart';
@@ -1104,7 +1105,7 @@ void main() {
       picture.dispose();
       return image;
     });
-    const provider = ResizeImage(NetworkImage(url),
+    const provider = ResizeImage(TrackCoverProvider(url),
         width: 48, height: 48, policy: ResizeImagePolicy.fit);
     final key = await tester
         .runAsync(() => provider.obtainKey(ImageConfiguration.empty));

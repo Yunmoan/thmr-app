@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../core/network/track_cover_provider.dart';
 import '../../core/theme/thmr_motion.dart';
 import '../../core/theme/thmr_theme.dart';
 
-/// 曲目封面，加载中、无封面或加载失败时显示 THMR 标志。
+/// 曲目封面，无可用帧时显示 THMR 标志。
 class TrackCover extends StatelessWidget {
   const TrackCover({
     super.key,
@@ -24,7 +25,7 @@ class TrackCover extends StatelessWidget {
       null,
       url.isEmpty
           ? const AssetImage('assets/brand/logo.png')
-          : NetworkImage(url),
+          : TrackCoverProvider(url),
     );
   }
 
@@ -75,12 +76,12 @@ class TrackCoverImage extends StatefulWidget {
 }
 
 class _TrackCoverImageState extends State<TrackCoverImage> {
-  bool _hasCoverFrame = false;
+  Widget? _coverFrame;
 
   @override
   void didUpdateWidget(covariant TrackCoverImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.url != widget.url) _hasCoverFrame = false;
+    if (oldWidget.url != widget.url) _coverFrame = null;
   }
 
   @override
@@ -94,6 +95,16 @@ class _TrackCoverImageState extends State<TrackCoverImage> {
 
     if (url.isEmpty) return placeholder();
 
+    Widget display(BuildContext context) => AnimatedSwitcher(
+          duration: ThmrMotion.of(context),
+          switchInCurve: ThmrMotion.enterCurve,
+          switchOutCurve: ThmrMotion.exitCurve,
+          child: SizedBox.expand(
+            key: ValueKey(_coverFrame != null),
+            child: _coverFrame ?? placeholder(),
+          ),
+        );
+
     return Image(
       // 仅切换封面来源时重建图片。同一封面重新解码期间继续显示已有帧。
       key: ValueKey(url),
@@ -102,19 +113,14 @@ class _TrackCoverImageState extends State<TrackCoverImage> {
       filterQuality: filterQuality,
       gaplessPlayback: true,
       frameBuilder: (context, child, frame, synchronous) {
-        // 解码尺寸改变时帧号会重置，已有封面无需重新从占位图淡入。
-        _hasCoverFrame |= synchronous || frame != null;
-        return AnimatedSwitcher(
-          duration: ThmrMotion.of(context),
-          switchInCurve: ThmrMotion.enterCurve,
-          switchOutCurve: ThmrMotion.exitCurve,
-          child: SizedBox.expand(
-            key: ValueKey(_hasCoverFrame),
-            child: _hasCoverFrame ? child : placeholder(),
-          ),
-        );
+        // 尺寸改变时帧号会重置，gaplessPlayback 会继续提供同一封面的上一帧。
+        if (synchronous || frame != null || _coverFrame != null) {
+          _coverFrame = child;
+        }
+        return display(context);
       },
-      errorBuilder: (_, __, ___) => placeholder(),
+      // 新尺寸解码失败时，绘制 Image 仍持有的上一帧。
+      errorBuilder: (context, _, __) => display(context),
     );
   }
 }

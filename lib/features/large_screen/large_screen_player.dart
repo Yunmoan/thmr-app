@@ -11,6 +11,7 @@ import '../../core/platform/mobile_presentation.dart';
 import '../../core/player/playback_controller.dart';
 import '../../core/player/spectrum.dart';
 import '../../core/models/models.dart';
+import '../../core/network/track_cover_provider.dart';
 import '../../core/state/large_screen_settings.dart';
 import '../../core/state/settings_provider.dart';
 import '../../core/state/station_provider.dart';
@@ -229,7 +230,7 @@ class _LargeScreenPlayerState extends ConsumerState<LargeScreenPlayer>
           final fluidStage =
               settings.musicEffect == LargeScreenMusicEffect.fluid;
           final artwork = fluidStage && coverUrl.isNotEmpty
-              ? ResizeImage(NetworkImage(coverUrl),
+              ? ResizeImage(TrackCoverProvider(coverUrl),
                   width: 48, height: 48, policy: ResizeImagePolicy.fit)
               : null;
           Color? illustrationTint(FluidColors? colors) {
