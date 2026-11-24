@@ -9,6 +9,8 @@ import '../../core/platform/mobile_presentation.dart';
 import '../../core/state/large_screen_settings.dart';
 import '../../core/theme/thmr_motion.dart';
 import '../../core/platform/window_presentation.dart';
+import '../../shared/widgets/desktop_title_bar.dart';
+import '../mini/desktop_player_surface.dart';
 import 'large_screen_controller.dart';
 import 'large_screen_player.dart';
 
@@ -23,10 +25,7 @@ class LargeScreenSurface extends ConsumerStatefulWidget {
 }
 
 class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
-    with
-        SingleTickerProviderStateMixin,
-        WindowListener,
-        WidgetsBindingObserver {
+    with TickerProviderStateMixin, WindowListener, WidgetsBindingObserver {
   Size? _mainSize;
   MediaQueryData? _mainMetrics;
   FocusNode? _previousFocus;
@@ -34,6 +33,8 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
   final _stageMessenger = GlobalKey<ScaffoldMessengerState>();
   late final LargeScreenController _mode;
   late final AnimationController _standard;
+  late final AnimationController _inPlaceFade;
+  late final Animation<double> _inPlaceOpacity;
   bool _standardVisible = true;
   EdgeInsets _workAreaInsets = EdgeInsets.zero;
   int _metricsRevision = 0;
@@ -111,12 +112,18 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
     WidgetsBinding.instance.addObserver(this);
     _mode = ref.read(largeScreenProvider.notifier);
     final mode = ref.read(largeScreenProvider);
-    _standardVisible = !mode.active && mode.contentVisible;
+    _standardVisible =
+        mode.switchingInPlace || (!mode.active && mode.contentVisible);
     _standard = AnimationController(
         vsync: this,
         duration: ThmrMotion.duration,
         value: _standardVisible ? 1 : 0);
+    _inPlaceFade = AnimationController(
+        vsync: this, duration: ThmrMotion.duration, value: mode.active ? 1 : 0);
+    _inPlaceOpacity =
+        _inPlaceFade.drive(CurveTween(curve: Curves.easeInOutCubic));
     _mode.animateStandard = _animateStandard;
+    _mode.animateInPlace = _animateInPlace;
     _mode.refreshMetrics = _refreshWorkArea;
     if (hasDesktopWindowControls) windowManager.addListener(this);
   }
@@ -127,6 +134,7 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
     if (MediaQuery.disableAnimationsOf(context) ||
         !TickerMode.valuesOf(context).enabled) {
       _standard.value = _standardVisible ? 1 : 0;
+      _inPlaceFade.stop();
     }
   }
 
@@ -152,6 +160,27 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
     }
   }
 
+  Future<void> _animateInPlace(bool entering) async {
+    if (entering) _previousFocus = FocusManager.instance.primaryFocus;
+    // 普通页面完整绘制在底层，大屏连同自己的背景一起渐显或渐隐。
+    _standardVisible = true;
+    _standard.value = 1;
+    final duration = ThmrMotion.of(context, exiting: !entering);
+    if (duration == Duration.zero || !TickerMode.valuesOf(context).enabled) {
+      return;
+    }
+    _inPlaceFade.duration = duration;
+    _inPlaceFade.value = entering ? 0 : 1;
+    try {
+      await (entering ? _inPlaceFade.forward() : _inPlaceFade.reverse())
+          .orCancel
+          .timeout(duration + const Duration(milliseconds: 200),
+              onTimeout: _inPlaceFade.stop);
+    } on TickerCanceled {
+      // 页面重挂载或系统减少动态效果时，直接完成切换。
+    }
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -160,10 +189,14 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
     if (_mode.animateStandard == _animateStandard) {
       _mode.animateStandard = null;
     }
+    if (_mode.animateInPlace == _animateInPlace) {
+      _mode.animateInPlace = null;
+    }
     if (_mode.refreshMetrics == _refreshWorkArea) {
       _mode.refreshMetrics = null;
     }
     _standard.dispose();
+    _inPlaceFade.dispose();
     _stageFocus.dispose();
     super.dispose();
   }
@@ -189,6 +222,7 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
   Widget build(BuildContext context) {
     final mode = ref.watch(largeScreenProvider);
     final active = mode.active;
+    final inPlace = mode.switchingInPlace;
     ref.listen(largeScreenProvider, (previous, next) {
       if (previous?.active != next.active) _syncKeepScreenOn();
       if (next.active && previous?.active != true) {
@@ -235,8 +269,15 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
         },
         child: LayoutBuilder(builder: (context, constraints) {
           final metrics = MediaQuery.of(context);
-          if (!active) {
-            _mainSize = constraints.biggest;
+          final ordinaryTop = inPlace &&
+                  context.findAncestorWidgetOfExactType<
+                          DesktopPlayerSurface>() !=
+                      null
+              ? DesktopTitleBar.height
+              : 0.0;
+          if (!active || inPlace) {
+            _mainSize =
+                constraints.deflate(EdgeInsets.only(top: ordinaryTop)).biggest;
             _mainMetrics = metrics;
           }
           final retainedMetrics = metrics.copyWith(
@@ -248,39 +289,52 @@ class _LargeScreenSurfaceState extends ConsumerState<LargeScreenSurface>
           );
           return Stack(fit: StackFit.expand, children: [
             Offstage(
-              offstage: active,
-              child: TickerMode(
-                enabled: !active,
-                child: ExcludeFocus(
-                  excluding: active,
-                  child: OverflowBox(
-                    alignment: Alignment.topLeft,
-                    minWidth: 0,
-                    minHeight: 0,
-                    maxWidth: double.infinity,
-                    maxHeight: double.infinity,
-                    child: SizedBox.fromSize(
-                        size: _mainSize ?? constraints.biggest,
-                        child: MediaQuery(
-                            data: retainedMetrics,
-                            child: IgnorePointer(
-                                ignoring: mode.busy,
-                                child: ThmrFadeSlide(
-                                    key: const ValueKey(
-                                        'standard-mode-transition'),
-                                    animation: _standard,
-                                    fade: false,
-                                    child: widget.child)))),
+              offstage: active && !inPlace,
+              child: Padding(
+                padding: EdgeInsets.only(top: ordinaryTop),
+                child: TickerMode(
+                  enabled: !active,
+                  child: ExcludeFocus(
+                    excluding: active || inPlace,
+                    child: OverflowBox(
+                      alignment: Alignment.topLeft,
+                      minWidth: 0,
+                      minHeight: 0,
+                      maxWidth: double.infinity,
+                      maxHeight: double.infinity,
+                      child: SizedBox.fromSize(
+                          size: _mainSize ?? constraints.biggest,
+                          child: MediaQuery(
+                              data: retainedMetrics,
+                              child: IgnorePointer(
+                                  ignoring: mode.busy,
+                                  child: ThmrFadeSlide(
+                                      key: const ValueKey(
+                                          'standard-mode-transition'),
+                                      animation: _standard,
+                                      fade: false,
+                                      child: widget.child)))),
+                    ),
                   ),
                 ),
               ),
             ),
-            if (active)
-              FocusScope(
-                  node: _stageFocus,
-                  child: ScaffoldMessenger(
-                      key: _stageMessenger,
-                      child: LargeScreenPlayer(safeInsets: _workAreaInsets))),
+            if (active || inPlace)
+              FadeTransition(
+                key: const ValueKey('large-screen-window-fade'),
+                opacity: inPlace ? _inPlaceOpacity : kAlwaysCompleteAnimation,
+                child: IgnorePointer(
+                  ignoring: inPlace,
+                  child: FocusScope(
+                    node: _stageFocus,
+                    canRequestFocus: !inPlace,
+                    descendantsAreFocusable: !inPlace,
+                    child: ScaffoldMessenger(
+                        key: _stageMessenger,
+                        child: LargeScreenPlayer(safeInsets: _workAreaInsets)),
+                  ),
+                ),
+              ),
           ]);
         }));
   }

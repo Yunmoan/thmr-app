@@ -1196,6 +1196,66 @@ void main() {
     expect(h.container.read(largeScreenProvider).active, isTrue);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
+  testWidgets('windowed switching crossfades without hiding the window',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount(startFullScreen: false, desktopRoot: true);
+    var concealCalls = 0;
+    h.onConceal = () => concealCalls++;
+    h.scroll.jumpTo(800);
+    h.mainFocus.requestFocus();
+    await tester.pump();
+    final ordinary =
+        tester.element(find.byKey(const ValueKey('retained-list')));
+    final stage = find.byKey(const ValueKey('large-screen-window-fade'));
+    final mainControl = find.text('main control');
+    final controlPosition = tester.getTopLeft(mainControl);
+    double opacity() => tester.widget<FadeTransition>(stage).opacity.value;
+    void expectTransitionFrame() {
+      expect(opacity(), inExclusiveRange(0, 1));
+      expect(tester.getTopLeft(stage), Offset.zero);
+      expect(tester.getTopLeft(mainControl), controlPosition);
+      expect(find.text('main control'), findsOneWidget);
+    }
+
+    final entering = h.controller.change(true);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expectTransitionFrame();
+    expect(h.container.read(largeScreenProvider).busy, isTrue);
+    await tester.pumpAndSettle();
+    await entering;
+    expect(opacity(), 1);
+    expect(find.text('main control'), findsNothing);
+
+    final leaving = h.controller.change(false);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    expectTransitionFrame();
+    await tester.pumpAndSettle();
+    await leaving;
+    expect(stage, findsNothing);
+    expect(tester.element(find.byKey(const ValueKey('retained-list'))),
+        same(ordinary));
+    expect(h.scroll.offset, 800);
+    expect(h.mainFocus.hasFocus, isTrue);
+    expect(concealCalls, 0);
+    expect(h.revealed, isEmpty);
+    expect(h.calls, isEmpty);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('windowed switching respects reduced motion', (tester) async {
+    final h = _Harness(tester);
+    await h.mount(startFullScreen: false, reducedMotion: true);
+    final entering = h.controller.change(true);
+    await tester.pump();
+    final stage = find.byKey(const ValueKey('large-screen-window-fade'));
+    expect(tester.widget<FadeTransition>(stage).opacity.value, 1);
+    await tester.pumpAndSettle();
+    await entering;
+    expect(h.revealed, isEmpty);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
   for (final size in [
     const Size(1920, 1080),
     const Size(1280, 720),

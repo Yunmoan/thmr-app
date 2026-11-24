@@ -16,6 +16,7 @@ class LargeScreenState {
       this.fullScreen = false,
       this.busy = false,
       this.contentVisible = true,
+      this.switchingInPlace = false,
       this.error});
   final bool active;
   final bool fullScreen;
@@ -23,6 +24,7 @@ class LargeScreenState {
 
   /// 原生切换或入场动画进行时，组件重挂载也会保留该状态。
   final bool contentVisible;
+  final bool switchingInPlace;
   final String? error;
 }
 
@@ -44,6 +46,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
   _PresentationTarget? _target;
   Future<void> Function(bool)? animatePresentation;
   Future<void> Function(bool)? animateStandard;
+  Future<void> Function(bool)? animateInPlace;
   Future<void> Function()? refreshMetrics;
   bool _restoreFullScreen = false;
   Completer<void>? _nativeFullScreenWaiter;
@@ -149,9 +152,9 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
   Future<void> _change(_PresentationTarget target) async {
     if (hasMobilePresentation) return _changeMobile(target.active);
     final previous = state;
-    // Windows 原生窗口隐藏前保留完整的大屏界面，避免仅淡出内容时露出单独的背景。
-    final animateSwitch =
-        previous.active != target.active && (!_windows || target.active);
+    final changesPage = previous.active != target.active;
+    var switchingInPlace = false;
+    var animateSwitch = false;
     var previousFullScreen = previous.fullScreen;
     var concealed = false;
     String? errorMessage;
@@ -172,6 +175,25 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
               : _restoreFullScreen);
       _target = (active: target.active, fullScreen: targetFullScreen);
       Tooltip.dismissAllToolTips();
+      switchingInPlace =
+          _windows && changesPage && previousFullScreen == targetFullScreen;
+      if (switchingInPlace) {
+        await refreshMetrics?.call();
+        if (!mounted) return;
+        state = LargeScreenState(
+            active: previous.active,
+            fullScreen: previousFullScreen,
+            busy: true,
+            switchingInPlace: true);
+        await animateInPlace?.call(target.active);
+        if (mounted) {
+          state = LargeScreenState(
+              active: target.active, fullScreen: targetFullScreen, busy: true);
+        }
+        return;
+      }
+      // Windows 调整窗口尺寸时保留完整的大屏界面，直到原生窗口隐藏。
+      animateSwitch = changesPage && (!_windows || target.active);
       if (animateSwitch) await _animate(false);
       if (!mounted) return;
       if (_windows) {
@@ -249,11 +271,13 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
         }
       }
       if (mounted) {
-        try {
-          await windowManager.focus();
-          if (_windows) await _presentation.fullscreenHint(state.fullScreen);
-        } catch (error) {
-          debugPrint('Window focus failed: $error');
+        if (!switchingInPlace) {
+          try {
+            await windowManager.focus();
+            if (_windows) await _presentation.fullscreenHint(state.fullScreen);
+          } catch (error) {
+            debugPrint('Window focus failed: $error');
+          }
         }
         if (entrance != null) {
           try {
@@ -326,6 +350,7 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
           fullScreen: fullScreen,
           contentVisible: state.contentVisible,
           busy: state.busy,
+          switchingInPlace: state.switchingInPlace,
           error: state.error);
     }
   }
