@@ -118,15 +118,12 @@ Future<void> main() async {
                 extensions: [ThmrTokens.reimuLight.accessible()]),
         builder: (context, child) => RepaintBoundary(
             key: renderedFrame,
-            child: Consumer(
-                builder: (context, ref, _) => MediaQuery(
-                    data: MediaQuery.of(context).copyWith(
-                        disableAnimations:
-                            const bool.fromEnvironment('reducedMotion')),
-                    child: ThmrFocusLayer(
-                        reserveEdgeSpace: !ref
-                            .watch(largeScreenProvider.select((s) => s.active)),
-                        child: DesktopPlayerSurface(child: child!))))),
+            child: MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                    disableAnimations:
+                        const bool.fromEnvironment('reducedMotion')),
+                child: ThmrFocusLayer(
+                    child: DesktopPlayerSurface(child: child!)))),
         home: editorPreview
             ? const LargeScreenSettingsPage()
             : LargeScreenSurface(

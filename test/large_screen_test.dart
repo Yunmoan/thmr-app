@@ -279,11 +279,7 @@ class _Harness {
           child: AppInput(
               navigatorKey: navigator,
               child: desktopRoot
-                  ? Consumer(
-                      builder: (context, ref, _) => ThmrFocusLayer(
-                          reserveEdgeSpace: !ref.watch(
-                              largeScreenProvider.select((s) => s.active)),
-                          child: DesktopPlayerSurface(child: child!)))
+                  ? ThmrFocusLayer(child: DesktopPlayerSurface(child: child!))
                   : child!),
         ),
         home: ValueListenableBuilder(
@@ -635,6 +631,81 @@ void main() {
             'Cover fills the entire square instead of retaining side bars.');
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
+  testWidgets('resizing keeps the current cover until its new size is decoded',
+      (tester) async {
+    const windowSizes = [Size(1280, 720), Size(1120, 630), Size(610, 660)];
+    const url = 'https://cover.test/window-resize.png';
+    final h = _Harness(tester);
+    await h.mount(size: windowSizes.first, startFullScreen: false);
+    await h.container
+        .read(largeScreenSettingsProvider.notifier)
+        .update(const LargeScreenSettings(queue: LargeScreenQueue.list));
+    await h.change(true);
+    final cover = find.byKey(const ValueKey('large-screen-cover'));
+    final widths = <int>[];
+    for (final size in windowSizes) {
+      tester.view.physicalSize = size;
+      await tester.pumpAndSettle();
+      widths.add(tester.getSize(cover).width.round());
+    }
+    expect(widths.toSet(), hasLength(windowSizes.length));
+    tester.view.physicalSize = windowSizes.first;
+    await tester.pumpAndSettle();
+
+    Future<Completer<ImageInfo>> pendingCover(int width) async {
+      final key = await TrackCover.providerFor(url, cacheWidth: width)
+          .obtainKey(ImageConfiguration.empty);
+      final pending = Completer<ImageInfo>();
+      PaintingBinding.instance.imageCache
+          .putIfAbsent(key, () => OneFrameImageStreamCompleter(pending.future));
+      return pending;
+    }
+
+    Future<ui.Image> coverImage(int width, Color color) async {
+      final recorder = ui.PictureRecorder();
+      Canvas(recorder).drawColor(color, BlendMode.src);
+      final picture = recorder.endRecording();
+      final image = await tester.runAsync(() => picture.toImage(width, width));
+      picture.dispose();
+      return image!;
+    }
+
+    Finder pixels(ui.Image image) => find.descendant(
+        of: cover,
+        matching: find.byWidgetPredicate((widget) =>
+            widget is RawImage && (widget.image?.isCloneOf(image) ?? false)));
+    void expectVisibleCover(ui.Image image) {
+      final visible = pixels(image);
+      expect(visible, findsOneWidget);
+      final fades =
+          find.ancestor(of: visible, matching: find.byType(FadeTransition));
+      expect(
+          tester.widgetList<FadeTransition>(fades).map((w) => w.opacity.value),
+          everyElement(1));
+    }
+
+    final images = [
+      for (final width in widths) await coverImage(width, Colors.red)
+    ];
+    final requests = [for (final width in widths) await pendingCover(width)];
+    requests.first.complete(ImageInfo(image: images.first));
+    h.station.update(
+        StationUiState(status: _status(coverUrl: url), initialLoading: false));
+    await tester.pumpAndSettle();
+    expectVisibleCover(images.first);
+
+    for (var i = 1; i < windowSizes.length; i++) {
+      tester.view.physicalSize = windowSizes[i];
+      await tester.pumpAndSettle();
+      expectVisibleCover(images[i - 1]);
+      requests[i].complete(ImageInfo(image: images[i]));
+      await tester.pump();
+      await tester.pump();
+      expectVisibleCover(images[i]);
+      expect(pixels(images[i - 1]), findsNothing);
+    }
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
   testWidgets(
       'native resize without window events refreshes the work area before reveal',
       (tester) async {
@@ -906,6 +977,36 @@ void main() {
             .controller,
         same(scroll));
     expect(scroll.offset, 150);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('horizontal stage queue accepts both mouse wheel axes',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount(startFullScreen: false);
+    h.station.update(
+        StationUiState(status: _status(queueCount: 8), initialLoading: false));
+    await h.container.read(largeScreenSettingsProvider.notifier).update(
+        const LargeScreenSettings(
+            queue: LargeScreenQueue.strip, queueCount: 8));
+    await h.change(true);
+
+    final queue = find.byKey(const ValueKey('large-screen-queue'));
+    final scroll = tester.widget<ListView>(queue).controller!;
+    final position = tester.getCenter(queue);
+    Future<void> wheel(Offset delta) async {
+      await tester.sendEventToBinding(PointerScrollEvent(
+          kind: PointerDeviceKind.mouse,
+          position: position,
+          scrollDelta: delta));
+      await tester.pumpAndSettle();
+    }
+
+    await wheel(const Offset(0, 100));
+    expect(scroll.offset, 100);
+    await wheel(const Offset(0, -40));
+    expect(scroll.offset, 60);
+    await wheel(const Offset(80, 0));
+    expect(scroll.offset, 140);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('window drag is confined to the brand and title region',
@@ -1198,6 +1299,66 @@ void main() {
     expect(h.calls, isEmpty);
     expect(find.byTooltip('进入全屏'), findsOneWidget);
     expect(h.container.read(largeScreenProvider).active, isTrue);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('windowed switching crossfades without hiding the window',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount(startFullScreen: false, desktopRoot: true);
+    var concealCalls = 0;
+    h.onConceal = () => concealCalls++;
+    h.scroll.jumpTo(800);
+    h.mainFocus.requestFocus();
+    await tester.pump();
+    final ordinary =
+        tester.element(find.byKey(const ValueKey('retained-list')));
+    final stage = find.byKey(const ValueKey('large-screen-window-fade'));
+    final mainControl = find.text('main control');
+    final controlPosition = tester.getTopLeft(mainControl);
+    double opacity() => tester.widget<FadeTransition>(stage).opacity.value;
+    void expectTransitionFrame() {
+      expect(opacity(), inExclusiveRange(0, 1));
+      expect(tester.getTopLeft(stage), Offset.zero);
+      expect(tester.getTopLeft(mainControl), controlPosition);
+      expect(find.text('main control'), findsOneWidget);
+    }
+
+    final entering = h.controller.change(true);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expectTransitionFrame();
+    expect(h.container.read(largeScreenProvider).busy, isTrue);
+    await tester.pumpAndSettle();
+    await entering;
+    expect(opacity(), 1);
+    expect(find.text('main control'), findsNothing);
+
+    final leaving = h.controller.change(false);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    expectTransitionFrame();
+    await tester.pumpAndSettle();
+    await leaving;
+    expect(stage, findsNothing);
+    expect(tester.element(find.byKey(const ValueKey('retained-list'))),
+        same(ordinary));
+    expect(h.scroll.offset, 800);
+    expect(h.mainFocus.hasFocus, isTrue);
+    expect(concealCalls, 0);
+    expect(h.revealed, isEmpty);
+    expect(h.calls, isEmpty);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('windowed switching respects reduced motion', (tester) async {
+    final h = _Harness(tester);
+    await h.mount(startFullScreen: false, reducedMotion: true);
+    final entering = h.controller.change(true);
+    await tester.pump();
+    final stage = find.byKey(const ValueKey('large-screen-window-fade'));
+    expect(tester.widget<FadeTransition>(stage).opacity.value, 1);
+    await tester.pumpAndSettle();
+    await entering;
+    expect(h.revealed, isEmpty);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   for (final size in [

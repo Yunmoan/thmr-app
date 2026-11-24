@@ -56,7 +56,7 @@ class TrackCover extends StatelessWidget {
 }
 
 /// 不同尺寸与装饰的封面共用的加载逻辑。
-class TrackCoverImage extends StatelessWidget {
+class TrackCoverImage extends StatefulWidget {
   const TrackCoverImage({
     super.key,
     required this.url,
@@ -71,7 +71,21 @@ class TrackCoverImage extends StatelessWidget {
   final FilterQuality filterQuality;
 
   @override
+  State<TrackCoverImage> createState() => _TrackCoverImageState();
+}
+
+class _TrackCoverImageState extends State<TrackCoverImage> {
+  bool _hasCoverFrame = false;
+
+  @override
+  void didUpdateWidget(covariant TrackCoverImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) _hasCoverFrame = false;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final TrackCoverImage(:url, :cacheWidth, :fit, :filterQuality) = widget;
     Widget placeholder() => Image(
           image: TrackCover.providerFor('', cacheWidth: cacheWidth),
           fit: fit,
@@ -81,20 +95,22 @@ class TrackCoverImage extends StatelessWidget {
     if (url.isEmpty) return placeholder();
 
     return Image(
-      // 图片来源变化时，从占位图重新开始，避免沿用旧封面或旧封面已完成的淡入动画。
-      key: ValueKey((url, cacheWidth)),
+      // 仅切换封面来源时重建图片。同一封面重新解码期间继续显示已有帧。
+      key: ValueKey(url),
       image: TrackCover.providerFor(url, cacheWidth: cacheWidth),
       fit: fit,
       filterQuality: filterQuality,
+      gaplessPlayback: true,
       frameBuilder: (context, child, frame, synchronous) {
-        final ready = synchronous || frame != null;
+        // 解码尺寸改变时帧号会重置，已有封面无需重新从占位图淡入。
+        _hasCoverFrame |= synchronous || frame != null;
         return AnimatedSwitcher(
           duration: ThmrMotion.of(context),
           switchInCurve: ThmrMotion.enterCurve,
           switchOutCurve: ThmrMotion.exitCurve,
           child: SizedBox.expand(
-            key: ValueKey(ready),
-            child: ready ? child : placeholder(),
+            key: ValueKey(_hasCoverFrame),
+            child: _hasCoverFrame ? child : placeholder(),
           ),
         );
       },

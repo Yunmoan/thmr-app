@@ -29,18 +29,36 @@ class _DesktopPlayerSurfaceState extends ConsumerState<DesktopPlayerSurface> {
   Widget build(BuildContext context) {
     final mini = ref.watch(miniPlayerProvider);
     final busy = ref.watch(miniTransitionBusyProvider);
-    final large = ref.watch(largeScreenProvider.select((s) => s.active));
+    final (large, inPlace) = ref.watch(
+        largeScreenProvider.select((s) => (s.active, s.switchingInPlace)));
+    final showOrdinary = !mini && (!large || inPlace);
     return ExcludeFocus(
       excluding: busy,
       child: IgnorePointer(
         ignoring: busy,
         child: ThmrBackground(
-          visible: !mini && !large,
+          visible: showOrdinary,
           child: Stack(
             fit: StackFit.expand,
             children: [
+              if (showOrdinary)
+                Align(
+                  alignment: Alignment.topCenter,
+                  child: ExcludeFocus(
+                    excluding: inPlace,
+                    child: IgnorePointer(
+                      ignoring: inPlace,
+                      child: DesktopTitleBar(
+                        onMini: () => enterMiniMode(
+                            ref, MediaQuery.textScalerOf(context)),
+                      ),
+                    ),
+                  ),
+                ),
               Padding(
-                padding: mini || large
+                key: const ValueKey('desktop-navigator'),
+                // 窗口内切换时，大屏覆盖标题栏，普通页面仍保留自己的顶部间距。
+                padding: mini || large || inPlace
                     ? EdgeInsets.zero
                     : const EdgeInsets.only(top: DesktopTitleBar.height),
                 child: TickerMode(
@@ -68,16 +86,7 @@ class _DesktopPlayerSurfaceState extends ConsumerState<DesktopPlayerSurface> {
                   }),
                 ),
               ),
-              if (mini)
-                MiniPlayerTransition(child: widget.miniPlayer)
-              else if (!large)
-                Align(
-                  alignment: Alignment.topCenter,
-                  child: DesktopTitleBar(
-                    onMini: () =>
-                        enterMiniMode(ref, MediaQuery.textScalerOf(context)),
-                  ),
-                ),
+              if (mini) MiniPlayerTransition(child: widget.miniPlayer),
             ],
           ),
         ),

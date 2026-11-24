@@ -1,10 +1,10 @@
 // 移动端以横向卡片显示队列，点击卡片打开详情弹层。
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/theme/thmr_motion.dart';
 
+import '../../../shared/widgets/horizontal_wheel_scroll.dart';
 import '../../../shared/widgets/thmr_panel.dart';
 import '../../../core/models/models.dart';
 import '../../../core/theme/thmr_theme.dart';
@@ -172,23 +172,6 @@ class _QueueStripState extends State<QueueStrip> {
     super.dispose();
   }
 
-  void _onPointerSignal(PointerSignalEvent event) {
-    if (event is! PointerScrollEvent ||
-        event.scrollDelta.dy.abs() <= event.scrollDelta.dx.abs() ||
-        !_scrollController.hasClients) {
-      return;
-    }
-    final position = _scrollController.position;
-    final delta = event.scrollDelta.dy;
-    final target = (position.pixels + delta)
-        .clamp(position.minScrollExtent, position.maxScrollExtent);
-    if (target == position.pixels) return;
-    // 仅注册一次指针信号处理，避免外层页面同时滚动。原生横向滚轮或触控板事件仍由 ListView 处理。
-    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
-      position.pointerScroll(delta);
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final status = widget.status;
@@ -212,8 +195,8 @@ class _QueueStripState extends State<QueueStrip> {
     }
     return Column(
       children: [
-        Listener(
-          onPointerSignal: _onPointerSignal,
+        HorizontalWheelScroll(
+          controller: _scrollController,
           child: SizedBox(
             height: queueStripHeight(context),
             child: ListView.separated(

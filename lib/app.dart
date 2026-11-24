@@ -54,7 +54,6 @@ class ThmrApp extends ConsumerWidget {
         return AppInput(
           navigatorKey: navigatorKey,
           child: ThmrFocusLayer(
-            reserveEdgeSpace: !mini && !large,
             child: Stack(
               fit: StackFit.expand,
               children: [

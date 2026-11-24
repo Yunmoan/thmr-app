@@ -30,7 +30,7 @@ class LargeScreenSettingsEntry extends StatelessWidget {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                Text('大屏幕模式Beta 配置',
+                Text('大屏幕模式 Beta 配置',
                     style: Theme.of(context)
                         .textTheme
                         .bodyMedium
@@ -68,7 +68,7 @@ class _LargeScreenSettingsPageState extends State<LargeScreenSettingsPage>
   @override
   Widget build(BuildContext context) => Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: AppBar(title: const Text('大屏幕模式Beta 配置'), actions: [
+      appBar: AppBar(title: const Text('大屏幕模式 Beta 配置'), actions: [
         TextButton.icon(
             onPressed: () => LargeScreenPreview.open(context),
             icon: const Icon(Icons.preview_outlined, size: 18),
