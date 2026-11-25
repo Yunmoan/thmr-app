@@ -97,6 +97,25 @@ class _DelayedVerification extends UpdatePackageManager {
 }
 
 void main() {
+  test('the checked tar is extracted without colliding with package contents',
+      () async {
+    final temp = await Directory.systemTemp.createTemp('thmr-update-test-');
+    addTearDown(() => temp.delete(recursive: true));
+    final destination = await Directory('${temp.path}/out').create();
+    final file = File('${temp.path}/update.tar.gz');
+    final archive = Archive()
+      ..addFile(ArchiveFile('payload.tar', 3, [1, 2, 3]));
+    await file.writeAsBytes(gzip.encode(TarEncoder().encode(archive)));
+    await extractCheckedUpdate(file, 'tar.gz', destination);
+    expect(
+        await File('${destination.path}/payload.tar').readAsBytes(), [1, 2, 3]);
+    final invalid = Archive()
+      ..addFile(ArchiveFile.symlink('bad-link', '../outside'));
+    await file.writeAsBytes(gzip.encode(TarEncoder().encode(invalid)));
+    await expectLater(extractCheckedUpdate(file, 'tar.gz', destination),
+        throwsA(isA<UpdateCheckException>()));
+    expect(await destination.list().length, 1);
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory directory;
   setUp(() async {

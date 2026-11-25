@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math';
 
 import 'package:archive/archive_io.dart';
@@ -239,7 +240,7 @@ class UpdatePackageManager {
     File? abortFile;
     try {
       await unpack.create(); // 退出前检查安装位置是否可写。
-      await _extractChecked(file, artifact, unpack);
+      await extractCheckedUpdate(file, artifact.format, unpack);
       final payload = Platform.isMacOS
           ? Directory(p.join(unpack.path, 'THMR.app'))
           : Platform.isLinux
@@ -383,7 +384,7 @@ class UpdatePackageManager {
     WindowsUpdateProcess? process;
     var started = false;
     try {
-      await _extractChecked(file, artifact, payload);
+      await extractCheckedUpdate(file, artifact.format, payload);
       if (!await File(p.join(payload.path, 'thmr_app.exe')).exists()) {
         throw const UpdateCheckException('更新包缺少 THMR 主程序');
       }
@@ -482,55 +483,6 @@ class UpdatePackageManager {
     }
   }
 
-  Future<void> _extractChecked(
-      File file, UpdateArtifact artifact, Directory destination) async {
-    File? tar;
-    InputFileStream? input;
-    try {
-      if (artifact.format == 'tar.gz') {
-        tar = File(p.join(destination.path, 'payload.tar'));
-        final output = OutputFileStream(tar.path);
-        input = InputFileStream(file.path);
-        try {
-          const GZipDecoder().decodeStream(input, output);
-        } finally {
-          await output.close();
-          await input.close();
-          input = null;
-        }
-        if (await tar.length() > 2 * 1024 * 1024 * 1024) {
-          throw const FormatException('Archive too large');
-        }
-      }
-      input = InputFileStream(tar?.path ?? file.path);
-      final tarDecoder = TarDecoder();
-      final archive = artifact.format == 'zip'
-          ? ZipDecoder().decodeStream(input, verify: true)
-          : tarDecoder.decodeStream(input, verify: true);
-      if (tarDecoder.files
-          .any((entry) => !['', '0', '2', '5'].contains(entry.typeFlag))) {
-        throw const UpdateCheckException('更新包包含不支持的硬链接或特殊文件');
-      }
-      validateUpdateArchive(archive);
-      await input.close();
-      input = null;
-      if (tar != null) await tar.delete();
-      final process = Platform.isMacOS
-          ? await Process.run(
-              '/usr/bin/ditto', ['-x', '-k', file.path, destination.path])
-          : Platform.isWindows
-              ? await Process.run(
-                  p.join(Platform.environment['SystemRoot'] ?? r'C:\Windows',
-                      'System32/tar.exe'),
-                  ['-xf', file.path, '-C', destination.path])
-              : await Process.run(
-                  '/bin/tar', ['-xzf', file.path, '-C', destination.path]);
-      if (process.exitCode != 0) throw const UpdateCheckException('解压更新包失败');
-    } finally {
-      await input?.close();
-    }
-  }
-
   Future<void> _removeStage(
       Directory directory, String parent, String prefix) async {
     final path = p.normalize(p.absolute(directory.path));
@@ -542,6 +494,65 @@ class UpdatePackageManager {
       throw const UpdateCheckException('拒绝清理不安全的更新目录');
     }
     await directory.delete(recursive: true);
+  }
+}
+
+/// 在后台 isolate 中校验归档，再让系统工具从同一份已校验文件恢复权限与链接。
+Future<void> extractCheckedUpdate(
+        File file, String format, Directory destination) =>
+    Isolate.run(() => _extractArchive(file, format, destination));
+
+Future<void> _extractArchive(
+    File file, String format, Directory destination) async {
+  Directory? scratch;
+  var archiveFile = file;
+  try {
+    if (format == 'tar.gz') {
+      scratch = await Directory.systemTemp.createTemp('thmr-archive-');
+      archiveFile = File(p.join(scratch.path, 'payload.tar'));
+      final output = archiveFile.openWrite();
+      var total = 0;
+      try {
+        await output
+            .addStream(file.openRead().transform(gzip.decoder).map((chunk) {
+          total += chunk.length;
+          if (total > 2 * 1024 * 1024 * 1024) {
+            throw const FormatException('Archive too large');
+          }
+          return chunk;
+        }));
+      } finally {
+        await output.close();
+      }
+    }
+    final input = InputFileStream(archiveFile.path);
+    try {
+      final tarDecoder = TarDecoder();
+      final archive = format == 'zip'
+          ? ZipDecoder().decodeStream(input, verify: true)
+          : tarDecoder.decodeStream(input, verify: true);
+      if (tarDecoder.files
+          .any((entry) => !['', '0', '2', '5'].contains(entry.typeFlag))) {
+        throw const UpdateCheckException('更新包包含不支持的硬链接或特殊文件');
+      }
+      validateUpdateArchive(archive);
+    } finally {
+      await input.close();
+    }
+    final process = Platform.isMacOS && format == 'zip'
+        ? await Process.run(
+            '/usr/bin/ditto', ['-x', '-k', archiveFile.path, destination.path])
+        : await Process.run(
+            Platform.isWindows
+                ? p.join(Platform.environment['SystemRoot'] ?? r'C:\Windows',
+                    'System32/tar.exe')
+                : Platform.isMacOS
+                    ? '/usr/bin/tar'
+                    : '/bin/tar',
+            ['-xf', archiveFile.path, '-C', destination.path]);
+    if (process.exitCode != 0) throw const UpdateCheckException('解压更新包失败');
+  } finally {
+    if (scratch != null) await scratch.delete(recursive: true);
   }
 }
 
