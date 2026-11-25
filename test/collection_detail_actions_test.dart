@@ -32,7 +32,7 @@ const _collection = Collection(
   itemCount: 1,
   createdAt: null,
   updatedAt: null,
-  share: ShareInfo(enabled: false, slug: '', expiresAt: null),
+  share: ShareInfo(enabled: true, slug: 'favorites', expiresAt: null),
 );
 
 const _item = CollectionItem(
@@ -180,6 +180,23 @@ void main() {
 
     expect(find.text('反馈'), findsOneWidget);
     expect(find.text('复制信息'), findsOneWidget);
+
+    const shareChannel = MethodChannel('dev.fluttercommunity.plus/share');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    Map? share;
+    messenger.setMockMethodCallHandler(shareChannel, (call) async {
+      share = call.arguments as Map;
+      return '';
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(shareChannel, null));
+    final button = find.widgetWithIcon(IconButton, Icons.share_rounded);
+    final bounds = tester.getRect(button);
+    await tester.tap(button);
+    await tester.pump();
+    expect(share?['originX'], bounds.left);
+    expect(share?['originY'], bounds.top);
+    expect(share?['originWidth'], bounds.width);
+    expect(share?['originHeight'], bounds.height);
 
     await tester.tap(find.text('复制信息'));
     await tester.pump();

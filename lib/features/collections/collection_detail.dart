@@ -506,12 +506,20 @@ class _ShareLinkBar extends StatelessWidget {
                   context, const SnackBar(content: Text('分享链接已复制')));
             },
           ),
-          IconButton(
-            tooltip: '系统分享',
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.share_rounded, size: 16),
-            onPressed: () => Share.share(url, subject: '东方音乐电台 THMR · 收藏夹分享'),
-          ),
+          Builder(
+              builder: (buttonContext) => IconButton(
+                    tooltip: '系统分享',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.share_rounded, size: 16),
+                    onPressed: () {
+                      final button =
+                          buttonContext.findRenderObject()! as RenderBox;
+                      Share.share(url,
+                          subject: '东方音乐电台 THMR · 收藏夹分享',
+                          sharePositionOrigin:
+                              button.localToGlobal(Offset.zero) & button.size);
+                    },
+                  )),
         ],
       ),
     );
