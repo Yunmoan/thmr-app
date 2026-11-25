@@ -50,22 +50,43 @@ void push_samples(const float* src, size_t n) {
   g_written += n;
 }
 
-// 完整的采集会话始终在此线程运行。
-void capture_main() {
-  HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-  if (FAILED(hr)) {
-    g_init.store(-1);
-    g_run.store(false);
-    return;
+void read_packets(IAudioCaptureClient* cap, int channels) {
+  std::vector<float> mono;
+  while (g_run.load(std::memory_order_relaxed)) {
+    Sleep(6);
+    UINT32 packet = 0;
+    while (g_run.load(std::memory_order_relaxed)) {
+      if (FAILED(cap->GetNextPacketSize(&packet))) return;
+      if (packet == 0) break;
+      BYTE* data = nullptr;
+      UINT32 frames = 0;
+      DWORD flags = 0;
+      UINT64 pos = 0, qpc = 0;
+      if (FAILED(cap->GetBuffer(&data, &frames, &flags, &pos, &qpc))) return;
+      mono.resize(frames);
+      if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
+        std::memset(mono.data(), 0, frames * sizeof(float));
+      } else {
+        const float* f = reinterpret_cast<const float*>(data);
+        for (UINT32 i = 0; i < frames; ++i) {
+          float acc = 0.0f;
+          for (int c = 0; c < channels; ++c) acc += f[i * channels + c];
+          mono[i] = acc / static_cast<float>(channels);
+        }
+      }
+      push_samples(mono.data(), frames);
+      if (FAILED(cap->ReleaseBuffer(frames))) return;
+    }
   }
+}
 
+void capture_endpoint() {
   IMMDeviceEnumerator* en = nullptr;
   IMMDevice* dev = nullptr;
   IAudioClient* client = nullptr;
   IAudioCaptureClient* cap = nullptr;
   WAVEFORMATEX* wf = nullptr;
-  UINT32 sr = 48000;
-  int channels = 2;
+  HRESULT hr;
 
   do {
     hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
@@ -87,9 +108,6 @@ void capture_main() {
          reinterpret_cast<WAVEFORMATEXTENSIBLE*>(wf)->SubFormat.Data1 == 3);
     if (!isFloat || wf->nChannels < 1) break;
 
-    channels = wf->nChannels;
-    sr = wf->nSamplesPerSec;
-    g_sr.store(sr);
     hr = client->Initialize(AUDCLNT_SHAREMODE_SHARED,
                             AUDCLNT_STREAMFLAGS_LOOPBACK,
                             2000000 /* 200 ms */, 0, wf, nullptr);
@@ -100,55 +118,38 @@ void capture_main() {
     hr = client->Start();
     if (FAILED(hr)) break;
 
+    g_sr.store(wf->nSamplesPerSec);
     g_init.store(0);
+    read_packets(cap, wf->nChannels);
+    client->Stop();
   } while (false);
 
-  if (g_init.load() != 0) {
-    // 初始化失败，释放已取得的资源。
-    if (wf) CoTaskMemFree(wf);
-    if (cap) cap->Release();
-    if (client) client->Release();
-    if (dev) dev->Release();
-    if (en) en->Release();
-    CoUninitialize();
-    g_run.store(false);
-    return;
-  }
-
-  // 采集循环
-  std::vector<float> mono;
-  while (g_run.load(std::memory_order_relaxed)) {
-    Sleep(6);
-    UINT32 packet = 0;
-    while (SUCCEEDED(cap->GetNextPacketSize(&packet)) && packet > 0) {
-      BYTE* data = nullptr;
-      UINT32 frames = 0;
-      DWORD flags = 0;
-      UINT64 pos = 0, qpc = 0;
-      if (FAILED(cap->GetBuffer(&data, &frames, &flags, &pos, &qpc))) break;
-      mono.resize(frames);
-      if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
-        std::memset(mono.data(), 0, frames * sizeof(float));
-      } else {
-        const float* f = reinterpret_cast<const float*>(data);
-        for (UINT32 i = 0; i < frames; ++i) {
-          float acc = 0.0f;
-          for (int c = 0; c < channels; ++c) acc += f[i * channels + c];
-          mono[i] = acc / static_cast<float>(channels);
-        }
-      }
-      push_samples(mono.data(), frames);
-      cap->ReleaseBuffer(frames);
-    }
-  }
-
-  // 在采集线程上释放资源。
-  client->Stop();
   if (cap) cap->Release();
   if (client) client->Release();
   if (wf) CoTaskMemFree(wf);
   if (dev) dev->Release();
   if (en) en->Release();
+}
+
+void capture_main() {
+  if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
+    g_init.store(-1);
+    return;
+  }
+  while (g_run.load()) {
+    capture_endpoint();
+    if (g_init.load() != 0) {
+      g_init.store(-1);
+      break;
+    }
+    // 旧端点失效后丢弃残留样本，等待新的默认设备就绪；停止采集时及时退出等待。
+    {
+      std::lock_guard<std::mutex> lk(g_mu);
+      g_written = g_polled = 0;
+      g_wpos = 0;
+    }
+    for (int i = 0; i < 20 && g_run.load(); ++i) Sleep(25);
+  }
   CoUninitialize();
 }
 
