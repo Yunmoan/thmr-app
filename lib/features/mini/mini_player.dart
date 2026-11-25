@@ -15,6 +15,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../core/player/playback_controller.dart';
 import '../../core/platform/window_presentation.dart';
+import '../../core/state/desktop_window_mode.dart';
 import '../../core/state/settings_provider.dart';
 import '../../core/state/station_provider.dart';
 import '../../core/theme/thmr_theme.dart';
@@ -22,6 +23,9 @@ import '../../shared/widgets/track_cover.dart';
 import '../../shared/widgets/volume_slider.dart';
 import '../../shared/widgets/volume_wheel_control.dart';
 import '../../shared/widgets/focus_outline.dart';
+import '../large_screen/large_screen_controller.dart';
+
+export '../../core/state/desktop_window_mode.dart' show miniPlayerProvider;
 
 /// 三个可选迷你窗口尺寸，以逻辑像素为单位。
 const Size kMiniSmallWindowSize = Size(320, 96);
@@ -57,14 +61,13 @@ double miniSummaryHeight(TextScaler textScaler) =>
 /// 退出迷你模式时恢复的最小窗口尺寸，与 desktop_window.dart 的 WindowOptions 对应。
 const Size kMainMinWindowSize = Size(430, 660);
 
-/// 是否处于迷你模式。
-final miniPlayerProvider = StateProvider<bool>((ref) => false);
-
 /// 迷你播放器缩到屏幕边缘时，导航输入先将其展开，再移动焦点。
 final miniRevealRequests = ValueNotifier<int>(0);
 
 /// 窗口切换期间阻止重复切换及贴边移动。
-final miniTransitionBusyProvider = StateProvider<bool>((ref) => false);
+final miniTransitionBusyProvider = Provider<bool>((ref) =>
+    ref.watch(desktopWindowTransitionProvider) ==
+    DesktopWindowTransition.miniPlayer);
 
 /// 进入迷你模式前记录的主窗口边界(逻辑像素)。
 final miniSavedBoundsProvider = StateProvider<Rect?>((ref) => null);
@@ -93,11 +96,16 @@ class MiniModeTransition {
       return Future.value();
     }
     if (_inFlight != null) return _inFlight!;
-    if (_ref.read(miniPlayerProvider) == mini) return Future.value();
-    _ref.read(miniTransitionBusyProvider.notifier).state = true;
+    if (_ref.read(desktopWindowTransitionProvider) != null ||
+        _ref.read(largeScreenProvider).active ||
+        _ref.read(miniPlayerProvider) == mini) {
+      return Future.value();
+    }
+    _ref.read(desktopWindowTransitionProvider.notifier).state =
+        DesktopWindowTransition.miniPlayer;
     return _inFlight = _change(mini, textScaler).whenComplete(() {
       _inFlight = null;
-      _ref.read(miniTransitionBusyProvider.notifier).state = false;
+      _ref.read(desktopWindowTransitionProvider.notifier).state = null;
     });
   }
 
