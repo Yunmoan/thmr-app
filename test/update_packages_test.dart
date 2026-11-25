@@ -76,6 +76,26 @@ class _ControllerPackages extends UpdatePackageManager {
   Future<String?> previousInstallResult() async => null;
 }
 
+class _DelayedVerification extends UpdatePackageManager {
+  _DelayedVerification(Directory directory, _BytesAdapter adapter)
+      : super(
+            client: Dio()..httpClientAdapter = adapter,
+            cacheDirectory: () async => directory,
+            platform: () => 'windows-x86_64');
+
+  final verifying = Completer<void>();
+  final resume = Completer<void>();
+
+  @override
+  Future<void> verifyFile(File file, UpdateArtifact artifact) async {
+    await super.verifyFile(file, artifact);
+    if (!verifying.isCompleted) {
+      verifying.complete();
+      await resume.future;
+    }
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory directory;
@@ -106,6 +126,52 @@ void main() {
     await updater.download(_release(), (_) {});
     expect(adapter.requests, 2);
     expect(await file.readAsString(), 'abc');
+  });
+
+  test(
+      'cancelling during cache initialization never requests or writes a package',
+      () async {
+    final adapter = _BytesAdapter();
+    final entered = Completer<void>();
+    final cache = Completer<Directory>();
+    final updater = UpdatePackageManager(
+        client: Dio()..httpClientAdapter = adapter,
+        cacheDirectory: () {
+          entered.complete();
+          return cache.future;
+        },
+        platform: () => 'windows-x86_64');
+    addTearDown(updater.close);
+    final cancelled = expectLater(
+        updater.download(_release(), (_) {}),
+        throwsA(isA<UpdateCheckException>()
+            .having((e) => e.message, 'message', contains('已取消'))));
+    await entered.future;
+    updater.cancel();
+    cache.complete(directory);
+    await cancelled;
+    expect(adapter.requests, 0);
+    expect(await directory.list().toList(), isEmpty);
+  });
+
+  test('retry waits for a cancelled verification to release the partial file',
+      () async {
+    final adapter = _BytesAdapter();
+    final updater = _DelayedVerification(directory, adapter);
+    addTearDown(updater.close);
+    final cancelled = expectLater(
+        updater.download(_release(), (_) {}),
+        throwsA(isA<UpdateCheckException>()
+            .having((e) => e.message, 'message', contains('已取消'))));
+    await updater.verifying.future;
+    updater.cancel();
+    final retry = updater.download(_release(), (_) {});
+    updater.resume.complete();
+    await cancelled;
+    final file = await retry;
+    expect(adapter.requests, 2);
+    expect(await file.readAsString(), 'abc');
+    expect(await directory.list().map((e) => e.path).toList(), [file.path]);
   });
 
   test(

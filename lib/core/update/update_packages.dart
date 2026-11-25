@@ -45,6 +45,7 @@ class UpdatePackageManager {
   final String Function() _platform;
   final Future<void> Function() _quit;
   CancelToken? _cancelToken;
+  Future<void> _downloadDone = Future.value();
   void cancel() => _cancelToken?.cancel('Update download cancelled');
   void close() {
     cancel();
@@ -64,23 +65,46 @@ class UpdatePackageManager {
       AppRelease release, void Function(double) progress) async {
     final artifact = release.artifactFor(_platform());
     if (artifact == null) throw const UpdateCheckException('此版本没有当前系统架构的自动更新包');
+    cancel();
+    final token = _cancelToken = CancelToken();
+    // 重试可以立即受理，但必须等旧任务关闭文件并清理 .part 后再使用同一路径。
+    final download =
+        _downloadDone.then((_) => _download(artifact, progress, token));
+    _downloadDone = download.then<void>((_) {}, onError: (Object _) {});
+    try {
+      return await download;
+    } finally {
+      if (identical(_cancelToken, token)) _cancelToken = null;
+    }
+  }
+
+  Future<File> _download(UpdateArtifact artifact,
+      void Function(double) progress, CancelToken token) async {
+    void checkCancelled() {
+      if (token.isCancelled) throw const UpdateCheckException('更新下载已取消');
+    }
+
+    checkCancelled();
     final cache = await _cacheDirectory();
+    checkCancelled();
     await cache.create(recursive: true);
     final file =
         File(p.join(cache.path, '${artifact.sha256}.${artifact.format}'));
     if (await file.exists()) {
       try {
         await verifyFile(file, artifact);
+        checkCancelled();
         progress(1);
         return file;
       } on UpdateCheckException {
+        checkCancelled();
         await file.delete();
       }
     }
     final partial = File('${file.path}.part');
-    final token = _cancelToken = CancelToken();
     IOSink? sink;
     try {
+      checkCancelled();
       var url = artifact.url;
       Response<ResponseBody>? response;
       for (var redirects = 0; redirects <= 5; redirects++) {
@@ -115,10 +139,11 @@ class UpdatePackageManager {
       if (contentLength != null && contentLength != artifact.size) {
         throw const UpdateCheckException('更新包大小与签名信息不一致');
       }
+      checkCancelled();
       sink = partial.openWrite();
       var received = 0;
       await sink.addStream(response.data!.stream.map((bytes) {
-        if (token.isCancelled) throw token.cancelError!;
+        checkCancelled();
         received += bytes.length;
         if (received > artifact.size) {
           throw const UpdateCheckException('更新包超过声明大小，已停止下载');
@@ -129,7 +154,9 @@ class UpdatePackageManager {
       await sink.flush();
       await sink.close();
       sink = null;
+      checkCancelled();
       await verifyFile(partial, artifact);
+      checkCancelled();
       return await partial.rename(file.path);
     } catch (error) {
       try {
@@ -141,8 +168,6 @@ class UpdatePackageManager {
         throw const UpdateCheckException('更新下载已取消');
       }
       throw const UpdateCheckException('下载更新失败，请检查网络、磁盘空间后重试');
-    } finally {
-      if (identical(_cancelToken, token)) _cancelToken = null;
     }
   }
 
@@ -213,8 +238,7 @@ class UpdatePackageManager {
     var helperStarted = false;
     File? abortFile;
     try {
-      await unpack
-          .create(); // 退出前检查安装位置是否可写。
+      await unpack.create(); // 退出前检查安装位置是否可写。
       await _extractChecked(file, artifact, unpack);
       final payload = Platform.isMacOS
           ? Directory(p.join(unpack.path, 'THMR.app'))
