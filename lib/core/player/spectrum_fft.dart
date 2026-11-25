@@ -36,6 +36,9 @@ class PcmSpectrumDecoder {
   }
 }
 
+// 每个 isolate 只保留最近使用的窗口，连续音频帧共享双精度系数。
+Float64List _hannWindow = Float64List(0);
+
 /// 使用 Hann 窗的基 2 FFT，振幅按输入 PCM 归一化。
 Float32List pcmMagnitudes(Float32List samples) {
   final n = samples.length;
@@ -44,8 +47,14 @@ Float32List pcmMagnitudes(Float32List samples) {
   }
   final real = Float64List(n);
   final imaginary = Float64List(n);
+  if (_hannWindow.length != n) {
+    _hannWindow = Float64List(n);
+    for (var i = 0; i < n; i++) {
+      _hannWindow[i] = 0.5 - 0.5 * math.cos(2 * math.pi * i / (n - 1));
+    }
+  }
   for (var i = 0; i < n; i++) {
-    real[i] = samples[i] * (0.5 - 0.5 * math.cos(2 * math.pi * i / (n - 1)));
+    real[i] = samples[i] * _hannWindow[i];
   }
   for (var i = 1, j = 0; i < n; i++) {
     var bit = n >> 1;

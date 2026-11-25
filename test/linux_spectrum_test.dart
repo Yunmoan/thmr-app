@@ -7,6 +7,14 @@ import 'package:thmr_app/core/player/spectrum_fft.dart';
 import 'package:thmr_app/core/player/spectrum_linux.dart';
 
 void main() {
+  test('Hann coefficients follow FFT size across consecutive calls', () {
+    for (final size in [16, 16, 32, 16]) {
+      final impulse = Float32List(size)..[3] = 1;
+      final expected =
+          (0.5 - 0.5 * math.cos(6 * math.pi / (size - 1))) * 4 / size;
+      expect(pcmMagnitudes(impulse), everyElement(closeTo(expected, 1e-7)));
+    }
+  });
   test('FFT identifies a tone, maps bounded bands and leaves silence still',
       () {
     const n = 2048, sampleRate = 44100, bin = 46;
