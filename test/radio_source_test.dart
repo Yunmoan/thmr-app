@@ -2,9 +2,12 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:thmr_app/core/api/radio_api.dart';
+import 'package:thmr_app/core/models/models.dart';
 import 'package:thmr_app/core/network/network_probe.dart';
 import 'package:thmr_app/core/state/radio_source_provider.dart';
 import 'package:thmr_app/core/state/settings_provider.dart';
+import 'package:thmr_app/core/state/station_provider.dart';
 
 SourceMeasurement measurement(int index, int milliseconds,
         {int status = 200,
@@ -25,12 +28,16 @@ class _Tester extends RadioSourceTester {
   _Tester(this.result);
   final Future<List<SourceMeasurement>> result;
   bool closed = false;
+  String? measuredProfile;
   @override
   Future<List<SourceMeasurement>> measure(
-          {String? stationId,
-          String profileId = '128k',
-          List<RadioSource>? sources}) =>
-      result;
+      {String? stationId,
+      String profileId = '128k',
+      List<RadioSource>? sources}) {
+    measuredProfile = profileId;
+    return result;
+  }
+
   @override
   void close() {
     closed = true;
@@ -38,8 +45,40 @@ class _Tester extends RadioSourceTester {
   }
 }
 
+class _Radio extends Fake implements RadioApi {
+  final statusResult = Completer<StationStatus>();
+  @override
+  Future<StationStatus> status(String stationId) => statusResult.future;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('cold-start measurement waits for the enabled playback profile',
+      () async {
+    final radio = _Radio();
+    final poller = StationPoller(radio, 'only320');
+    addTearDown(poller.dispose);
+    final tester = _Tester(Future.value([]));
+    final controller = RadioSourceController(
+        stationId: () => 'only320',
+        profileForStation: (id) =>
+            measurementProfile(id, '128k', poller.state, poller.stream),
+        testerFactory: () => tester);
+    addTearDown(controller.dispose);
+    final testing = controller.ensureSelected();
+    expect(tester.measuredProfile, isNull);
+    radio.statusResult.complete(StationStatus.fromJson({
+      'station': {
+        'id': 'only320',
+        'bitrates': [
+          {'id': '128k', 'enabled': false},
+          {'id': '320k'}
+        ]
+      }
+    }));
+    await testing;
+    expect(tester.measuredProfile, '320k');
+  });
   test('automatic selection compares successful complete audio samples',
       () async {
     final tester =

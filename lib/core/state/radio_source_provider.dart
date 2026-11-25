@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/radio_api.dart';
+import '../config.dart';
 import '../network/radio_sources.dart';
 import 'channel_provider.dart';
 import 'settings_provider.dart';
+import 'station_provider.dart';
 
 export '../network/radio_sources.dart';
 
@@ -34,13 +36,27 @@ class RadioSourceState {
 
 typedef SourceTesterFactory = RadioSourceTester Function();
 
+Future<String> measurementProfile(String stationId, String preferred,
+    StationUiState snapshot, Stream<StationUiState> updates) async {
+  if (snapshot.initialLoading) {
+    snapshot = await updates.firstWhere((s) => !s.initialLoading,
+        orElse: () => const StationUiState());
+  }
+  if (snapshot.status?.station.id != stationId) {
+    return preferred.isEmpty ? '128k' : preferred;
+  }
+  return snapshot.selectedProfile(preferred).id;
+}
+
 class RadioSourceController extends StateNotifier<RadioSourceState> {
   RadioSourceController({
     RadioSourcePreference preference = RadioSourcePreference.automatic,
     SourceTesterFactory? testerFactory,
     String Function()? stationId,
+    Future<String> Function(String)? profileForStation,
   })  : _testerFactory = testerFactory ?? RadioSourceTester.new,
         _stationId = stationId,
+        _profileForStation = profileForStation,
         super(RadioSourceState(
           preference: preference,
           selected:
@@ -49,6 +65,7 @@ class RadioSourceController extends StateNotifier<RadioSourceState> {
 
   final SourceTesterFactory _testerFactory;
   final String Function()? _stationId;
+  final Future<String> Function(String)? _profileForStation;
   RadioSourceTester? _tester;
   Future<void>? _inFlight;
   int _generation = 0;
@@ -95,7 +112,11 @@ class RadioSourceController extends StateNotifier<RadioSourceState> {
       testedAt: state.testedAt,
     );
     try {
-      final results = await tester.measure(stationId: _stationId?.call());
+      final stationId = _stationId?.call() ?? appConfig.stationId;
+      final profileId = await _profileForStation?.call(stationId) ?? '128k';
+      if (!mounted || generation != _generation) return;
+      final results =
+          await tester.measure(stationId: stationId, profileId: profileId);
       if (!mounted || generation != _generation) return;
       final fastest = fastestRadioSource(results);
       state = RadioSourceState(
@@ -135,11 +156,17 @@ class RadioSourceController extends StateNotifier<RadioSourceState> {
   }
 }
 
-final radioSourceProvider =
+final StateNotifierProvider<RadioSourceController, RadioSourceState>
+    radioSourceProvider =
     StateNotifierProvider<RadioSourceController, RadioSourceState>((ref) {
   final controller = RadioSourceController(
     preference: ref.read(settingsProvider).radioSource,
     stationId: () => ref.read(activeStationIdProvider),
+    profileForStation: (stationId) {
+      final preferred = ref.read(settingsProvider).bitrateFor(stationId);
+      return measurementProfile(stationId, preferred, ref.read(stationProvider),
+          ref.read(stationProvider.notifier).stream);
+    },
   );
   ref.listen(settingsProvider.select((settings) => settings.radioSource),
       (_, next) => controller.setPreference(next));
