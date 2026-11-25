@@ -532,7 +532,8 @@ class _ShareToggle extends StatelessWidget {
                 .textTheme
                 .labelMedium
                 ?.copyWith(fontWeight: FontWeight.w600)),
-        FocusOutline(child: Switch(value: enabled, onChanged: onChanged)),
+        FocusOutline(
+            child: Switch.adaptive(value: enabled, onChanged: onChanged)),
       ],
     );
   }

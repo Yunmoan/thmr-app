@@ -133,7 +133,7 @@ class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
                           const SizedBox(height: 10),
                         ],
                         Expanded(
-                          child: RefreshIndicator(
+                          child: RefreshIndicator.adaptive(
                             onRefresh: () async {
                               ref.invalidate(collectionsProvider);
                               try {

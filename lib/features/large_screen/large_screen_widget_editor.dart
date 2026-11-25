@@ -383,7 +383,7 @@ class _ComponentEditorState extends State<_ComponentEditor> {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Row(mainAxisSize: MainAxisSize.min, children: [
-              Switch(
+              Switch.adaptive(
                   value: item.enabled,
                   onChanged: (v) =>
                       widget.onChanged(item.copyWith(enabled: v))),

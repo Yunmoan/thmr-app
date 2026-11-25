@@ -221,7 +221,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                       ),
                     ),
                     FocusOutline(
-                        child: Switch(
+                        child: Switch.adaptive(
                       value: settings.autoPlay,
                       onChanged: (v) =>
                           ref.read(settingsProvider.notifier).setAutoPlay(v),
