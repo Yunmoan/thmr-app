@@ -12,7 +12,7 @@ class SharedRadioStream {
 
   Future<HttpServer>? _serverFuture;
   HttpClient? _upstream;
-  final Set<HttpResponse> _consumers = {};
+  final Set<RelayOutput> _consumers = {};
   final Queue<Uint8List> _tail = Queue();
   int _tailBytes = 0;
   int _generation = 0;
@@ -56,8 +56,8 @@ class SharedRadioStream {
     _generation++;
     _upstream?.close(force: true);
     _upstream = null;
-    for (final response in _consumers) {
-      unawaited(response.close().catchError((Object _) {}));
+    for (final consumer in _consumers.toList()) {
+      consumer.abort();
     }
     _consumers.clear();
     _tail.clear();
@@ -81,7 +81,7 @@ class SharedRadioStream {
     await server?.close(force: true);
   }
 
-  void _serve(HttpRequest request) {
+  Future<void> _serve(HttpRequest request) async {
     final parts = request.uri.pathSegments;
     final role = parts.isEmpty ? '' : parts.first;
     if (parts.length != 2 ||
@@ -105,18 +105,30 @@ class SharedRadioStream {
       return;
     }
 
-    response.bufferOutput = false;
     final generation = _generation;
+    // 直播没有固定长度，以连接关闭标记结尾，便于单独断开已阻塞的客户端。
+    response.persistentConnection = false;
+    response.headers.chunkedTransferEncoding = false;
+    final Socket socket;
+    try {
+      socket = await response.detachSocket();
+    } on IOException {
+      return;
+    }
+    if (generation != _generation) {
+      socket.destroy();
+      return;
+    }
+    final consumer = RelayOutput(socket);
+    _consumers.add(consumer);
+    socket.listen((_) {}, onError: (Object _) => consumer.abort());
+    socket.done.then((_) => _consumers.remove(consumer),
+        onError: (Object _) => _consumers.remove(consumer));
     if (role == 'spectrum') {
       for (final bytes in _tail) {
-        response.add(bytes);
+        consumer.add(bytes);
       }
     }
-    _consumers.add(response);
-    response.done.then(
-      (_) => _consumers.remove(response),
-      onError: (Object _) => _consumers.remove(response),
-    );
     if (role == 'play' && _upstream == null) {
       unawaited(_pump(generation, _sourceUrl!));
     }
@@ -143,22 +155,16 @@ class SharedRadioStream {
           _tailBytes -= _tail.removeFirst().length;
         }
         for (final consumer in _consumers.toList()) {
-          try {
-            consumer.add(bytes);
-          } catch (_) {
-            _consumers.remove(consumer);
-            unawaited(consumer.close().catchError((Object _) {}));
-          }
+          consumer.add(bytes);
         }
       }
     } catch (_) {
       // 上游中断后关闭本地响应，由播放器原有的重连逻辑开启新的中继会话。
     } finally {
       if (generation == _generation) {
-        for (final response in _consumers) {
-          unawaited(response.close().catchError((Object _) {}));
+        for (final consumer in _consumers) {
+          consumer.finish();
         }
-        _consumers.clear();
         _upstream = null;
       }
       client.close(force: true);
@@ -167,3 +173,53 @@ class SharedRadioStream {
 }
 
 final sharedRadioStream = SharedRadioStream();
+
+/// 独立统计每个连接尚未写出的字节，包括正在等待套接字刷新的批次。
+class RelayOutput {
+  RelayOutput(this._socket);
+
+  static const maxPendingBytes = 512 * 1024;
+  final Socket _socket;
+  final _queue = Queue<Uint8List>();
+  int _pending = 0;
+  bool _finished = false;
+
+  void add(Uint8List bytes) {
+    if (_finished || bytes.isEmpty) return;
+    if (_pending + bytes.length > maxPendingBytes) {
+      abort();
+      return;
+    }
+    final idle = _pending == 0;
+    _pending += bytes.length;
+    _queue.addLast(bytes);
+    if (idle) unawaited(_drain());
+  }
+
+  Future<void> _drain() async {
+    try {
+      while (_queue.isNotEmpty) {
+        final batch = _pending;
+        while (_queue.isNotEmpty) {
+          _socket.add(_queue.removeFirst());
+        }
+        await _socket.flush().timeout(const Duration(seconds: 15));
+        _pending -= batch;
+      }
+      if (_finished) await _socket.close();
+    } catch (_) {
+      abort();
+    }
+  }
+
+  void finish() {
+    _finished = true;
+    if (_pending == 0) unawaited(_drain());
+  }
+
+  void abort() {
+    _finished = true;
+    _queue.clear();
+    _socket.destroy();
+  }
+}
