@@ -40,7 +40,7 @@ class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
 
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

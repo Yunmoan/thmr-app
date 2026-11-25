@@ -96,7 +96,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
         child: Column(
           children: [
             Text('THMR 音乐数据库',
