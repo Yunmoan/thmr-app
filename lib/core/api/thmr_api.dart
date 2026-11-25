@@ -127,15 +127,20 @@ class ThmrApi {
     if (r.statusCode != 200) _throwApiError(r);
     // 兼容直接返回列表，以及将列表放在 collections 或 data 字段中的响应。
     final data = r.data;
-    final List raw;
-    if (data is List) {
-      raw = data;
-    } else if (data is Map) {
-      raw = (data['collections'] ?? data['data'] ?? const []) as List;
-    } else {
-      raw = const [];
+    final raw = data is Map ? data['collections'] ?? data['data'] : data;
+    if (raw is! List) {
+      throw const FormatException('收藏夹响应缺少列表');
     }
-    return raw.map((e) => Collection.fromJson(e)).toList();
+    return raw.map((entry) {
+      if (entry is! Map<String, dynamic>) {
+        throw const FormatException('收藏夹条目格式无效');
+      }
+      final id = entry['id'];
+      if (id is! int && (id is! String || id.trim().isEmpty)) {
+        throw const FormatException('收藏夹条目缺少有效 ID');
+      }
+      return Collection.fromJson(entry);
+    }).toList();
   }
 
   Future<Collection> createCollection(String name,
