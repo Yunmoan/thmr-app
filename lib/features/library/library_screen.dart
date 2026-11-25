@@ -11,6 +11,7 @@ import '../../core/input/app_commands.dart';
 import '../../core/api/network_failure.dart';
 import '../../core/models/models.dart';
 import '../../core/state/auth_provider.dart';
+import '../../core/state/app_providers.dart';
 import '../../core/state/channel_provider.dart';
 import '../../core/theme/thmr_colors.dart';
 import '../../core/theme/thmr_theme.dart';
@@ -306,9 +307,8 @@ class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
   Future<void> _add(Collection c) async {
     setState(() => _busy = true);
     try {
-      final api = ref.read(authProvider.notifier).api;
-      await api.addToCollection(c.id,
-          stationId: widget.stationId, trackId: widget.track.trackId);
+      await ref.read(writeCollectionProvider)((api) => api.addToCollection(c.id,
+          stationId: widget.stationId, trackId: widget.track.trackId));
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context)
@@ -356,20 +356,26 @@ class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
               child: Center(child: CircularProgressIndicator()),
             )
           else
-            ...collections.map(
-              (c) => FocusOutline(
-                  child: ListTile(
-                leading: Icon(
-                  c.share.enabled
-                      ? Icons.bookmark_rounded
-                      : Icons.bookmark_border_rounded,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                title: Text(c.name),
-                subtitle: Text('${c.itemCount} 首'),
-                onTap: _busy ? null : () => _add(c),
-              )),
-            ),
+            Flexible(
+                child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: collections.length,
+              itemBuilder: (context, index) {
+                final c = collections[index];
+                return FocusOutline(
+                    child: ListTile(
+                  leading: Icon(
+                    c.share.enabled
+                        ? Icons.bookmark_rounded
+                        : Icons.bookmark_border_rounded,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  title: Text(c.name),
+                  subtitle: Text('${c.itemCount} 首'),
+                  onTap: _busy ? null : () => _add(c),
+                ));
+              },
+            )),
           const SizedBox(height: 10),
         ],
       ),

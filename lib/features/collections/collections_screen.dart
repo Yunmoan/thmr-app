@@ -230,17 +230,14 @@ class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
       return;
     }
     try {
-      final api = ref.read(authProvider.notifier).api;
-      await api.createCollection(name);
-      ref.invalidate(collectionsProvider);
-      ref.invalidate(favoritesStatusProvider);
+      await ref
+          .read(writeCollectionProvider)((api) => api.createCollection(name));
     } on ApiException catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showThmrSnackBar(
           context, SnackBar(content: Text('创建失败:${e.message}')));
     } catch (error) {
       if (!context.mounted) return;
-      if (isNetworkFailure(error)) ref.invalidate(collectionsProvider);
       ScaffoldMessenger.of(context).showThmrSnackBar(
         context,
         const SnackBar(content: Text('创建失败，请检查网络连接后重试')),
@@ -323,10 +320,9 @@ class _CollectionCard extends ConsumerWidget {
     );
     if (confirmed != true || !context.mounted) return;
     try {
-      await ref.read(authProvider.notifier).api.deleteCollection(collection.id);
+      await ref.read(writeCollectionProvider)(
+          (api) => api.deleteCollection(collection.id));
       if (!context.mounted) return;
-      ref.invalidate(collectionsProvider);
-      ref.invalidate(favoritesStatusProvider);
       ScaffoldMessenger.of(context).showThmrSnackBar(
         context,
         SnackBar(content: Text('已删除「${collection.name}」')),
@@ -339,7 +335,6 @@ class _CollectionCard extends ConsumerWidget {
       );
     } catch (error) {
       if (!context.mounted) return;
-      if (isNetworkFailure(error)) ref.invalidate(collectionsProvider);
       ScaffoldMessenger.of(context).showThmrSnackBar(
         context,
         const SnackBar(content: Text('删除失败，请检查网络连接后重试')),
@@ -359,7 +354,7 @@ class _CollectionCard extends ConsumerWidget {
             preferOffline: readOnly,
           ),
         ));
-        if (!readOnly) ref.invalidate(collectionsProvider);
+        if (!readOnly && context.mounted) ref.invalidate(collectionsProvider);
       },
       child: Row(
         children: [

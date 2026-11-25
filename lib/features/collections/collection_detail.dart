@@ -50,6 +50,7 @@ class _CollectionDetailScreenState
   List<CollectionItem>? _items;
   Object? _error;
   bool _loading = true;
+  int _loadRevision = 0;
   bool _offline = false;
   DateTime? _cachedAt;
 
@@ -75,12 +76,14 @@ class _CollectionDetailScreenState
 
   Future<void> _load({bool retryOnline = false}) async {
     if (!mounted) return;
+    final revision = ++_loadRevision;
+    bool current() => mounted && revision == _loadRevision;
     setState(() => _loading = true);
     final userId = ref.read(authProvider).user?.id;
     const cache = CollectionCache();
     if (userId != null && (widget.preferOffline || _offline) && !retryOnline) {
       final snapshot = await cache.readDetail(userId, widget.collectionId);
-      if (!mounted) return;
+      if (!current()) return;
       setState(() {
         _collection = snapshot?.collection;
         _items = snapshot == null ? null : _sortCached(snapshot.items);
@@ -95,13 +98,13 @@ class _CollectionDetailScreenState
       final api = ref.read(authProvider.notifier).api;
       final (c, items) = await api.collectionDetail(widget.collectionId,
           sort: _sort, order: _order);
-      if (!mounted) return;
+      if (!current()) return;
       if (userId != null && ref.read(authProvider).user?.id == userId) {
         try {
           await cache.saveDetail(userId, c, items);
         } catch (_) {}
       }
-      if (!mounted) return;
+      if (!current()) return;
       setState(() {
         _collection = c;
         _items = items;
@@ -110,10 +113,11 @@ class _CollectionDetailScreenState
         _cachedAt = null;
       });
     } catch (e) {
+      if (!current()) return;
       final snapshot = userId != null && isNetworkFailure(e)
           ? await cache.readDetail(userId, widget.collectionId)
           : null;
-      if (!mounted) return;
+      if (!current()) return;
       setState(() {
         _collection = snapshot?.collection;
         _items = snapshot == null ? null : _sortCached(snapshot.items);
@@ -122,7 +126,7 @@ class _CollectionDetailScreenState
         _error = snapshot == null ? e : null;
       });
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (current()) setState(() => _loading = false);
     }
   }
 
@@ -141,11 +145,10 @@ class _CollectionDetailScreenState
 
   Future<void> _removeItem(CollectionItem item) async {
     try {
-      final api = ref.read(authProvider.notifier).api;
-      await api.removeItem(widget.collectionId, item.id);
+      await ref.read(writeCollectionProvider)(
+          (api) => api.removeItem(widget.collectionId, item.id));
       if (!mounted) return;
       _load();
-      ref.invalidate(collectionsProvider);
     } catch (error) {
       await _markOfflineIfNetwork(error);
       if (!mounted) return;
@@ -303,8 +306,8 @@ class _CollectionDetailScreenState
                       enabled: share.enabled,
                       onChanged: (v) async {
                         try {
-                          final api = ref.read(authProvider.notifier).api;
-                          await api.setShare(widget.collectionId, enabled: v);
+                          await ref.read(writeCollectionProvider)((api) =>
+                              api.setShare(widget.collectionId, enabled: v));
                           _load();
                         } catch (error) {
                           await _markOfflineIfNetwork(error);
