@@ -39,14 +39,17 @@ class DesktopTrayController with TrayListener {
     trayManager.addListener(this);
     _listening = true;
     try {
-      if (platform == TargetPlatform.macOS) {
-        // tray_manager 在 macOS 上通过 rootBundle 加载图标资源。
+      if (platform == TargetPlatform.windows ||
+          platform == TargetPlatform.macOS) {
+        // Windows 插件将相对路径定位到安装包资源，macOS 插件直接读取资源内容。
         _iconRequested = true;
-        await trayManager.setIcon('assets/icons/icon-512.png', iconSize: 18);
+        await trayManager.setIcon(
+            platform == TargetPlatform.windows
+                ? 'assets/icons/thmr_tray.ico'
+                : 'assets/icons/icon-512.png',
+            iconSize: 18);
       } else {
-        final name = platform == TargetPlatform.windows
-            ? 'thmr_tray.ico'
-            : 'icon-512.png';
+        const name = 'icon-512.png';
         final data = await rootBundle.load('assets/icons/$name');
         if (_disposed) return false;
         _directory = await Directory.systemTemp.createTemp('thmr-tray-');
