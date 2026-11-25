@@ -22,8 +22,6 @@ class SharedRadioStream {
 
   Uri? get spectrumUri => _spectrumUri;
 
-  Future<HttpServer> _server() => _serverFuture ??= _bind();
-
   Future<HttpServer> _bind() async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen(_serve);
@@ -31,7 +29,17 @@ class SharedRadioStream {
   }
 
   Future<Uri> activate(String sourceUrl) async {
-    final server = await _server();
+    final binding = _serverFuture ??= _bind();
+    final HttpServer server;
+    try {
+      server = await binding;
+    } catch (_) {
+      if (identical(_serverFuture, binding)) _serverFuture = null;
+      rethrow;
+    }
+    if (!identical(_serverFuture, binding)) {
+      throw StateError('中继已关闭');
+    }
     stop();
     final random = Random.secure();
     final token = base64UrlEncode(
@@ -60,10 +68,17 @@ class SharedRadioStream {
   }
 
   Future<void> dispose() async {
-    stop();
-    final server = await _serverFuture;
-    await server?.close(force: true);
+    final binding = _serverFuture;
     _serverFuture = null;
+    stop();
+    final HttpServer? server;
+    try {
+      server = await binding;
+    } catch (_) {
+      // 绑定失败时没有监听套接字需要关闭。
+      return;
+    }
+    await server?.close(force: true);
   }
 
   void _serve(HttpRequest request) {
