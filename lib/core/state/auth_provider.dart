@@ -1,13 +1,11 @@
-import 'dart:convert';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/radio_api.dart';
 import '../api/network_failure.dart';
 import '../api/thmr_api.dart';
 import '../models/models.dart';
 import 'collection_cache.dart';
+import 'session_store.dart';
 
 /// 登录状态、当前用户和初始化进度。
 class AuthState {
@@ -36,131 +34,90 @@ class AuthState {
 }
 
 class AuthController extends StateNotifier<AuthState> {
-  AuthController({ThmrApi? client})
+  AuthController({ThmrApi? client, SessionStore store = const SessionStore()})
       : api = client ?? ThmrApi(),
+        _store = store,
         super(const AuthState()) {
-    _bootstrap();
+    _pending = _bootstrap();
   }
 
-  // Windows 上 SharedPreferences 与 SharedPreferencesAsync 共用存储文件。
-  // 会话和设置统一使用 SharedPreferences，避免独立实例以旧快照覆盖新值。
-  static const _storageKey = 'thmr_session_token';
-  static const _cachedUserKey = 'thmr_cached_user_v1';
   final ThmrApi api;
+  final SessionStore _store;
+  String? _token;
+  late Future<void> _pending;
 
-  Future<void> _saveCachedUser(ThmrUser? user) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (user == null) {
-      await prefs.remove(_cachedUserKey);
-      return;
-    }
-    await prefs.setString(
-        _cachedUserKey,
-        jsonEncode({
-          'token': prefs.getString(_storageKey),
-          'id': user.id,
-          'naidsId': user.naidsId,
-          'username': user.username,
-          'nickname': user.nickname,
-          'email': user.email,
-          'realnameVerified': user.realnameVerified,
-          'createdAt': user.createdAt,
-          'needsNickname': user.needsNickname,
-        }));
-  }
-
-  Future<ThmrUser?> _readCachedUser(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_cachedUserKey);
-    if (raw == null) return null;
-    try {
-      final data = (jsonDecode(raw) as Map).cast<String, dynamic>();
-      if (data['token'] != token) return null;
-      return ThmrUser.fromJson(data);
-    } catch (_) {
-      await prefs.remove(_cachedUserKey);
-      return null;
-    }
-  }
-
-  Future<String?> _readToken() async =>
-      (await SharedPreferences.getInstance()).getString(_storageKey);
-
-  Future<void> _writeToken(String? token) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (token == null) {
-      await prefs.remove(_storageKey);
-    } else {
-      await prefs.setString(_storageKey, token);
-    }
+  // 登录、修改资料和退出共用一条写入队列，旧请求不能覆盖新会话。
+  Future<void> _enqueue(Future<void> Function() action) {
+    final next = _pending.then((_) => action());
+    _pending = next.catchError((Object _) {});
+    return next;
   }
 
   Future<void> _bootstrap() async {
-    final token = await _readToken();
-    if (token != null && token.isNotEmpty) {
-      api.token = token;
+    try {
+      final saved = await _store.read();
+      if (saved == null || !mounted) return;
+      api.token = _token = saved.token;
+      ThmrUser? user;
       try {
-        final user = await api.me();
-        if (user != null) {
-          await _saveCachedUser(user);
-          state = state.copyWith(initialized: true, user: user);
-          return;
-        }
-      } on ApiException catch (e) {
-        if (e.statusCode != 401) {
-          final cached = await _readCachedUser(token);
-          state = state.copyWith(initialized: true, user: cached);
-          return;
-        }
+        user = await api.me();
       } catch (error) {
-        final cached =
-            isNetworkFailure(error) ? await _readCachedUser(token) : null;
-        state = state.copyWith(initialized: true, user: cached);
-        return;
+        if (error is! ApiException || error.statusCode != 401) {
+          if (mounted && (isNetworkFailure(error) || error is ApiException)) {
+            state = state.copyWith(user: saved.user);
+          }
+          return;
+        }
       }
-    }
-    // 会话无效或本地无 token 时，清除本地会话和用户快照。
-    await _writeToken(null);
-    await _saveCachedUser(null);
-    api.token = null;
-    state = state.copyWith(initialized: true, clearUser: true);
-  }
-
-  /// 验证 WebView 取得的会话 token，成功后再持久化。
-  Future<void> signInWithToken(String token) async {
-    final previousToken = await _readToken();
-    api.token = token;
-    try {
-      final user = await api.me();
-      if (user == null) throw ApiException(401, 'authentication required');
-      await _writeToken(token);
-      await _saveCachedUser(user);
-      state = state.copyWith(user: user);
+      if (!mounted) return;
+      if (user == null) {
+        api.token = _token = null;
+        await _store.clear();
+      } else {
+        state = state.copyWith(user: user);
+        await _store.save(saved.token, user);
+      }
     } catch (_) {
-      api.token = previousToken;
-      rethrow;
+      // 钥匙串锁定或迁移失败时保留持久化记录，用户仍可使用公开功能。
+    } finally {
+      if (mounted) state = state.copyWith(initialized: true);
     }
   }
 
-  Future<void> logout() async {
-    final userId = state.user?.id;
-    try {
-      await api.logout();
-    } catch (_) {
-      // 网络失败也继续清本地
-    }
-    await _writeToken(null);
-    await _saveCachedUser(null);
-    if (userId != null) await const CollectionCache().clearUser(userId);
-    api.token = null;
-    state = state.copyWith(clearUser: true);
-  }
+  /// 验证 WebView 取得的会话令牌，成功写入安全存储后再更新登录状态。
+  Future<void> signInWithToken(String token) => _enqueue(() async {
+        api.token = token;
+        try {
+          final user = await api.me();
+          if (user == null) throw ApiException(401, 'authentication required');
+          await _store.save(token, user);
+          _token = token;
+          if (mounted) state = state.copyWith(user: user);
+        } finally {
+          api.token = _token;
+        }
+      });
 
-  Future<void> setNickname(String nickname) async {
-    final user = await api.updateNickname(nickname);
-    await _saveCachedUser(user);
-    state = state.copyWith(user: user);
-  }
+  Future<void> logout() => _enqueue(() async {
+        final userId = state.user?.id;
+        try {
+          await api.logout();
+        } catch (_) {
+          // 网络失败也继续清理本地会话。
+        }
+        await _store.clear();
+        api.token = _token = null;
+        if (mounted) state = state.copyWith(clearUser: true);
+        if (userId != null) await const CollectionCache().clearUser(userId);
+      });
+
+  Future<void> setNickname(String nickname) => _enqueue(() async {
+        final token = _token;
+        if (token == null) throw ApiException(401, 'authentication required');
+        final user = await api.updateNickname(nickname);
+        await _store.save(token, user);
+        if (mounted) state = state.copyWith(user: user);
+      });
 }
 
 final authProvider =

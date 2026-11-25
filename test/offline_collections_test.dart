@@ -9,6 +9,7 @@ import 'package:thmr_app/core/api/thmr_api.dart';
 import 'package:thmr_app/core/models/models.dart';
 import 'package:thmr_app/core/state/app_providers.dart';
 import 'package:thmr_app/core/state/auth_provider.dart';
+import 'package:thmr_app/core/state/session_store.dart';
 import 'package:thmr_app/core/theme/thmr_theme.dart';
 import 'package:thmr_app/features/collections/collections_screen.dart';
 
@@ -50,6 +51,9 @@ class _FakeApi extends ThmrApi {
   bool includeExtra = false;
 
   @override
+  Future<void> logout() async {}
+
+  @override
   Future<ThmrUser?> me() async {
     if (offline) throw _connectionError();
     return _user;
@@ -82,6 +86,25 @@ Future<void> _waitForAuth(ProviderContainer container) async {
 }
 
 void main() {
+  test('sign-in and logout keep the secure session and UI in sync', () async {
+    SharedPreferences.setMockInitialValues({});
+    final container = ProviderContainer(overrides: [
+      authProvider.overrideWith((ref) => AuthController(client: _FakeApi())),
+    ]);
+    addTearDown(container.dispose);
+    await _waitForAuth(container);
+    final auth = container.read(authProvider.notifier);
+    await auth.signInWithToken('new-token');
+    expect(container.read(authProvider).user?.id, _user.id);
+    expect((await const SessionStore().read())?.token, 'new-token');
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.containsKey('thmr_session_token'), isFalse);
+    expect(prefs.containsKey('thmr_cached_user_v1'), isFalse);
+    await auth.logout();
+    expect(container.read(authProvider).signedIn, isFalse);
+    expect(await const SessionStore().read(), isNull);
+  });
+
   test('network loss serves the saved list and restores the account on restart',
       () async {
     SharedPreferences.setMockInitialValues({'thmr_session_token': 'token-a'});
