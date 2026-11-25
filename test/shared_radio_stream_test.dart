@@ -1,10 +1,89 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:thmr_app/core/player/shared_radio_stream_io.dart';
 
+class _BlockedSocket extends Fake implements Socket {
+  final writable = Completer<void>();
+  var bytesWritten = 0;
+  var destroyed = false;
+
+  @override
+  void add(List<int> bytes) => bytesWritten += bytes.length;
+
+  @override
+  Future<void> flush() => writable.future;
+
+  @override
+  void destroy() {
+    destroyed = true;
+    if (!writable.isCompleted) writable.complete();
+  }
+
+  @override
+  Future<void> close() async {}
+}
+
 void main() {
+  test('a stalled consumer is disconnected while another keeps draining',
+      () async {
+    final slow = _BlockedSocket();
+    final fast = _BlockedSocket()..writable.complete();
+    final stalled = RelayOutput(slow);
+    final healthy = RelayOutput(fast);
+    final chunk = Uint8List(RelayOutput.maxPendingBytes ~/ 2);
+    for (var i = 0; i < 3; i++) {
+      stalled.add(chunk);
+      healthy.add(chunk);
+      await Future<void>.delayed(Duration.zero);
+    }
+    expect(slow.destroyed, isTrue);
+    expect(slow.bytesWritten, chunk.length);
+    expect(fast.destroyed, isFalse);
+    expect(fast.bytesWritten, 3 * chunk.length);
+    healthy.finish();
+  });
+  test('a failed bind can be retried on the same relay', () async {
+    final relay = SharedRadioStream();
+    addTearDown(relay.dispose);
+    await IOOverrides.runZoned(
+      () => expectLater(relay.activate('https://example.invalid/radio'),
+          throwsA(isA<SocketException>())),
+      serverSocketBind: (_, __,
+              {backlog = 0, shared = false, v6Only = false}) async =>
+          throw const SocketException('暂时无法绑定'),
+    );
+    final uri = await relay.activate('https://example.invalid/radio');
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+    final response = await (await client.headUrl(uri)).close();
+    expect(response.statusCode, HttpStatus.ok);
+    await response.drain<void>();
+  });
+
+  test('disposing a pending failed bind leaves a new binding intact', () async {
+    final relay = SharedRadioStream();
+    addTearDown(relay.dispose);
+    final binding = Completer<ServerSocket>();
+    final failed = IOOverrides.runZoned(
+      () => expectLater(relay.activate('https://example.invalid/old'),
+          throwsA(isA<SocketException>())),
+      serverSocketBind: (_, __,
+              {backlog = 0, shared = false, v6Only = false}) =>
+          binding.future,
+    );
+    final disposing = relay.dispose();
+    final uri = await relay.activate('https://example.invalid/new');
+    binding.completeError(const SocketException('绑定失败'));
+    await failed;
+    await disposing;
+    expect(relay.spectrumUri?.port, uri.port);
+    expect(
+        (await relay.activate('https://example.invalid/again')).port, uri.port);
+  });
+
   test('player and spectrum share one upstream radio request', () async {
     final upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final relay = SharedRadioStream();

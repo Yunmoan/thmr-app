@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:tray_manager/tray_manager.dart';
 import 'package:thmr_app/core/platform/desktop_tray.dart';
 import 'package:thmr_app/core/platform/desktop_window.dart';
@@ -129,8 +130,7 @@ void main() {
     expect(calls, hasLength(2));
   });
 
-  test('Windows keeps file-based icons, click-to-restore and temp file cleanup',
-      () async {
+  test('Windows uses the packaged icon and keeps click-to-restore', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     tray = DesktopTrayController(
       showWindow: () async => shows++,
@@ -140,12 +140,15 @@ void main() {
     final args =
         calls.singleWhere((call) => call.method == 'setIcon').arguments;
     expect(args.containsKey('base64Icon'), isFalse);
-    final file = File(args['iconPath'] as String);
-    expect(await file.exists(), isTrue);
+    final expected = p.join(p.dirname(Platform.resolvedExecutable), 'data',
+        'flutter_assets', 'assets', 'icons', 'thmr_tray.ico');
+    expect(p.normalize(args['iconPath'] as String), p.normalize(expected));
+    final icon = await rootBundle.load('assets/icons/thmr_tray.ico');
+    expect(icon.buffer.asUint8List(icon.offsetInBytes, 4), [0, 0, 1, 0]);
     await event('onTrayIconMouseDown');
     expect(shows, 1);
     expect(calls.where((call) => call.method == 'popUpContextMenu'), isEmpty);
     await tray.dispose();
-    expect(await file.exists(), isFalse);
+    expect(calls.last.method, 'destroy');
   });
 }

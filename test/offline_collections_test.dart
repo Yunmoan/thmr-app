@@ -9,6 +9,8 @@ import 'package:thmr_app/core/api/thmr_api.dart';
 import 'package:thmr_app/core/models/models.dart';
 import 'package:thmr_app/core/state/app_providers.dart';
 import 'package:thmr_app/core/state/auth_provider.dart';
+import 'package:thmr_app/core/state/collection_cache.dart';
+import 'package:thmr_app/core/state/session_store.dart';
 import 'package:thmr_app/core/theme/thmr_theme.dart';
 import 'package:thmr_app/features/collections/collections_screen.dart';
 
@@ -50,6 +52,9 @@ class _FakeApi extends ThmrApi {
   bool includeExtra = false;
 
   @override
+  Future<void> logout() async {}
+
+  @override
   Future<ThmrUser?> me() async {
     if (offline) throw _connectionError();
     return _user;
@@ -81,7 +86,63 @@ Future<void> _waitForAuth(ProviderContainer container) async {
   subscription.close();
 }
 
+class _PendingDetailApi extends _FakeApi {
+  final started = Completer<void>();
+  final detail = Completer<(Collection, List<CollectionItem>)>();
+  bool deleted = false;
+  @override
+  Future<List<Collection>> collections() async => deleted ? [] : [_collection];
+  @override
+  Future<void> deleteCollection(String cid) async => deleted = true;
+  @override
+  Future<(Collection, List<CollectionItem>)> collectionDetail(String cid,
+      {String sort = 'position', String order = 'asc'}) {
+    started.complete();
+    return detail.future;
+  }
+}
+
 void main() {
+  test('late prefetch cannot restore the offline detail of a deleted folder',
+      () async {
+    SharedPreferences.setMockInitialValues({'thmr_session_token': 'token-a'});
+    final api = _PendingDetailApi();
+    final container = ProviderContainer(overrides: [
+      authProvider.overrideWith((ref) => AuthController(client: api)),
+    ]);
+    addTearDown(container.dispose);
+    await _waitForAuth(container);
+    await container.read(collectionsProvider.future);
+    await api.started.future;
+    await container.read(writeCollectionProvider)(
+        (api) => api.deleteCollection(_collection.id));
+    expect((await container.read(collectionsProvider.future)).collections,
+        isEmpty);
+    api.detail.complete((_collection, <CollectionItem>[]));
+    await Future<void>.delayed(Duration.zero);
+    expect(await const CollectionCache().readDetail(_user.id, _collection.id),
+        isNull);
+  });
+
+  test('sign-in and logout keep the secure session and UI in sync', () async {
+    SharedPreferences.setMockInitialValues({});
+    final container = ProviderContainer(overrides: [
+      authProvider.overrideWith((ref) => AuthController(client: _FakeApi())),
+    ]);
+    addTearDown(container.dispose);
+    await _waitForAuth(container);
+    final auth = container.read(authProvider.notifier);
+    await auth.signInWithToken('new-token');
+    expect(container.read(authProvider).user?.id, _user.id);
+    expect((await const SessionStore().read())?.token, 'new-token');
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.containsKey('thmr_session_token'), isFalse);
+    expect(prefs.containsKey('thmr_cached_user_v1'), isFalse);
+    await auth.logout();
+    expect(container.read(authProvider).signedIn, isFalse);
+    expect(await const SessionStore().read(), isNull);
+  });
+
   test('network loss serves the saved list and restores the account on restart',
       () async {
     SharedPreferences.setMockInitialValues({'thmr_session_token': 'token-a'});

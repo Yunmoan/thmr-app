@@ -133,6 +133,7 @@ class _Harness {
   bool workAreaFollowsFullscreen = false;
   Completer<void>? enterGate;
   Completer<void>? frameGate;
+  Completer<void>? flushGate;
   bool concealed = false;
   VoidCallback? onConceal;
   final revealed = <LargeScreenState>[];
@@ -218,6 +219,7 @@ class _Harness {
       if (call.method == 'waitForFrame') await frameGate?.future;
       if (call.method == 'flushFrame') {
         flushed.add(container.read(largeScreenProvider));
+        await flushGate?.future;
       }
       if (call.method == 'reveal') {
         concealed = false;
@@ -1444,6 +1446,11 @@ void main() {
     expect(h.container.read(largeScreenProvider).busy, isFalse);
     expect(find.text('无法切换显示模式，请重试。'), findsOneWidget);
     expect(h.nativeFullScreen, isFalse);
+    final mini = h.container.read(miniModeTransitionProvider);
+    final enteringMini = mini.change(true, TextScaler.noScaling);
+    await tester.pumpAndSettle();
+    await enteringMini;
+    expect(h.container.read(miniPlayerProvider), isTrue);
     expect(tester.takeException(), isNull);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
@@ -1573,6 +1580,66 @@ void main() {
     h.container.read(miniPlayerProvider.notifier).state = true;
     await h.change(true);
     expect(h.calls, isEmpty);
+    expect(h.container.read(largeScreenProvider).active, isFalse);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('large screen excludes mini from the first request through exit',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount(desktopRoot: true);
+    final mini = h.container.read(miniModeTransitionProvider);
+    final button = find.byIcon(Icons.picture_in_picture_alt_rounded);
+    final buttonPosition = tester.getCenter(button);
+    var conceals = 0;
+    h.onConceal = () => conceals++;
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.f11);
+    expect(h.container.read(largeScreenProvider).busy, isTrue);
+    expect(h.container.read(largeScreenProvider).active, isFalse);
+    await tester.tapAt(buttonPosition);
+    await tester.pump();
+    expect(button.hitTestable(), findsNothing);
+    await tester.pumpAndSettle();
+    expect(h.nativeFullScreen, isTrue);
+    expect(h.container.read(miniPlayerProvider), isFalse);
+    expect(conceals, 1);
+
+    final conflicting = mini.change(true, TextScaler.noScaling);
+    await tester.pumpAndSettle();
+    await conflicting;
+    expect(h.container.read(miniPlayerProvider), isFalse);
+    expect(conceals, 1);
+
+    h.flushGate = Completer<void>();
+    final exiting = h.controller.change(false);
+    for (var frame = 0; frame < 100 && h.flushed.last.active; frame++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(h.flushed.last.active, isFalse);
+    expect(button.hitTestable(), findsNothing);
+    final duringFlush = mini.change(true, TextScaler.noScaling);
+    expect(h.container.read(miniTransitionBusyProvider), isFalse);
+    expect(conceals, 2);
+    h.flushGate!.complete();
+    await tester.pumpAndSettle();
+    await Future.wait([exiting, duringFlush]);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(h.container.read(miniPlayerProvider), isTrue);
+    expect(conceals, 3);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('starting mini blocks a large screen request in the same frame',
+      (tester) async {
+    final h = _Harness(tester);
+    await h.mount();
+    final mini = h.container.read(miniModeTransitionProvider);
+    final entering = mini.change(true, TextScaler.noScaling);
+    final competing = h.controller.change(true);
+    await tester.pumpAndSettle();
+    await Future.wait([entering, competing]);
+    expect(h.calls, isEmpty);
+    expect(h.container.read(miniPlayerProvider), isTrue);
     expect(h.container.read(largeScreenProvider).active, isFalse);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 

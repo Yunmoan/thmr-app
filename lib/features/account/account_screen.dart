@@ -317,6 +317,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8,
+                          runSpacing: 8,
                           children: [
                             for (final a in CloseAction.values)
                               FocusOutline(

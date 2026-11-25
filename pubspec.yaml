@@ -27,9 +27,9 @@ dependencies:
   google_fonts: ^6.2.1
   flutter_svg: ^2.3.0
 
-  # flutter_secure_storage 依赖仍保留，当前会话 token 由 SharedPreferences 持久化。
+  # 会话令牌及对应的离线用户资料保存在系统安全存储中。
   flutter_secure_storage: ^9.2.2
-  # 轻量持久化，用于主题、码率、会话等本地状态。
+  # 轻量持久化，用于主题、码率和收藏夹快照等本地状态。
   shared_preferences: ^2.3.2
   ffi: ^2.2.0
 

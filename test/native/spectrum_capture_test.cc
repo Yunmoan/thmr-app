@@ -9,8 +9,28 @@ void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
 
+class InvalidatedEndpoint : public IAudioCaptureClient {
+ public:
+  int polls = 0;
+  HRESULT STDMETHODCALLTYPE GetNextPacketSize(UINT32*) override {
+    // 第二次轮询时终止测试，避免失效端点导致回归测试挂起。
+    if (++polls > 1) g_run.store(false);
+    return AUDCLNT_E_DEVICE_INVALIDATED;
+  }
+  HRESULT STDMETHODCALLTYPE GetBuffer(BYTE**, UINT32*, DWORD*, UINT64*, UINT64*) override {
+    return E_UNEXPECTED;
+  }
+  HRESULT STDMETHODCALLTYPE ReleaseBuffer(UINT32) override { return E_UNEXPECTED; }
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void**) override { return E_NOINTERFACE; }
+  ULONG STDMETHODCALLTYPE AddRef() override { return 1; }
+  ULONG STDMETHODCALLTYPE Release() override { return 1; }
+};
+
 int main() {
   g_run.store(true);
+  InvalidatedEndpoint endpoint;
+  read_packets(&endpoint, 2);
+  require(endpoint.polls == 1 && g_run.load(), "Invalid endpoint was polled again");
   g_init.store(0);
   g_sr.store(48000);
   float magnitudes[kFft / 2 + 1]{};

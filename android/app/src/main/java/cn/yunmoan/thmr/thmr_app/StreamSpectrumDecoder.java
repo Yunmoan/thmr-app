@@ -56,6 +56,10 @@ final class StreamSpectrumDecoder {
         return decodeFailed;
     }
 
+    private synchronized void markFailed(long token) {
+        if (token == generation) decodeFailed = true;
+    }
+
     Map<String, Object> magnitudes() {
         float[] snapshot = new float[SpectrumMath.FFT_SIZE];
         int rate;
@@ -110,7 +114,11 @@ final class StreamSpectrumDecoder {
                     break;
                 }
             }
-            if (inputFormat == null || token != generation) return;
+            if (token != generation) return;
+            if (inputFormat == null) {
+                markFailed(token);
+                return;
+            }
             codec = MediaCodec.createDecoderByType(inputFormat.getString(MediaFormat.KEY_MIME));
             codec.configure(inputFormat, null, null, 0);
             codec.start();
@@ -150,10 +158,10 @@ final class StreamSpectrumDecoder {
                     if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) break;
                 }
             }
-            if (token == generation) decodeFailed = true;
+            markFailed(token);
         } catch (Exception error) {
             if (token == generation) {
-                decodeFailed = true;
+                markFailed(token);
                 Log.w(TAG, "Radio spectrum decoder unavailable: "
                         + error.getClass().getSimpleName());
             }

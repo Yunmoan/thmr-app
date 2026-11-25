@@ -10,6 +10,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:thmr_app/core/models/models.dart';
 import 'package:thmr_app/core/player/playback_controller.dart';
 import 'package:thmr_app/core/platform/window_presentation.dart';
+import 'package:thmr_app/core/state/desktop_window_mode.dart';
 import 'package:thmr_app/core/state/station_provider.dart';
 import 'package:thmr_app/core/state/settings_provider.dart';
 import 'package:thmr_app/core/theme/thmr_theme.dart';
@@ -193,8 +194,8 @@ void main() {
     expect(positions.length, greaterThan(movesAtDragStart));
     final movesAtModeChange = positions.length;
     ProviderScope.containerOf(tester.element(find.byType(MiniPlayerWindow)))
-        .read(miniTransitionBusyProvider.notifier)
-        .state = true;
+        .read(desktopWindowTransitionProvider.notifier)
+        .state = DesktopWindowTransition.miniPlayer;
     listener.onWindowMoved();
     for (var i = 0; i < 40; i++) {
       await tester.pump(const Duration(milliseconds: 20));

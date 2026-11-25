@@ -63,6 +63,7 @@ class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
       return;
     }
     final api = ref.read(authProvider.notifier).api;
+    final write = ref.read(writeCollectionProvider);
     final stationId = widget.status.station.id;
     final fs = ref.read(favoritesStatusProvider).asData?.value;
     try {
@@ -70,7 +71,7 @@ class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
           fs.favorited &&
           fs.itemId != null &&
           fs.collectionId != null) {
-        await api.removeItem(fs.collectionId!, fs.itemId!);
+        await write((api) => api.removeItem(fs.collectionId!, fs.itemId!));
       } else {
         // 默认收藏夹 = collections 首个(position 最小)
         final String defaultCid;
@@ -88,8 +89,8 @@ class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
           }
           defaultCid = cols.first.id;
         }
-        await api.addToCollection(defaultCid,
-            stationId: stationId, trackId: cur.trackId);
+        await write((api) => api.addToCollection(defaultCid,
+            stationId: stationId, trackId: cur.trackId));
       }
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -107,11 +108,6 @@ class _NowPlayingPanelState extends ConsumerState<NowPlayingPanel> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showThmrSnackBar(
           context, const SnackBar(content: Text('网络异常,稍后再试')));
-    } finally {
-      if (mounted) {
-        ref.invalidate(favoritesStatusProvider);
-        ref.invalidate(collectionsProvider);
-      }
     }
   }
 
@@ -270,16 +266,14 @@ class NowPlayingTrackInfo extends ConsumerWidget {
     );
     if (picked == null || !context.mounted) return;
     try {
-      final api = ref.read(authProvider.notifier).api;
+      final write = ref.read(writeCollectionProvider);
       if (picked.favorited && picked.itemId != null) {
-        await api.removeItem(picked.collectionId, picked.itemId!);
+        await write(
+            (api) => api.removeItem(picked.collectionId, picked.itemId!));
       } else {
-        await api.addToCollection(picked.collectionId,
-            stationId: stationId, trackId: cur!.trackId);
+        await write((api) => api.addToCollection(picked.collectionId,
+            stationId: stationId, trackId: cur!.trackId));
       }
-      if (!context.mounted) return;
-      ref.invalidate(favoritesStatusProvider);
-      ref.invalidate(collectionsProvider);
     } on ApiException catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showThmrSnackBar(

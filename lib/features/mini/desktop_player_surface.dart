@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/state/desktop_window_mode.dart';
 import '../../shared/widgets/desktop_title_bar.dart';
 import '../../shared/widgets/thmr_background.dart';
 import 'mini_player.dart';
@@ -28,14 +29,15 @@ class _DesktopPlayerSurfaceState extends ConsumerState<DesktopPlayerSurface> {
   @override
   Widget build(BuildContext context) {
     final mini = ref.watch(miniPlayerProvider);
-    final busy = ref.watch(miniTransitionBusyProvider);
+    final transition = ref.watch(desktopWindowTransitionProvider);
+    final miniBusy = transition == DesktopWindowTransition.miniPlayer;
     final (large, inPlace) = ref.watch(
         largeScreenProvider.select((s) => (s.active, s.switchingInPlace)));
     final showOrdinary = !mini && (!large || inPlace);
     return ExcludeFocus(
-      excluding: busy,
+      excluding: miniBusy,
       child: IgnorePointer(
-        ignoring: busy,
+        ignoring: miniBusy,
         child: ThmrBackground(
           visible: showOrdinary,
           child: Stack(
@@ -45,9 +47,9 @@ class _DesktopPlayerSurfaceState extends ConsumerState<DesktopPlayerSurface> {
                 Align(
                   alignment: Alignment.topCenter,
                   child: ExcludeFocus(
-                    excluding: inPlace,
+                    excluding: transition != null,
                     child: IgnorePointer(
-                      ignoring: inPlace,
+                      ignoring: transition != null,
                       child: DesktopTitleBar(
                         onMini: () => enterMiniMode(
                             ref, MediaQuery.textScalerOf(context)),

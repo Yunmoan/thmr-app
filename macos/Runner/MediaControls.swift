@@ -14,7 +14,7 @@ final class MediaControls: NSObject {
   private var commandsRegistered = false
   private var isPlaying = false
   private var nowPlayingInfo: [String: Any] = [:]
-  private var currentArtworkURL = ""
+  private var currentArtworkURL: String?
   private var artworkTask: URLSessionDataTask?
   private var fallbackArtwork: NSImage?
 
@@ -113,8 +113,8 @@ final class MediaControls: NSObject {
     }
     nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] =
       isPlaying ? 1.0 : 0.0
-    push()
     updateArtwork(urlString: args["artwork"] as? String ?? "")
+    push()
   }
 
   private func push() {
@@ -126,17 +126,14 @@ final class MediaControls: NSObject {
   }
 
   private func updateArtwork(urlString: String) {
-    if urlString.isEmpty {
-      currentArtworkURL = ""
-      applyArtwork(fallbackImage())
-      return
-    }
     guard urlString != currentArtworkURL else { return }
     currentArtworkURL = urlString
     artworkTask?.cancel()
+    artworkTask = nil
+    // 新曲目信息与占位封面一起发布，下载失败时也不会显示上一首的图片。
+    setArtwork(fallbackImage())
     guard let url = URL(string: urlString),
           url.scheme == "http" || url.scheme == "https" else {
-      applyArtwork(fallbackImage())
       return
     }
     artworkTask = URLSession.shared.dataTask(with: url) {
@@ -145,18 +142,21 @@ final class MediaControls: NSObject {
       DispatchQueue.main.async {
         // 封面下载返回时，忽略已经切换走的曲目。
         guard self.currentArtworkURL == urlString else { return }
-        self.applyArtwork(image)
+        self.setArtwork(image)
+        self.push()
       }
     }
     artworkTask?.resume()
   }
 
-  private func applyArtwork(_ image: NSImage?) {
-    guard let image else { return }
+  private func setArtwork(_ image: NSImage?) {
+    guard let image else {
+      nowPlayingInfo.removeValue(forKey: MPMediaItemPropertyArtwork)
+      return
+    }
     nowPlayingInfo[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(
       boundsSize: image.size
     ) { _ in image }
-    push()
   }
 
   private func fallbackImage() -> NSImage? {
@@ -169,7 +169,7 @@ final class MediaControls: NSObject {
   private func clear() {
     artworkTask?.cancel()
     artworkTask = nil
-    currentArtworkURL = ""
+    currentArtworkURL = nil
     isPlaying = false
     nowPlayingInfo.removeAll()
     MPNowPlayingInfoCenter.default().nowPlayingInfo = nil

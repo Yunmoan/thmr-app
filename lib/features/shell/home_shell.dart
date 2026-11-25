@@ -359,11 +359,11 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
       LayoutBuilder(builder: (context, constraints) {
         final wide = constraints.maxWidth >= 980;
         final dock = _dockBar(compact: !wide);
-        if (wide) {
-          return Scaffold(
-            backgroundColor: Colors.transparent,
-            body: Row(
-              children: [
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Row(
+            children: [
+              if (wide) ...[
                 NavigationRail(
                   backgroundColor:
                       Theme.of(context).thmr.solidPanel.withValues(alpha: 0.78),
@@ -384,32 +384,31 @@ class _HomeShellState extends ConsumerState<HomeShell> with WindowListener {
                   ],
                 ),
                 const VerticalDivider(width: 1),
-                Expanded(
-                  child: Column(
-                    children: [
-                      Expanded(child: stack),
-                      dock,
-                    ],
-                  ),
-                ),
               ],
-            ),
-          );
-        }
-        return Scaffold(
-          backgroundColor: Colors.transparent,
-          body: stack,
-          bottomNavigationBar: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              dock,
-              _ThmrNavBar(
-                destinations: _destinations,
-                index: _index,
-                onChanged: _switchTo,
+              // 宽窄布局共用同一棵页面树，跨断点时保留搜索、滚动和进行中的请求。
+              Expanded(
+                child: Column(
+                  children: [
+                    Expanded(child: stack),
+                    if (wide) dock,
+                  ],
+                ),
               ),
             ],
           ),
+          bottomNavigationBar: wide
+              ? null
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    dock,
+                    _ThmrNavBar(
+                      destinations: _destinations,
+                      index: _index,
+                      onChanged: _switchTo,
+                    ),
+                  ],
+                ),
         );
       }),
     ]));

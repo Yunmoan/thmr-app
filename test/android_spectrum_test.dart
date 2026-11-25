@@ -1,10 +1,39 @@
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:thmr_app/core/player/spectrum_android.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('a decoder without an audio track can retry the same stream', () async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var starts = 0;
+    messenger.setMockMethodCallHandler(AndroidSpectrum.channel, (call) async {
+      if (call.method == 'start') {
+        starts++;
+        return 'ready';
+      }
+      if (call.method == 'magnitudes' && starts == 1) {
+        throw PlatformException(code: 'decoder_unavailable');
+      }
+      return null;
+    });
+    addTearDown(() =>
+        messenger.setMockMethodCallHandler(AndroidSpectrum.channel, null));
+    final source = AndroidSpectrum.forTesting(() => 'http://localhost/stream');
+    source.start();
+    await Future<void>.delayed(Duration.zero);
+    source.poll(64);
+    await Future<void>.delayed(Duration.zero);
+    expect(source.isUnavailable, isTrue);
+    expect(await source.retry(), isTrue);
+    expect(starts, 2);
+    source.stop();
+    await Future<void>.delayed(Duration.zero);
+  });
 
   test('decodes the app radio URL without requesting microphone access',
       () async {

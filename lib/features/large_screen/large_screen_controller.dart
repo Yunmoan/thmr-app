@@ -7,8 +7,8 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../core/platform/mobile_presentation.dart';
 import '../../core/platform/window_presentation.dart';
+import '../../core/state/desktop_window_mode.dart';
 import '../../core/state/large_screen_settings.dart';
-import '../mini/mini_player.dart';
 
 class LargeScreenState {
   const LargeScreenState(
@@ -69,7 +69,8 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
   Future<void> _request({bool? active, bool? fullScreen}) {
     if (!supportsLargeScreenMode ||
         _ref.read(miniPlayerProvider) ||
-        _ref.read(miniTransitionBusyProvider)) {
+        _ref.read(desktopWindowTransitionProvider) ==
+            DesktopWindowTransition.miniPlayer) {
       return Future.value();
     }
     final base = _pending ??
@@ -89,6 +90,10 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
     if (_inFlight != null) return _inFlight!;
     final completion = Completer<void>();
     _inFlight = completion.future;
+    if (_windows) {
+      _ref.read(desktopWindowTransitionProvider.notifier).state =
+          DesktopWindowTransition.largeScreen;
+    }
     unawaited(_drain(completion));
     return completion.future;
   }
@@ -107,6 +112,9 @@ class LargeScreenController extends StateNotifier<LargeScreenState> {
     } finally {
       _target = null;
       _inFlight = null;
+      if (_windows && mounted) {
+        _ref.read(desktopWindowTransitionProvider.notifier).state = null;
+      }
       completion.complete();
     }
   }
