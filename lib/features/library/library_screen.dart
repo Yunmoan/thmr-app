@@ -10,6 +10,7 @@ import '../../core/api/radio_api.dart';
 import '../../core/input/app_commands.dart';
 import '../../core/api/network_failure.dart';
 import '../../core/models/models.dart';
+import '../../core/platform/mobile_presentation.dart';
 import '../../core/state/auth_provider.dart';
 import '../../core/state/channel_provider.dart';
 import '../../core/theme/thmr_colors.dart';
@@ -91,51 +92,153 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       _search();
     });
     final auth = ref.watch(authProvider);
-    final tokens = Theme.of(context).thmr;
+    final theme = Theme.of(context);
+    final tokens = theme.thmr;
+    final accent = theme.colorScheme.primary;
+    final isDark = theme.brightness == Brightness.dark;
+    // 与和风磨砂卡片保持同一材质层级，避免浅色纯白过硬或深色过淡。
+    final controlBg = tokens.panelBg.withValues(alpha: isDark ? 0.78 : 0.86);
+    final sortActive = _sort != 'title';
+    const controlRadius = 12.0;
+
+    final sortButton = ThmrMenuButton<String>(
+      initialValue: _sort,
+      tooltip: '排序',
+      onSelected: (v) {
+        setState(() => _sort = v);
+        _search();
+      },
+      itemBuilder: (_) => [
+        for (final (v, label) in _sortOptions)
+          PopupMenuItem(
+            value: v,
+            child: AncestorFocusOutline(
+              child: Text(
+                label,
+                style: v == _sort
+                    ? theme.textTheme.bodyMedium?.copyWith(
+                        color: accent,
+                        fontWeight: FontWeight.w700,
+                      )
+                    : null,
+              ),
+            ),
+          ),
+      ],
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: sortActive ? tokens.accentSoft : controlBg,
+          borderRadius: BorderRadius.circular(controlRadius),
+          border: Border.all(
+            color:
+                sortActive ? accent.withValues(alpha: 0.48) : tokens.panelBorder,
+          ),
+        ),
+        child: Center(
+          child: Icon(
+            Icons.sort_rounded,
+            size: 20,
+            color: sortActive ? accent : tokens.mutedInk,
+          ),
+        ),
+      ),
+    );
 
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('THMR 音乐数据库',
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
+                style: theme.textTheme.headlineSmall
                     ?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
-            // 搜索行
+            // 搜索行：左侧柔和圆角搜索框，右侧独立同规格排序按钮。
             Row(
               children: [
                 Expanded(
                   child: FocusOutline(
-                      child: TextField(
-                    focusNode: ref.watch(librarySearchFocusProvider),
-                    controller: _controller,
-                    textInputAction: TextInputAction.search,
-                    onSubmitted: (_) => _search(),
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search_rounded),
-                      hintText: '搜索曲名 / 艺术家 / 专辑…',
+                    radius: controlRadius,
+                    child: ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _controller,
+                      builder: (context, value, _) {
+                        final border = OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(controlRadius),
+                          borderSide: BorderSide(color: tokens.panelBorder),
+                        );
+                        return TextField(
+                          focusNode: ref.watch(librarySearchFocusProvider),
+                          controller: _controller,
+                          textInputAction: TextInputAction.search,
+                          textAlignVertical: TextAlignVertical.center,
+                          onSubmitted: (_) => _search(),
+                          onTapOutside: (_) =>
+                              FocusManager.instance.primaryFocus?.unfocus(),
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(height: 1.25),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            fillColor: controlBg,
+                            constraints: const BoxConstraints(minHeight: 44),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.search_rounded,
+                              size: 20,
+                              color: tokens.mutedInk,
+                            ),
+                            prefixIconConstraints: const BoxConstraints(
+                              minWidth: 40,
+                              minHeight: 44,
+                            ),
+                            suffixIcon: value.text.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: '清空',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 36,
+                                      minHeight: 36,
+                                    ),
+                                    icon: Icon(
+                                      Icons.cancel_rounded,
+                                      size: 18,
+                                      color: tokens.mutedInk
+                                          .withValues(alpha: 0.78),
+                                    ),
+                                    onPressed: () => _controller.clear(),
+                                  ),
+                            suffixIconConstraints: const BoxConstraints(
+                              minWidth: 40,
+                              minHeight: 44,
+                            ),
+                            hintText: '搜索曲名 / 艺术家 / 专辑…',
+                            border: border,
+                            enabledBorder: border,
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.circular(controlRadius),
+                              borderSide: BorderSide(
+                                color: accent.withValues(alpha: 0.72),
+                                width: 1.4,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                  )),
+                  ),
                 ),
                 const SizedBox(width: 8),
-                ThmrMenuButton<String>(
-                  initialValue: _sort,
-                  tooltip: '排序',
-                  onSelected: (v) {
-                    setState(() => _sort = v);
-                    _search();
-                  },
-                  itemBuilder: (_) => [
-                    for (final (v, label) in _sortOptions)
-                      PopupMenuItem(
-                          value: v,
-                          child: AncestorFocusOutline(child: Text(label))),
-                  ],
-                  icon: const Icon(Icons.sort_rounded),
-                ),
+                if (hasIosPresentation && usesPhoneLayout(context, ref))
+                  sortButton
+                else
+                  FocusOutline(radius: controlRadius, child: sortButton),
               ],
             ),
             const SizedBox(height: 12),
@@ -194,6 +297,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       );
     }
     return ListView.separated(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.only(bottom: 16),
       itemCount: results.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, i) =>
