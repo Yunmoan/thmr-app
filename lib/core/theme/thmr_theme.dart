@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../platform/mobile_presentation.dart';
 import 'thmr_colors.dart';
 import 'thmr_focus_ring.dart';
 import 'thmr_motion.dart';
@@ -68,7 +69,11 @@ class ThmrTheme {
       colorScheme: scheme,
       focusColor: accent.withValues(alpha: 0.12),
       scaffoldBackgroundColor: t.pageBg,
-      splashFactory: InkSparkle.splashFactory,
+      // iOS 端关闭 Material 3 星芒水波纹，改用柔和的按压高亮以贴合系统触感。
+      splashFactory:
+          hasIosPresentation ? NoSplash.splashFactory : InkSparkle.splashFactory,
+      highlightColor:
+          hasIosPresentation ? t.accentSoft.withValues(alpha: 0.45) : null,
       textTheme: textTheme.copyWith(
         // 正文行高对齐 Web 端 1.62
         bodyLarge: textTheme.bodyLarge?.copyWith(height: 1.62),
@@ -168,7 +173,10 @@ class ThmrTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: t.panelBorder),
+          borderSide: BorderSide(
+            color: accent.withValues(alpha: 0.72),
+            width: 1.4,
+          ),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
