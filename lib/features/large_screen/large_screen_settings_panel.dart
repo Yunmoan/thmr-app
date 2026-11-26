@@ -604,7 +604,7 @@ class _SettingSwitch extends StatelessWidget {
           FocusOutline(
               child: Semantics(
                   label: title,
-                  child: Switch(value: value, onChanged: onChanged))),
+                  child: Switch.adaptive(value: value, onChanged: onChanged))),
         ]),
       );
 }

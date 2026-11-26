@@ -316,7 +316,7 @@ class _NarrowLayout extends ConsumerWidget {
     final st = station.status;
     final error = station.error;
     final showVote = st != null && _showVote(ref);
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       color: Theme.of(context).colorScheme.primary,
       onRefresh: () async {
         ref.invalidate(channelCatalogProvider);
