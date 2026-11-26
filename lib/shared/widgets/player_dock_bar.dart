@@ -29,41 +29,66 @@ class PlayerDockBar extends ConsumerWidget {
     final status = ref.watch(stationProvider.select((s) => s.status));
     final cur = status?.current;
 
+    final trackInfo = Row(
+      children: [
+        TrackCover(url: cur?.coverUrl ?? '', size: 44, radius: 6),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                cur?.title ?? '暂无播放',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w700, height: 1.25),
+              ),
+              Text(
+                cur?.artist ?? '等待下一首',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context)
+                    .textTheme
+                    .labelSmall
+                    ?.copyWith(color: tokens.mutedInk),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
     return Container(
       decoration: BoxDecoration(
         color: tokens.solidPanel,
         border: Border(top: BorderSide(color: tokens.panelBorder)),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+      padding: EdgeInsets.fromLTRB(16, 8, compact ? 10 : 12, 8),
       child: Row(
         children: [
-          TrackCover(url: cur?.coverUrl ?? '', size: 44, radius: 6),
-          const SizedBox(width: 12),
+          // 窄屏下整块曲目信息区域可点击跳转收听页，为曲名保留更多展示空间。
           Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  cur?.title ?? '暂无播放',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w700, height: 1.25),
-                ),
-                Text(
-                  cur?.artist ?? '等待下一首',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelSmall
-                      ?.copyWith(color: tokens.mutedInk),
-                ),
-              ],
-            ),
+            child: compact && onOpenPlayer != null
+                ? FocusOutline(
+                    radius: 8,
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: InkWell(
+                        onTap: onOpenPlayer,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Semantics(
+                          button: true,
+                          hint: '打开播放器',
+                          child: trackInfo,
+                        ),
+                      ),
+                    ),
+                  )
+                : trackInfo,
           ),
           if (!compact) ...[
             const SizedBox(width: 12),
@@ -73,17 +98,27 @@ class PlayerDockBar extends ConsumerWidget {
             const SizedBox(width: 10),
             const _DockVolume(),
             const SizedBox(width: 12),
+            OutlinedButton.icon(
+              onPressed: onOpenPlayer,
+              icon: const Icon(Icons.open_in_new_rounded, size: 15),
+              label: const Text('打开播放器'),
+            ),
           ],
           if (compact) ...[
             const SizedBox(width: 10),
             const _DockPlayButton(),
-            const SizedBox(width: 10),
+            const SizedBox(width: 4),
+            IconButton(
+              tooltip: '打开播放器',
+              visualDensity: VisualDensity.compact,
+              onPressed: onOpenPlayer,
+              icon: Icon(
+                Icons.keyboard_arrow_up_rounded,
+                size: 22,
+                color: tokens.mutedInk,
+              ),
+            ),
           ],
-          OutlinedButton.icon(
-            onPressed: onOpenPlayer,
-            icon: const Icon(Icons.open_in_new_rounded, size: 15),
-            label: const Text('打开播放器'),
-          ),
         ],
       ),
     );
