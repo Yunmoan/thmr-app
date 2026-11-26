@@ -6,10 +6,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:thmr_app/core/api/radio_api.dart';
 import 'package:thmr_app/core/config.dart';
 import 'package:thmr_app/core/models/models.dart';
+import 'package:thmr_app/core/platform/mobile_presentation.dart';
 import 'package:thmr_app/core/state/channel_provider.dart';
 import 'package:thmr_app/core/state/radio_source_provider.dart';
 import 'package:thmr_app/core/theme/thmr_theme.dart';
 import 'package:thmr_app/features/collections/collections_screen.dart';
+import 'package:thmr_app/features/collections/yesterday_playlist.dart';
 
 const _curated = 'touhou-curated';
 
@@ -126,4 +128,40 @@ void main() {
     expect(find.text('尚未登录'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('iOS 昨日歌单频道选择器渲染圆角轮廓并可正常切换频道', (tester) async {
+    tester.view.physicalSize = const Size(375, 812);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final api = _HistoryApi()..curatedAvailable = true;
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        iosIsPadProvider.overrideWith((ref) async => false),
+        radioApiProvider.overrideWithValue(api),
+        channelCatalogProvider.overrideWith((ref) async => const [
+              RadioChannel(id: AppConfig.defaultStationId, name: '东方综合频道'),
+              RadioChannel(id: _curated, name: '东方综合精选频道'),
+            ]),
+      ],
+      child: MaterialApp(
+        theme: ThmrTheme.light(),
+        home: const Scaffold(body: YesterdayPlaylist()),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('频道'), findsOneWidget);
+    expect(find.text('东方综合频道'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('昨日歌单频道'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('东方综合精选频道').last);
+    await tester.pumpAndSettle();
+    expect(find.text('东方综合精选频道'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 }

@@ -102,17 +102,45 @@ class _YesterdayPlaylistState extends ConsumerState<YesterdayPlaylist> {
                                 AncestorFocusOutline(child: Text(entry.name)),
                           ),
                       ],
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                      // 与收听页频道切换器统一圆角容器样式，强化可点击轮廓。
+                      child: Container(
+                        constraints: const BoxConstraints(minHeight: 40),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.thmr.panelSoft,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: theme.thmr.panelBorder),
+                        ),
                         child: Row(
                           spacing: 8,
                           children: [
-                            Flexible(
-                              child: Text(channel.name,
-                                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(
+                              '频道',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: theme.thmr.mutedInk,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                channel.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  color: theme.thmr.ink,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
                             if (channels.length > 1)
-                              const Icon(Icons.expand_more_rounded, size: 18),
+                              Icon(
+                                Icons.expand_more_rounded,
+                                size: 18,
+                                color: theme.thmr.mutedInk,
+                              ),
                           ],
                         ),
                       ),
