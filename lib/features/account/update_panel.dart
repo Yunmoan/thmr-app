@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,13 +8,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../shared/widgets/focus_outline.dart';
+import '../../core/theme/thmr_colors.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../core/update/app_update.dart';
+import '../../shared/markdown/markdown_view.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import '../large_screen/large_screen_controller.dart';
 
 bool get supportsAppUpdates =>
     !kIsWeb && defaultTargetPlatform != TargetPlatform.iOS;
+
+/// 更新弹窗正文宽度与两侧内边距；进度带需要横贯弹窗，因此留白由内容自己处理。
+const _updateBodyWidth = 460.0;
+const _updateBodyPadding = 24.0;
 
 /// 在 Navigator 下全局挂载一次，所有标签页都能收到更新提示。
 class AppUpdateMonitor extends ConsumerStatefulWidget {
@@ -311,6 +318,7 @@ Future<void> showAppUpdate(BuildContext context, AppRelease release) =>
         final ready = state.status == UpdateStatus.ready;
         final installing = state.status == UpdateStatus.installing;
         final downloading = state.status == UpdateStatus.downloading;
+        final progress = _updateProgressFor(state);
         final title = state.error != null
             ? '更新未完成'
             : installing
@@ -322,7 +330,7 @@ Future<void> showAppUpdate(BuildContext context, AppRelease release) =>
                         : '发现新版本';
         return AlertDialog(
           titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 12),
-          contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+          contentPadding: EdgeInsets.zero,
           actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           title: Row(children: [
             Icon(
@@ -342,89 +350,29 @@ Future<void> showAppUpdate(BuildContext context, AppRelease release) =>
                         ?.copyWith(fontSize: 20, fontWeight: FontWeight.w600))),
           ]),
           content: SizedBox(
-              width: 460,
+              // 正文宽度加上两侧内边距后与弹窗同宽。
+              width: _updateBodyWidth + _updateBodyPadding * 2,
               child: ConstrainedBox(
                   constraints: BoxConstraints(
                       maxHeight: MediaQuery.sizeOf(context).height * .55),
-                  child: SingleChildScrollView(
-                      child: Column(
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Wrap(spacing: 12, runSpacing: 4, children: [
-                        Text('v${current.version}',
-                            style: theme.textTheme.bodySmall
-                                ?.copyWith(fontWeight: FontWeight.w600)),
-                        Text('构建 ${current.buildNumber}',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant)),
-                        if (artifact != null)
-                          Text(
-                              '${(artifact.size / (1024 * 1024)).toStringAsFixed(1)} MB',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant)),
-                      ]),
-                      const SizedBox(height: 16),
-                      Text('更新内容',
-                          style: theme.textTheme.labelLarge
-                              ?.copyWith(fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 8),
-                      _UpdateNotes(notes: current.notes),
-                      const SizedBox(height: 16),
-                      const Divider(),
-                      const SizedBox(height: 12),
-                      Text(
-                          artifact == null
-                              ? '此版本暂未提供当前架构的安装包。'
-                              : installing
-                                  ? '正在准备安装，请留意系统的授权提示。'
-                                  : ready
-                                      ? '更新包已下载并通过校验。安装后将自动重启应用。'
-                                      : '下载完成并校验后，即可安装更新。',
-                          style: theme.textTheme.bodySmall),
-                      if (artifact != null &&
-                          defaultTargetPlatform == TargetPlatform.windows) ...[
-                        const SizedBox(height: 6),
-                        Text('需要管理员权限时，Windows 会请求授权。',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant)),
-                      ],
-                      if (downloading || installing) ...[
-                        const SizedBox(height: 10),
-                        LinearProgressIndicator(
-                            value: installing || state.progress >= 1
-                                ? null
-                                : state.progress,
-                            minHeight: 3),
-                        if (downloading)
-                          Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Text(
-                                  state.progress >= 1
-                                      ? '正在校验更新包…'
-                                      : '${(state.progress * 100).round()}%',
-                                  style: theme.textTheme.labelSmall)),
-                      ],
-                      if (state.error != null) ...[
-                        const SizedBox(height: 12),
-                        Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                                color: theme.colorScheme.error
-                                    .withValues(alpha: .06),
-                                border: Border.all(
-                                    color: theme.colorScheme.error
-                                        .withValues(alpha: .25)),
-                                borderRadius: BorderRadius.circular(6)),
-                            child: Text(state.error!,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.error))),
-                      ],
-                      if (state.installNotice != null)
-                        Text(state.installNotice!),
+                      Flexible(
+                        child: SingleChildScrollView(
+                            padding: const EdgeInsets.fromLTRB(
+                                _updateBodyPadding, 0, _updateBodyPadding, 8),
+                            child: _UpdateDetails(
+                                release: current,
+                                artifact: artifact,
+                                state: state)),
+                      ),
+                      if (progress != null)
+                        _UpdateProgressBar(
+                            value: progress.value, label: progress.label),
                     ],
-                  )))),
+                  ))),
           actions: [
             TextButton(
                 onPressed: state.status == UpdateStatus.installing
@@ -432,7 +380,7 @@ Future<void> showAppUpdate(BuildContext context, AppRelease release) =>
                     : () => Navigator.of(context).pop(),
                 child: const Text('稍后')),
             TextButton(
-                onPressed: () => _openUpdateLink(context, current.pageUrl),
+                onPressed: () => _openExternalLink(context, current.pageUrl),
                 child: const Text('发布页')),
             if (state.status == UpdateStatus.downloading)
               TextButton(
@@ -452,45 +400,300 @@ Future<void> showAppUpdate(BuildContext context, AppRelease release) =>
             else if (artifact != null)
               FilledButton(
                   onPressed: state.busy ? null : controller.downloadUpdate,
-                  child: const Text('下载更新')),
+                  child: Text(state.error != null ? '重新下载' : '下载更新')),
           ],
         );
       }),
     );
 
+class _UpdateProgress {
+  const _UpdateProgress(this.label, this.value);
+
+  final String label;
+
+  /// 为 null 表示不确定进度，显示流动动画和状态文字。
+  final double? value;
+}
+
+/// 进度带只在下载、校验和准备安装时出现。
+_UpdateProgress? _updateProgressFor(AppUpdateState state) {
+  switch (state.status) {
+    case UpdateStatus.downloading:
+      if (state.progress >= 1) {
+        return const _UpdateProgress('正在校验更新包…', null);
+      }
+      final progress = state.progress.clamp(0.0, 1.0).toDouble();
+      return _UpdateProgress('${(progress * 100).round()}%', progress);
+    case UpdateStatus.installing:
+      return const _UpdateProgress('正在准备安装…', null);
+    default:
+      return null;
+  }
+}
+
+/// 横贯弹窗底部的细进度条。
+///
+/// 横带只有 3px 细线高；百分比文字直接压在线上，文字下的弹窗同色背景
+/// 会把细线和重叠的正文/按钮内容挡住，形成挖空效果。
+/// [value] 为 null 时显示不定态动画和状态文字。
+class _UpdateProgressBar extends StatelessWidget {
+  const _UpdateProgressBar({required this.label, required this.value});
+
+  final String label;
+  final double? value;
+
+  static const _barThickness = 3.0;
+  // 文字周围留出的同色背景边距，以及文字尾部保留的填充长度。
+  static const _labelGap = 4.0;
+  static const _labelVerticalGap = 2.0;
+  static const _fillTail = 8.0;
+  static const _bandKey = ValueKey('update-progress');
+  static const _fillKey = ValueKey('update-progress-fill');
+  static const _backdropKey = ValueKey('update-progress-backdrop');
+  static const _labelKey = ValueKey('update-progress-label');
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.thmr;
+    final textScaler = MediaQuery.textScalerOf(context);
+    final textStyle =
+        (theme.textTheme.labelSmall ?? const TextStyle()).copyWith(
+      fontSize: 11,
+      height: 1,
+      fontWeight: FontWeight.w600,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    final indeterminate = value == null;
+    final labelStyle = textStyle.copyWith(
+        color: indeterminate
+            ? tokens.ink
+            : ThmrColors.textAccent(
+                theme.colorScheme.primary, theme.colorScheme.surface));
+    final labelWidth = _measureLabel(context, labelStyle);
+    final labelHeight = textScaler.scale(11);
+    const height = _barThickness;
+    final labelTop = (height - labelHeight) / 2;
+    final labelWidget = Text(
+      label,
+      key: _labelKey,
+      style: labelStyle,
+      maxLines: 1,
+      softWrap: false,
+    );
+    final track = Align(
+      alignment: Alignment.centerLeft,
+      child: SizedBox(
+        width: double.infinity,
+        height: _barThickness,
+        child: ColoredBox(color: tokens.panelBorder),
+      ),
+    );
+
+    // 弹窗同色背景：既挖空细线，也挡住和文字重叠的正文/按钮内容。
+    Widget backdropAt(double left) => Positioned(
+          left: math.max(0.0, left - _labelGap),
+          top: labelTop - _labelVerticalGap,
+          width: labelWidth + _labelGap * 2,
+          height: labelHeight + _labelVerticalGap * 2,
+          child: ColoredBox(
+            key: _backdropKey,
+            color: theme.colorScheme.surface,
+          ),
+        );
+
+    Widget labelAt(double left) => Positioned(
+          left: left,
+          top: labelTop,
+          child: labelWidget,
+        );
+
+    return Semantics(
+      container: true,
+      label: '更新进度',
+      value: label,
+      child: ExcludeSemantics(
+        child: SizedBox(
+          key: _bandKey,
+          width: double.infinity,
+          height: height,
+          child: indeterminate
+              ? LayoutBuilder(
+                  builder: (context, constraints) {
+                    final width = constraints.maxWidth;
+                    final left = _clampLabelLeft(
+                        width - 8 - labelWidth, width, labelWidth);
+                    return Stack(clipBehavior: Clip.none, children: [
+                      track,
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        height: _barThickness,
+                        child: LinearProgressIndicator(
+                          backgroundColor: Colors.transparent,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      backdropAt(left),
+                      labelAt(left),
+                    ]);
+                  },
+                )
+              : TweenAnimationBuilder<double>(
+                  tween: Tween<double>(
+                      begin: 0, end: value!.clamp(0.0, 1.0).toDouble()),
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, progress, _) {
+                    return LayoutBuilder(
+                      builder: (context, constraints) {
+                        final width = constraints.maxWidth;
+                        final fillWidth = width * progress;
+                        final left = _clampLabelLeft(
+                            fillWidth - _fillTail - _labelGap - labelWidth,
+                            width,
+                            labelWidth);
+                        return Stack(clipBehavior: Clip.none, children: [
+                          track,
+                          Positioned(
+                            left: 0,
+                            top: 0,
+                            width: fillWidth,
+                            height: _barThickness,
+                            child: ColoredBox(
+                              key: _fillKey,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          backdropAt(left),
+                          labelAt(left),
+                        ]);
+                      },
+                    );
+                  },
+                ),
+        ),
+      ),
+    );
+  }
+
+  /// 文字左边界：优先贴住填充尾部，空间不足时退回左侧 8px 处。
+  double _clampLabelLeft(double ideal, double width, double labelWidth) {
+    final maxLeft = math.max(8.0, width - 8 - labelWidth);
+    return ideal.clamp(8.0, maxLeft).toDouble();
+  }
+
+  /// 用与渲染一致的字体缩放测量文字宽度，保证挖空位置准确。
+  double _measureLabel(BuildContext context, TextStyle style) {
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
+  }
+}
+
+/// 弹窗中可滚动的主体：版本信息、更新说明和安装状态。
+class _UpdateDetails extends StatelessWidget {
+  const _UpdateDetails({
+    required this.release,
+    required this.artifact,
+    required this.state,
+  });
+
+  final AppRelease release;
+  final UpdateArtifact? artifact;
+  final AppUpdateState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final artifact = this.artifact;
+    final ready = state.status == UpdateStatus.ready;
+    final installing = state.status == UpdateStatus.installing;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(spacing: 12, runSpacing: 4, children: [
+          Text('v${release.version}',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(fontWeight: FontWeight.w600)),
+          Text('构建 ${release.buildNumber}',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          if (artifact != null)
+            Text('${(artifact.size / (1024 * 1024)).toStringAsFixed(1)} MB',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ]),
+        const SizedBox(height: 16),
+        // 更新说明通常自带 Markdown 标题，不再重复「更新内容」标签。
+        _UpdateNotes(notes: release.notes),
+        const SizedBox(height: 16),
+        const Divider(),
+        const SizedBox(height: 12),
+        Text(
+            artifact == null
+                ? '此版本暂未提供当前架构的安装包。'
+                : installing
+                    ? '正在准备安装，请留意系统的授权提示。'
+                    : ready
+                        ? '更新包已下载并通过校验。安装后将自动重启应用。'
+                        : '下载完成并校验后，即可安装更新。',
+            style: theme.textTheme.bodySmall),
+        if (artifact != null &&
+            defaultTargetPlatform == TargetPlatform.windows) ...[
+          const SizedBox(height: 6),
+          Text('需要管理员权限时，Windows 会请求授权。',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ],
+        if (state.error != null) ...[
+          const SizedBox(height: 12),
+          Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                  color: theme.colorScheme.error.withValues(alpha: .06),
+                  border: Border.all(
+                      color: theme.colorScheme.error.withValues(alpha: .25)),
+                  borderRadius: BorderRadius.circular(6)),
+              child: Text(state.error!,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.error))),
+        ],
+        if (state.installNotice != null) Text(state.installNotice!),
+      ],
+    );
+  }
+}
+
+/// 更新说明使用轻量 Markdown 渲染，链接交给系统浏览器打开。
 class _UpdateNotes extends StatelessWidget {
   const _UpdateNotes({required this.notes});
   final String notes;
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context)
-        .textTheme
-        .bodyMedium
-        ?.copyWith(fontSize: 14, height: 1.6);
-    final lines =
-        notes.trim().isEmpty ? ['该版本未提供更新说明。'] : notes.trim().split('\n');
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      for (final line in lines)
-        if (line.trim().isNotEmpty)
-          Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: RegExp(r'^\s*[-*]\s+').hasMatch(line)
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                          Text('•  ', style: style),
-                          Expanded(
-                              child: SelectableText(
-                                  line.replaceFirst(RegExp(r'^\s*[-*]\s+'), ''),
-                                  style: style)),
-                        ])
-                  : SelectableText(line, style: style)),
-    ]);
+    final theme = Theme.of(context);
+    return MarkdownView(
+      data: notes,
+      emptyText: '该版本未提供更新说明。',
+      style: theme.textTheme.bodyMedium?.copyWith(fontSize: 14, height: 1.6),
+      onLinkTap: (url) => unawaited(_openExternalLink(context, url)),
+    );
   }
 }
 
-Future<void> _openUpdateLink(BuildContext context, Uri url) async {
+Future<void> _openExternalLink(BuildContext context, Uri url) async {
   try {
     if (await launchUrl(url, mode: LaunchMode.externalApplication)) return;
   } catch (_) {/* 由下方逻辑提示无法打开浏览器。 */}

@@ -22,6 +22,11 @@ Future<Directory> updateCacheDirectory() async => Directory(p.join(
         .path,
     'thmr-updates'));
 
+/// 安装包已被删除或校验失败，需要重新下载。
+class UpdatePackageInvalidException extends UpdateCheckException {
+  const UpdatePackageInvalidException(super.message);
+}
+
 String _randomToken() => List.generate(32, (_) => Random.secure().nextInt(256))
     .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
     .join();
@@ -54,11 +59,13 @@ class UpdatePackageManager {
   }
 
   Future<void> verifyFile(File file, UpdateArtifact artifact) async {
-    if (!await file.exists() ||
-        await file.length() != artifact.size ||
+    if (!await file.exists()) {
+      throw const UpdatePackageInvalidException('安装包已被删除，请重新下载');
+    }
+    if (await file.length() != artifact.size ||
         (await crypto.sha256.bind(file.openRead()).first).toString() !=
             artifact.sha256) {
-      throw const UpdateCheckException('更新包完整性校验失败，请重新下载');
+      throw const UpdatePackageInvalidException('安装包完整性校验失败，请重新下载');
     }
   }
 

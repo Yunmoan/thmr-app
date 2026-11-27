@@ -57,6 +57,7 @@ class _ControllerPackages extends UpdatePackageManager {
   int downloads = 0;
   int installs = 0;
   bool failInstall = false;
+  bool invalidPackage = false;
   @override
   Future<File> download(
       AppRelease release, void Function(double) progress) async {
@@ -69,6 +70,9 @@ class _ControllerPackages extends UpdatePackageManager {
   @override
   Future<void> install(AppRelease release, File file) async {
     installs++;
+    if (invalidPackage) {
+      throw const UpdatePackageInvalidException('安装包已被删除，请重新下载');
+    }
     if (failInstall) throw const UpdateCheckException('test install failed');
   }
 
@@ -145,6 +149,16 @@ void main() {
     await updater.download(_release(), (_) {});
     expect(adapter.requests, 2);
     expect(await file.readAsString(), 'abc');
+  });
+
+  test('missing package is reported as needing a re-download', () async {
+    final updater = manager(_BytesAdapter());
+    addTearDown(updater.close);
+    await expectLater(
+        updater.verifyFile(File('${directory.path}/missing.zip'),
+            _release().artifactFor('windows-x86_64')!),
+        throwsA(isA<UpdatePackageInvalidException>()
+            .having((error) => error.message, 'message', contains('重新下载'))));
   });
 
   test(
@@ -286,6 +300,27 @@ void main() {
     packages.failInstall = false;
     await controller.installUpdate();
     expect(packages.installs, 2);
+  });
+
+  test('deleted package returns to downloadable state for a retry', () async {
+    final packages = _ControllerPackages();
+    final controller = AppUpdateController(
+        service: serviceFor(ReleaseAdapter()),
+        packages: packages,
+        installedVersion: () async => const ClientVersion('0.1.3', '1'));
+    addTearDown(controller.dispose);
+    await controller.check();
+    expect(controller.state.status, UpdateStatus.ready);
+    packages.invalidPackage = true;
+    await controller.installUpdate();
+    expect(controller.state.status, UpdateStatus.available);
+    expect(controller.state.progress, 0);
+    expect(controller.state.error, contains('重新下载'));
+    packages.invalidPackage = false;
+    await controller.downloadUpdate();
+    expect(controller.state.status, UpdateStatus.ready);
+    expect(controller.state.error, isNull);
+    expect(packages.downloads, 2);
   });
 
   test('same version with a higher build updates the installed client',
