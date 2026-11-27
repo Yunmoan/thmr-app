@@ -70,7 +70,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsOneWidget);
       expect(find.text('下载更新'), findsOneWidget);
+      // 更新说明按简单 Markdown 渲染，标题、列表和行内格式不显示原始标记。
       expect(find.text('更新说明'), findsOneWidget);
+      expect(find.text('修复 下载进度 显示'), findsOneWidget);
+      expect(find.text('优化 重试 逻辑'), findsOneWidget);
+      expect(find.textContaining('**'), findsNothing);
       expect(adapter.requests, 1);
       expect(tester.takeException(), isNull);
       await tester.tap(find.text('稍后'));
@@ -140,7 +144,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('更新未完成'), findsOneWidget);
       expect(find.text('构建 2'), findsOneWidget);
-      expect(find.text('更新内容'), findsOneWidget);
+      expect(find.text('更新说明'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     }, variant: TargetPlatformVariant.only(TargetPlatform.windows));

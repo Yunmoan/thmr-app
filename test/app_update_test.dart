@@ -57,7 +57,9 @@ Map<String, dynamic> releaseJson(String version) => {
       'program': 'THMR',
       'version': version,
       'build_number': 2,
-      'notes': '更新说明',
+      'notes': '## 更新说明\n\n'
+          '- 修复 **下载进度** 显示\n'
+          '- 优化 `重试` 逻辑',
       'pub_date': '2026-11-04T00:00:00Z',
       'release_page': 'https://thmr.yunmoan.cn/download',
       'platforms': {

@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../shared/widgets/focus_outline.dart';
 import '../../core/theme/thmr_theme.dart';
 import '../../core/update/app_update.dart';
+import '../../shared/markdown/markdown_view.dart';
 import '../../shared/widgets/thmr_panel.dart';
 import '../large_screen/large_screen_controller.dart';
 
@@ -365,10 +366,7 @@ Future<void> showAppUpdate(BuildContext context, AppRelease release) =>
                                   color: theme.colorScheme.onSurfaceVariant)),
                       ]),
                       const SizedBox(height: 16),
-                      Text('更新内容',
-                          style: theme.textTheme.labelLarge
-                              ?.copyWith(fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 8),
+                      // 更新说明通常自带 Markdown 标题，不再重复「更新内容」标签。
                       _UpdateNotes(notes: current.notes),
                       const SizedBox(height: 16),
                       const Divider(),
@@ -432,7 +430,7 @@ Future<void> showAppUpdate(BuildContext context, AppRelease release) =>
                     : () => Navigator.of(context).pop(),
                 child: const Text('稍后')),
             TextButton(
-                onPressed: () => _openUpdateLink(context, current.pageUrl),
+                onPressed: () => _openExternalLink(context, current.pageUrl),
                 child: const Text('发布页')),
             if (state.status == UpdateStatus.downloading)
               TextButton(
@@ -458,39 +456,24 @@ Future<void> showAppUpdate(BuildContext context, AppRelease release) =>
       }),
     );
 
+/// 更新说明使用轻量 Markdown 渲染，链接交给系统浏览器打开。
 class _UpdateNotes extends StatelessWidget {
   const _UpdateNotes({required this.notes});
   final String notes;
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context)
-        .textTheme
-        .bodyMedium
-        ?.copyWith(fontSize: 14, height: 1.6);
-    final lines =
-        notes.trim().isEmpty ? ['该版本未提供更新说明。'] : notes.trim().split('\n');
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      for (final line in lines)
-        if (line.trim().isNotEmpty)
-          Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: RegExp(r'^\s*[-*]\s+').hasMatch(line)
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                          Text('•  ', style: style),
-                          Expanded(
-                              child: SelectableText(
-                                  line.replaceFirst(RegExp(r'^\s*[-*]\s+'), ''),
-                                  style: style)),
-                        ])
-                  : SelectableText(line, style: style)),
-    ]);
+    final theme = Theme.of(context);
+    return MarkdownView(
+      data: notes,
+      emptyText: '该版本未提供更新说明。',
+      style: theme.textTheme.bodyMedium?.copyWith(fontSize: 14, height: 1.6),
+      onLinkTap: (url) => unawaited(_openExternalLink(context, url)),
+    );
   }
 }
 
-Future<void> _openUpdateLink(BuildContext context, Uri url) async {
+Future<void> _openExternalLink(BuildContext context, Uri url) async {
   try {
     if (await launchUrl(url, mode: LaunchMode.externalApplication)) return;
   } catch (_) {/* 由下方逻辑提示无法打开浏览器。 */}
