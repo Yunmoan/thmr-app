@@ -33,6 +33,52 @@ class _PreviewController extends AppUpdateController {
   }
 }
 
+/// 直接打开更新弹窗，避免依赖面板的检查流程。
+Future<void> _pumpUpdateDialog(
+  WidgetTester tester,
+  AppUpdateState state, {
+  double width = 620,
+  double textScale = 1,
+}) async {
+  tester.view.physicalSize = Size(width, 940);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  final controller = _PreviewController(state);
+  final container = ProviderContainer(overrides: [
+    appUpdateProvider.overrideWith((ref) => controller),
+  ]);
+  addTearDown(container.dispose);
+  await controller.check();
+  // 先移除上一个弹窗，避免同一个 MaterialApp 里残留的路由挡住按钮。
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pumpWidget(UncontrolledProviderScope(
+    container: container,
+    child: MaterialApp(
+      theme: ThmrTheme.light(),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => Center(
+            child: TextButton(
+              onPressed: () => showAppUpdate(context, state.release!),
+              child: const Text('打开更新'),
+            ),
+          ),
+        ),
+      ),
+    ),
+  ));
+  await tester.tap(find.text('打开更新'));
+  await tester.pump();
+  // 不定态进度条持续动画，不能用 pumpAndSettle。
+  await tester.pump(const Duration(milliseconds: 400));
+}
+
 void main() {
   late AppRelease uiRelease;
   setUpAll(() async {
@@ -149,6 +195,106 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
   }
+
+  testWidgets('downloading shows a full-bleed band with a tail label',
+      (tester) async {
+    await _pumpUpdateDialog(
+        tester,
+        AppUpdateState(
+            status: UpdateStatus.downloading,
+            release: uiRelease,
+            progress: .7));
+    expect(find.text('70%'), findsOneWidget);
+    final bandFinder = find.byKey(const ValueKey('update-progress'));
+    final band = tester.getRect(bandFinder);
+    // 进度带铺满弹窗表面，直到两侧圆角处的 Material 边缘。
+    final surface = tester.getRect(
+        find.ancestor(of: bandFinder, matching: find.byType(Material)).first);
+    expect(band.left, closeTo(surface.left, .5));
+    expect(band.right, closeTo(surface.right, .5));
+    final fill =
+        tester.getRect(find.byKey(const ValueKey('update-progress-fill')));
+    final labelFinder = find.byKey(const ValueKey('update-progress-label'));
+    final label = tester.getRect(labelFinder);
+    final backdrop =
+        tester.getRect(find.byKey(const ValueKey('update-progress-backdrop')));
+    expect(fill.width, closeTo(band.width * .7, 1));
+    // 横带只有细线高度；百分比文字没有胶囊，用同色背景挡住重叠内容。
+    expect(band.height, 3);
+    expect(fill.height, 3);
+    expect(tester.widget(labelFinder), isA<Text>());
+    expect(backdrop.left, lessThan(label.left));
+    expect(backdrop.right, greaterThan(label.right));
+    expect(backdrop.top, lessThan(label.top));
+    expect(backdrop.bottom, greaterThan(label.bottom));
+    expect(label.height, greaterThan(fill.height));
+    expect(label.top, lessThan(band.top));
+    expect(label.bottom, greaterThan(band.bottom));
+    // 文字尾部保留 8px 填充和 4px 挖空间隔。
+    expect(label.right, closeTo(fill.right - 12, 1));
+    expect(label.right, lessThan(band.right));
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('zero progress still shows the label at the band start',
+      (tester) async {
+    await _pumpUpdateDialog(
+        tester,
+        AppUpdateState(
+            status: UpdateStatus.downloading, release: uiRelease, progress: 0));
+    final band = tester.getRect(find.byKey(const ValueKey('update-progress')));
+    final label =
+        tester.getRect(find.byKey(const ValueKey('update-progress-label')));
+    expect(find.text('0%'), findsOneWidget);
+    expect(label.left, closeTo(band.left + 8, 1));
+    expect(label.right, greaterThan(band.left + 8));
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('verifying and installing use an indeterminate band',
+      (tester) async {
+    await _pumpUpdateDialog(
+        tester,
+        AppUpdateState(
+            status: UpdateStatus.downloading, release: uiRelease, progress: 1));
+    expect(find.text('正在校验更新包…'), findsOneWidget);
+    expect(find.byKey(const ValueKey('update-progress')), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await _pumpUpdateDialog(tester,
+        AppUpdateState(status: UpdateStatus.installing, release: uiRelease));
+    expect(find.text('正在准备安装…'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('progress band fits 320px with large text', (tester) async {
+    await _pumpUpdateDialog(
+        tester,
+        AppUpdateState(
+            status: UpdateStatus.downloading, release: uiRelease, progress: .7),
+        width: 320,
+        textScale: 1.4);
+    final bandFinder = find.byKey(const ValueKey('update-progress'));
+    final band = tester.getRect(bandFinder);
+    final surface = tester.getRect(
+        find.ancestor(of: bandFinder, matching: find.byType(Material)).first);
+    expect(band.width, closeTo(surface.width, .5));
+    expect(find.text('70%'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    // 不确定态的长状态文字也要能放进窄屏。
+    await _pumpUpdateDialog(
+        tester,
+        AppUpdateState(
+            status: UpdateStatus.downloading, release: uiRelease, progress: 1),
+        width: 320,
+        textScale: 1.4);
+    expect(find.text('正在校验更新包…'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('Linux login explains unsupported WebView without invoking it',
       (tester) async {
