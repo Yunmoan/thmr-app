@@ -237,6 +237,20 @@ void main() {
     expect(tester.takeException(), isNull);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
+  testWidgets('missing package offers a re-download action', (tester) async {
+    await _pumpUpdateDialog(
+        tester,
+        AppUpdateState(
+            status: UpdateStatus.available,
+            release: uiRelease,
+            error: '安装包已被删除，请重新下载'));
+    expect(find.text('更新未完成'), findsOneWidget);
+    expect(find.text('安装包已被删除，请重新下载'), findsOneWidget);
+    expect(find.text('重新下载'), findsOneWidget);
+    expect(find.text('下载更新'), findsNothing);
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
   testWidgets('zero progress still shows the label at the band start',
       (tester) async {
     await _pumpUpdateDialog(

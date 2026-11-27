@@ -400,7 +400,7 @@ Future<void> showAppUpdate(BuildContext context, AppRelease release) =>
             else if (artifact != null)
               FilledButton(
                   onPressed: state.busy ? null : controller.downloadUpdate,
-                  child: const Text('下载更新')),
+                  child: Text(state.error != null ? '重新下载' : '下载更新')),
           ],
         );
       }),

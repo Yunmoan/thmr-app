@@ -34,8 +34,10 @@ class AppUpdateService {
     checkedUpdateUrl(apiUrl);
     try {
       final response = await _client.get<Object?>(apiUrl,
-          options: Options(
-              headers: {'Accept': 'application/json', 'User-Agent': 'THMR-App'}));
+          options: Options(headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'THMR-App'
+          }));
       if (response.statusCode == 204) return null;
       return await verifyUpdateManifest(response.data, publicKey);
     } on DioException catch (error) {
@@ -344,8 +346,12 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
       }
     } catch (error) {
       if (mounted) {
+        // 安装包被删除或校验失败时退回可下载状态，让用户直接重新下载。
+        final invalid = error is UpdatePackageInvalidException;
+        if (invalid) _downloaded = null;
         state = state.copyWith(
-            status: UpdateStatus.ready,
+            status: invalid ? UpdateStatus.available : UpdateStatus.ready,
+            progress: invalid ? 0 : state.progress,
             error: error is UpdateCheckException
                 ? error.message
                 : '安装失败，原版本保持可用，请重试');
